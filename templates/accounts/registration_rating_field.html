@@ -1,0 +1,5 @@
+<div class="rating-field{% if field.errors %} has-error{% endif %}">
+  <div class="rating-label">{{ field.label }}<span class="required-mark" aria-hidden="true"> *</span></div>
+  {{ field }}
+  {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+</div>

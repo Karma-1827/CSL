@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}私訊 / Messages{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="message-page-main">
+    <a class="back-link" href="{% url 'accounts:dashboard' %}#messages">← 返回私訊 / Back to messages</a>
+    {% include "components/messages.html" %}
+    <div class="message-layout">
+      <aside class="conversation-list">
+        <span class="section-kicker">CONVERSATIONS</span><h2>對話 <small>Messages</small></h2>
+        {% for row in conversations %}<a class="{% if row.pk == pairing.pk %}is-active{% endif %}" href="{% url 'tutoring:pairing_messages' row.pk %}"><strong>{% if request.user.pk == row.tutor_id %}{{ row.tutee.bilingual_name }}{% else %}{{ row.tutor.bilingual_name }}{% endif %}</strong><small>{{ row.semester }} · {{ row.get_status_display }}</small></a>{% endfor %}
+      </aside>
+      <section class="conversation-panel">
+        <header><div><span>{% if request.user.role == 'TUTOR' %}學生 / Student{% else %}老師 / Teacher{% endif %}</span><h1>{{ counterpart.bilingual_name }}</h1><small>{{ pairing.semester }}</small></div><a class="button button-secondary button-small" href="{% url 'accounts:matched_profile' counterpart.pk %}">查看資料 / Profile</a></header>
+        <div class="message-thread">
+          {% for row in message_rows %}<article class="message-bubble{% if row.sender_id == request.user.pk %} is-mine{% endif %}"><p>{{ row.body|linebreaksbr }}</p><small>{{ row.created_at|date:"Y-m-d H:i" }}{% if row.sender_id == request.user.pk and row.read_at %} · 已讀 / Read{% endif %}</small></article>{% empty %}<div class="empty-state">尚無訊息，開始第一則對話。 / No messages yet.</div>{% endfor %}
+        </div>
+        {% if pairing.status == 'ACTIVE' %}<form class="message-compose" method="post">{% csrf_token %}{{ message_form.body }}{% if message_form.body.errors %}<div class="field-error">{{ message_form.body.errors }}</div>{% endif %}<button class="button button-primary" type="submit">傳送 / Send</button></form>{% else %}<div class="read-only-banner">此配對已結束，只能查看歷史訊息。 / This conversation is read-only.</div>{% endif %}
+      </section>
+    </div>
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

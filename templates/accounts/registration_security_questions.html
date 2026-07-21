@@ -1,0 +1,10 @@
+<div class="form-divider"><span>密碼重設問題 / Password recovery questions</span></div>
+<p class="form-note bilingual-note">請妥善記住以下三個問題與答案；日後忘記密碼時，系統將使用這三題確認您的身分。<br>Keep these three questions and answers in a safe place. You will need them to verify your identity if you forget your password.</p>
+<div class="question-grid">
+  {% include "components/form_field.html" with field=form.question_1 %}
+  {% include "components/form_field.html" with field=form.answer_1 %}
+  {% include "components/form_field.html" with field=form.question_2 %}
+  {% include "components/form_field.html" with field=form.answer_2 %}
+  {% include "components/form_field.html" with field=form.question_3 %}
+  {% include "components/form_field.html" with field=form.answer_3 %}
+</div>

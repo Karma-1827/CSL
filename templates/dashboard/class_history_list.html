@@ -1,0 +1,16 @@
+<div class="class-list history-class-list">
+  {% for session in sessions %}
+    <a class="class-row{% if session.status == 'CANCELLED' %} is-cancelled{% endif %}" href="{% url 'tutoring:class_detail' session.pk %}">
+      <time><strong>{{ session.class_date|date:"m/d" }}</strong><small>{{ session.class_date|date:"D" }}</small></time>
+      <div class="class-row-main"><strong>{{ session.start_time|time:"H:i" }}–{{ session.ends_at|time:"H:i" }} · {{ session.duration }} 小時 / hours</strong><span>{% if request.user.role == 'TUTOR' %}{{ session.pairing.tutee.bilingual_name }}{% else %}{{ session.pairing.tutor.bilingual_name }}{% endif %}</span></div>
+      <div class="class-row-progress">
+        {% if session.status == 'CANCELLED' %}<span class="class-status cancelled">已取消 / Cancelled</span>
+        {% elif session.is_official %}<span class="class-status verified">有效成立 / Verified</span>
+        {% elif session.my_record and session.my_attendance %}<span class="class-status pending">等待雙方完成 / Waiting</span>
+        {% elif session.my_attendance %}<span class="class-status pending">待填紀錄 / Record due</span>
+        {% else %}<span class="class-status scheduled">已排課 / Scheduled</span>{% endif %}
+        <em>查看課程 / View →</em>
+      </div>
+    </a>
+  {% empty %}<div class="empty-state compact">此學期目前沒有已完成時間的課程。 / No past classes in this semester.</div>{% endfor %}
+</div>

@@ -1,0 +1,86 @@
+{% extends "accounts/register_profile_base.html" %}
+
+{% block title %}老師註冊 / Teacher registration{% endblock %}
+{% block role_kicker %}TEACHER REGISTRATION · STEP 2 OF 2{% endblock %}
+{% block role_title %}建立您的個人檔案 <span>Create your profile</span>{% endblock %}
+{% block role_intro %}請完善您的教學履歷，以便瀏覽並邀請適合的外籍學生。<br>Complete your teaching profile so you can browse and invite suitable international students.{% endblock %}
+{% block roster_detail_label %}學制 / Degree{% endblock %}
+{% block roster_detail %}{{ roster.get_education_level_display }}{% endblock %}
+
+{% block role_fields %}
+<section class="form-section">
+  <div class="form-section-heading">
+    <span>01</span>
+    <div>
+      <h2>聯絡與基本資料</h2>
+      <p>Contact and basic information</p>
+    </div>
+  </div>
+  <div class="two-column-fields">
+    {% include "components/form_field.html" with field=form.phone %}
+    {% include "components/form_field.html" with field=form.gender %}
+    {% include "components/form_field.html" with field=form.native_language %}
+    {% include "components/form_field.html" with field=form.nationality %}
+    {% include "components/form_field.html" with field=form.department %}
+  </div>
+  {% include "accounts/registration_security_questions.html" %}
+</section>
+
+<section class="form-section">
+  <div class="form-section-heading">
+    <span>02</span>
+    <div>
+      <h2>教學資料</h2>
+      <p>Teaching profile</p>
+    </div>
+  </div>
+  <p class="form-note bilingual-note">華語教學自我評估：1 分代表經驗較少，5 分代表非常有信心。<br>Chinese teaching self-assessment: 1 = limited experience; 5 = very confident.</p>
+  <div class="rating-grid">
+    {% include "accounts/registration_rating_field.html" with field=form.level_listening %}
+    {% include "accounts/registration_rating_field.html" with field=form.level_speaking %}
+    {% include "accounts/registration_rating_field.html" with field=form.level_reading %}
+    {% include "accounts/registration_rating_field.html" with field=form.level_writing %}
+  </div>
+  {% include "components/form_field.html" with field=form.teaching_notes %}
+  {% include "components/form_field.html" with field=form.qualification_file %}
+  <div class="qualification-note">
+    <strong>請上傳以下任一文件，供系辦進行資格審查：</strong>
+    <ol>
+      <li>對外華語教學能力認證考試「華語口語與表達」成績證明</li>
+      <li>華語師資養成班招生入學口試通過證明</li>
+      <li>應華組「華語正音與口語表達」修課成績單（B-〈含〉以上）</li>
+      <li>系上線上語音口試通過證明</li>
+    </ol>
+    <strong>Please upload one of the following documents for qualification review:</strong>
+    <ol>
+      <li>A score report for “Chinese Oral Expression” from the Teaching Chinese as a Foreign Language Proficiency Test</li>
+      <li>Proof of passing the admission oral interview for the Chinese teacher training program</li>
+      <li>A transcript showing a grade of B- or above in “Chinese Pronunciation and Oral Expression”</li>
+      <li>Proof of passing the department’s online oral interview</li>
+    </ol>
+  </div>
+</section>
+
+<section class="form-section">
+  <div class="form-section-heading">
+    <span>03</span>
+    <div>
+      <h2>上課時間</h2>
+      <p>Class schedule</p>
+    </div>
+  </div>
+  <p class="timezone-note">台灣時間 · Taiwan time (UTC/GMT+8)</p>
+  <div class="schedule-card">
+    <div class="choice-field{% if form.available_days.errors %} has-error{% endif %}">
+      <label>1. {{ form.available_days.label }}<span class="required-mark"> *</span></label>
+      {{ form.available_days }}
+      {% for error in form.available_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    </div>
+    <div class="choice-field{% if form.available_time_slots.errors %} has-error{% endif %}">
+      <label>2. {{ form.available_time_slots.label }}<span class="required-mark"> *</span></label>
+      {{ form.available_time_slots }}
+      {% for error in form.available_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

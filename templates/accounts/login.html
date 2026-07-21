@@ -1,0 +1,24 @@
+{% extends "accounts/auth_base.html" %}
+
+{% block title %}系統登入 / Sign in{% endblock %}
+
+{% block auth_content %}
+<div class="section-kicker">SIGN IN</div>
+<h2>系統登入</h2>
+<form method="post" class="stack-form" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="message message-error">學號或密碼不正確。 / The student ID or password is incorrect.</div>
+  {% endif %}
+  {% include "components/form_field.html" with field=form.username %}
+  <div class="form-group{% if form.password.errors %} has-error{% endif %}">
+    <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+    <div class="password-help-row"><a href="{% url 'accounts:recover' %}">忘記密碼？ / Forgot?</a></div>
+    {{ form.password }}
+    {% for error in form.password.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+  </div>
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="button button-primary button-full" type="submit">登入 <span>Sign in</span></button>
+</form>
+<p class="auth-switch">還沒有帳號？ / No account yet? <a href="{% url 'accounts:register' %}">註冊 / Register</a></p>
+{% endblock %}

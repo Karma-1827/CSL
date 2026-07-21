@@ -1,0 +1,18 @@
+{% extends "accounts/auth_base.html" %}
+
+{% block title %}帳號註冊 / Register{% endblock %}
+{% block auth_card_class %}register-auth-card{% endblock %}
+
+{% block auth_content %}
+<div class="section-kicker">REGISTER</div>
+<h2>帳號註冊</h2>
+<form method="post" class="stack-form" novalidate>
+  {% csrf_token %}
+  {% include "components/form_field.html" with field=form.student_id %}
+  {% include "components/form_field.html" with field=form.password1 hide_help=True %}
+  {% include "components/form_field.html" with field=form.password2 %}
+  <p class="help-text register-password-help">{{ form.password1.help_text }}</p>
+  <button class="button button-primary button-full" type="submit">註冊並填寫個人資料 <span>Register and continue</span></button>
+</form>
+<p class="auth-switch">已經有帳號？ / Already registered? <a href="{% url 'accounts:login' %}">登入 / Sign in</a></p>
+{% endblock %}

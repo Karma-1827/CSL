@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Django
+*.sqlite3
+db.sqlite3
+
+# 環境變數與機密
+.env
+.env.*
+
+# 使用者上傳與真實資料(勿提交真實個資或資格文件)
+media/
+
+# 本機人工檢查用 PDF 預覽,不是正式資料來源
+output/pdf/
+
+# 測試時的暫存圖片
+tmp/pdfs/
+
+# 編輯器/系統
+.DS_Store
+.vscode/
+.idea/
+
+# Node(若未來有用到)
+node_modules/

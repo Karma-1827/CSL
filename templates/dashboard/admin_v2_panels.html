@@ -1,0 +1,72 @@
+<section class="dashboard-view" data-dashboard-panel="semesters">
+  <div class="view-heading"><span>SEMESTER SETTINGS</span><h2>學期時間設定 <small>Semester settings</small></h2></div>
+  {% if configured_non_past_semester_count < 3 %}
+    <details class="semester-add-disclosure"{% if not semester_rows %} open{% endif %}>
+      <summary>
+        <span class="semester-add-icon" aria-hidden="true">＋</span>
+        <span><strong>新增學期</strong><small>Add semester</small></span>
+      </summary>
+      <form class="schedule-form semester-form semester-new-form" action="{% url 'tutoring:save_semester' %}" method="post">{% csrf_token %}{{ new_semester_form.as_div }}<button class="button button-primary" type="submit">新增學期 / Add semester</button></form>
+    </details>
+  {% else %}
+    <p class="semester-limit-note">目前與未來學期已設定完成（3/3）。<br>Current and upcoming semesters are fully configured.</p>
+  {% endif %}
+  {% if visible_semester_rows %}
+    <div class="semester-setting-list">
+      {% for semester in visible_semester_rows %}
+        <div class="semester-setting-row">
+          <span class="semester-setting-name"><strong>{{ semester.name_zh }}</strong><small>{{ semester.name_en }}</small></span>
+          <span class="semester-setting-dates"><time>{{ semester.starts_on|date:"Y/m/d" }}</time><i aria-hidden="true">→</i><time>{{ semester.ends_on|date:"Y/m/d" }}</time></span>
+          <span class="semester-setting-status status-{{ semester.lifecycle_status|lower }}">{% if semester.lifecycle_status == 'CURRENT' %}目前學期<small>Current</small>{% elif semester.lifecycle_status == 'FUTURE' %}未來學期<small>Upcoming</small>{% else %}已結束<small>Ended</small>{% endif %}</span>
+          {% if semester.lifecycle_status == 'PAST' %}<form action="{% url 'tutoring:archive_semester' semester.pk %}" method="post" onsubmit="return confirm('確定刪除此學期設定？歷史課程與時數仍會保留。');">{% csrf_token %}<button class="button button-danger" type="submit">刪除設定 <small>Delete</small></button></form>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+<section class="dashboard-view" data-dashboard-panel="class-overview">
+  <div class="view-heading"><span>CLASS OVERVIEW</span><h2>全系課程與異常總覽 <small>Classes and exceptions</small></h2></div>
+  <form class="class-overview-filter" action="{% url 'accounts:dashboard' %}#class-overview" method="get">
+    <label>學期 / Semester<select name="class_semester">{% for semester in overview_semesters %}<option value="{{ semester.pk }}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label>
+    <label>搜尋老師 / Search<input name="class_q" value="{{ class_q }}" placeholder="姓名或學號 / Name or student ID"></label>
+    <label>狀態 / Status<select name="class_status"><option value="all"{% if class_status == 'all' %} selected{% endif %}>全部老師 / All teachers</option><option value="incomplete"{% if class_status == 'incomplete' %} selected{% endif %}>有未完成課程 / Incomplete classes</option></select></label>
+    <button class="button button-primary" type="submit">套用 / Apply</button>
+  </form>
+  <div class="class-overview-metrics">
+    <div><span>老師人數<small>Tutors</small></span><strong>{{ class_overview_totals.tutors }}</strong></div>
+    <div><span>課程總數<small>Classes</small></span><strong>{{ class_overview_totals.classes }}</strong></div>
+    <div><span>已排時數<small>Reserved hours</small></span><strong>{{ class_overview_totals.reserved_hours }}</strong></div>
+    <div><span>有效時數<small>Verified hours</small></span><strong>{{ class_overview_totals.verified_hours }}</strong></div>
+    <div class="has-attention"><span>未完成課程<small>Incomplete classes</small></span><strong>{{ class_overview_totals.exceptions }}</strong></div>
+  </div>
+  {% if anomaly_class_sessions %}<details class="panel class-exception-preview"><summary><span><b>尚未完成的課程</b><small>Classes awaiting participant completion</small></span><em>{{ class_overview_totals.exceptions }}</em></summary><p class="incomplete-class-note">雙方尚未完成簽到、課堂紀錄或互相確認；此處僅供掌握進度，不代表需要管理員逐筆處理。<br>These classes are awaiting attendance, records, or mutual confirmation from participants.</p><div class="admin-class-list">{% for session in anomaly_class_sessions %}<a href="{% url 'tutoring:class_detail' session.pk %}"><time>{{ session.class_date|date:"Y-m-d" }}<small>{{ session.start_time|time:"H:i" }}</small></time><span><strong>{{ session.pairing.tutor.bilingual_name }} × {{ session.pairing.tutee.bilingual_name }}</strong>{% for reason in session.anomaly_reasons %}<em>{{ reason }}</em>{% endfor %}</span><b>查看 / View →</b></a>{% endfor %}</div></details>{% endif %}
+  <section class="panel tutor-overview-panel">
+    <div class="panel-heading"><div><span class="eyebrow">TUTOR DIRECTORY</span><h2>老師名單 <small>Tutor list</small></h2></div><span class="result-count">{{ tutor_class_page.paginator.count }} 位 / tutors</span></div>
+    <div class="tutor-overview-head"><span>老師</span><span>配對學生</span><span>課程</span><span>已排時數</span><span>有效時數</span><span>未完成</span><span></span></div>
+    <div class="tutor-overview-list">{% for row in tutor_class_page %}<a href="{% url 'accounts:admin_tutor_schedule' row.tutor.pk %}?semester={{ overview_semester.pk }}"><span class="tutor-overview-name"><strong>{{ row.tutor.bilingual_name }}</strong><small>{{ row.tutor.username }}</small></span><b>{{ row.pairing_count }}</b><b>{{ row.class_count }}</b><b>{{ row.reserved_hours }}</b><b>{{ row.verified_hours }}</b><b class="{% if row.exception_count %}has-exception{% endif %}">{{ row.exception_count }}</b><em>查看課表 / View →</em></a>{% empty %}<div class="empty-state">找不到符合條件的老師。 / No tutors match the filters.</div>{% endfor %}</div>
+    {% if tutor_class_page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="老師名單分頁 / Tutor list pages">{% if tutor_class_page.has_previous %}<a href="?class_semester={{ overview_semester.pk }}&class_q={{ class_q|urlencode }}&class_status={{ class_status }}&class_page={{ tutor_class_page.previous_page_number }}#class-overview">← 上一頁 / Previous</a>{% endif %}<span>{{ tutor_class_page.number }} / {{ tutor_class_page.paginator.num_pages }}</span>{% if tutor_class_page.has_next %}<a href="?class_semester={{ overview_semester.pk }}&class_q={{ class_q|urlencode }}&class_status={{ class_status }}&class_page={{ tutor_class_page.next_page_number }}#class-overview">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+  </section>
+</section>
+
+<section class="dashboard-view" data-dashboard-panel="export">
+  <div class="view-heading"><span>DATA EXPORT</span><h2>資料匯出 <small>Data export</small></h2></div>
+  <form class="data-export-form" action="{% url 'tutoring:export_excel' %}" method="post">{% csrf_token %}
+    <section class="panel export-config-card export-audience-card">
+      <div class="export-card-heading"><span>1</span><div><h2>選擇對象 <small>Select users</small></h2><p>選擇全體，或展開名單挑選特定使用者。</p></div></div>
+      <div class="export-choice-row"><label><input type="radio" name="scope" value="all" checked> <span><strong>全體使用者</strong><small>All users</small></span></label><label><input type="radio" name="scope" value="selected"> <span><strong>選取使用者</strong><small>Selected users</small></span></label></div>
+      <details class="export-user-picker" data-export-user-picker>
+        <summary><span><strong>展開使用者名單</strong><small>Open user list</small></span><em data-selected-user-count>0 位已選取 / selected</em></summary>
+        <div class="export-user-tools"><label>搜尋 / Search<input type="search" placeholder="姓名或學號 / Name or student ID" data-export-user-search></label><div><button type="button" class="button button-secondary button-small" data-select-visible-users>選取顯示名單 / Select visible</button><button type="button" class="button button-ghost button-small" data-clear-export-users>清除 / Clear</button></div></div>
+        <div class="export-user-grid">{% for user in export_users %}<label data-export-user-row data-search-text="{{ user.bilingual_name }} {{ user.username }} {{ user.get_role_display }}"><input type="checkbox" name="user_ids" value="{{ user.pk }}"><span><strong>{{ user.bilingual_name }}</strong><small>{{ user.username }} · {{ user.get_role_display }}</small></span></label>{% endfor %}</div>
+      </details>
+    </section>
+    <section class="panel export-config-card export-period-card">
+      <div class="export-card-heading"><span>2</span><div><h2>選擇期間 <small>Select period</small></h2><p>依學期或自訂日期範圍匯出課程資料。</p></div></div>
+      <div class="export-choice-row"><label><input type="radio" name="period_mode" value="semester" checked> <span><strong>選擇學期</strong><small>Semester</small></span></label><label><input type="radio" name="period_mode" value="range"> <span><strong>自訂時間段</strong><small>Date range</small></span></label></div>
+      <div class="export-period-panel" data-export-period-panel="semester"><label>學期 / Semester<select name="semester_id">{% for semester in export_semesters %}<option value="{{ semester.pk }}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></div>
+      <div class="export-period-panel" data-export-period-panel="range" hidden><label>開始日期 / Start date<input type="date" name="starts_on"></label><span aria-hidden="true">→</span><label>結束日期 / End date<input type="date" name="ends_on"></label></div>
+    </section>
+    <div class="export-submit-row"><span>目前格式 <strong>Excel (.xls)</strong><small>未來可加入其他格式 / More formats can be added later</small></span><button class="button button-primary" type="submit">匯出資料 <small>Export data</small></button></div>
+  </form>
+</section>

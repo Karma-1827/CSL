@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}使用手冊 / User guide{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="guide-page-main">
+    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+    <section class="guide-hero">
+      <div><span class="section-kicker">USER GUIDE · V1.1</span><h1>使用手冊 <small>User guide</small></h1><p>依照您的使用身分，整理目前系統可使用的主要功能。<br>A role-based guide to the features currently available in the system.</p></div>
+      <span class="guide-role">{{ request.user.get_role_display }}</span>
+    </section>
+    <section class="guide-grid">
+      {% if request.user.role == 'TUTOR' %}
+        <article class="guide-card"><span>01</span><h2>個人資料與資格 <small>Profile & qualification</small></h2><p>確認個人資料、教學履歷、上課時間與資格文件的審核狀態。</p><p>Review your profile, teaching information, availability, and qualification status.</p></article>
+        <article class="guide-card"><span>02</span><h2>尋找學生 <small>Find students</small></h2><p>瀏覽配對所需的匿名學習資料，並向合適的學生發出邀請。</p><p>Browse anonymous learning profiles and invite a suitable student.</p></article>
+        <article class="guide-card"><span>03</span><h2>邀請與配對 <small>Invitations & matching</small></h2><p>邀請五天內有效；雙方同意後即建立配對。每學期可同時輔導兩位學生。</p><p>Invitations are valid for five days. A match begins after both sides agree; up to two students may be active at once.</p></article>
+        <article class="guide-card"><span>04</span><h2>解除配對 <small>Pairing release</small></h2><p>可從目前配對提出解除申請；部分原因三日未處理會自動解除，行為或其他問題則由管理員審核。</p><p>Request a release from the current match. Eligible reasons auto-release after three days; conduct and other concerns require review.</p></article>
+      {% elif request.user.role == 'TUTEE' %}
+        <article class="guide-card"><span>01</span><h2>個人與學習資料 <small>Profile & learning needs</small></h2><p>確認基本資料、華語程度、希望加強項目與可上課時間。</p><p>Review your basic details, Chinese level, target skills, and availability.</p></article>
+        <article class="guide-card"><span>02</span><h2>收到邀請 <small>Received invitations</small></h2><p>在邀請到期前查看匿名老師資料，選擇接受或婉拒。</p><p>Review the anonymous teacher profile and respond before the invitation expires.</p></article>
+        <article class="guide-card"><span>03</span><h2>配對與解除 <small>Matching & release</small></h2><p>同一時間只能與一位老師配對；解除後可找新老師，但同學期不會再次配對到原老師。</p><p>Only one teacher may be active at a time. After release, you may find a new teacher but cannot rematch with the same teacher that semester.</p></article>
+        {% if is_maryland %}<article class="guide-card"><span>04</span><h2>主動尋找老師 <small>Find a teacher</small></h2><p>合作計畫學生可瀏覽匿名老師資料並主動發出邀請。</p><p>Partner-program students may browse anonymous teacher profiles and send invitations.</p></article>{% endif %}
+      {% else %}
+        <article class="guide-card"><span>01</span><h2>系統管理 <small>System administration</small></h2><p>從管理首頁查看學生名冊、資格審核、配對狀態與系統紀錄。</p><p>Use the dashboard to review the roster, qualifications, matching status, and system activity.</p></article>
+      {% endif %}
+    </section>
+    <p class="guide-footnote">本手冊將隨系統功能持續更新。<br>This guide will be updated as the system evolves.</p>
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body %}
+<div class="auth-page">
+  <header class="public-header">
+    <img src="{% static 'img/ntnu-csl-logo.png' %}" alt="師大華語文教學系 / NTNU Department of Chinese as a Second Language">
+  </header>
+  <main id="main-content" class="auth-main">
+    <section class="brand-panel" aria-labelledby="brand-title">
+      <div class="brand-kicker">NTNU CSL</div>
+      <h1 id="brand-title"><span class="brand-title-line">國立臺灣師範大學</span><br>華語文教學系</h1>
+      <p>National Taiwan Normal University<br>Department of Chinese as a Second Language</p>
+      <span class="brand-rule" aria-hidden="true"></span>
+      <h2>華語輔導系統</h2>
+      <p>Chinese Language Tutoring System</p>
+    </section>
+    <section class="auth-card {% block auth_card_class %}{% endblock %}">
+      {% include "components/messages.html" %}
+      {% block auth_content %}{% endblock %}
+    </section>
+  </main>
+  <footer class="public-footer">
+    <span>© 2026 國立臺灣師範大學華語文教學系</span>
+    <span>NTNU Department of Chinese as a Second Language</span>
+  </footer>
+</div>
+{% endblock %}

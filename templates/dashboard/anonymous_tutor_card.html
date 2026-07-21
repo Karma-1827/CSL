@@ -1,0 +1,33 @@
+<article class="candidate-card">
+  <div class="candidate-card-head">
+    <span class="anonymous-badge">華語老師 / Chinese teacher</span>
+    <strong>資格已通過 / Approved</strong>
+  </div>
+  <dl class="candidate-facts">
+    <div><dt>性別 / Gender</dt><dd>{{ candidate.gender }}</dd></div>
+    <div><dt>母語 / Native language</dt><dd>{{ candidate.native_language }}</dd></div>
+    <div><dt>國家 / Country</dt><dd>{{ candidate.nationality }}</dd></div>
+  </dl>
+  <div class="candidate-detail">
+    <span>教學能力 / Teaching skills</span>
+    <div class="tag-list">
+      {% for skill in candidate.levels %}<b>{{ skill.label }} {{ skill.score }}/5</b>{% endfor %}
+    </div>
+  </div>
+  <div class="candidate-detail">
+    <span>可上課時間 / Availability</span>
+    <div class="tag-list">
+      {% for day in candidate.days %}<b>{{ day }}</b>{% endfor %}
+      {% for slot in candidate.time_slots %}<b>{{ slot }}</b>{% endfor %}
+      {% if not candidate.days and not candidate.time_slots %}<em>未提供 / Not provided</em>{% endif %}
+    </div>
+  </div>
+  {% if action == "send" %}
+    <form action="{% url 'tutoring:invite_tutor' candidate.user_id %}" method="post">
+      {% csrf_token %}
+      <button class="button button-primary button-full" {% if candidate.pending %}disabled{% endif %}>
+        {% if candidate.pending %}待回覆{% else %}邀請老師 / Invite teacher{% endif %}
+      </button>
+    </form>
+  {% endif %}
+</article>

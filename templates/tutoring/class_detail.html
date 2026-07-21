@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}課程詳情 / Class details{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="class-detail-main">
+    {% include "components/messages.html" %}
+    <a class="back-link" href="{% url 'accounts:dashboard' %}#schedule">← 返回課表 / Back to schedule</a>
+
+    <header class="class-detail-hero">
+      <div><span class="section-kicker">CLASS SESSION</span><h1>{{ session.class_date|date:"Y 年 m 月 d 日" }}</h1><p>{{ session.start_time|time:"H:i" }}–{{ session.ends_at|time:"H:i" }} · {{ session.duration }} 小時 / hours · 台灣時間 / Taiwan time</p></div>
+      <div class="class-hero-side"><span>{% if request.user.role == 'TUTOR' %}學生 / Student{% else %}老師 / Teacher{% endif %}</span><strong>{{ counterpart.bilingual_name }}</strong>{% if is_valid_class %}<em class="class-status verified">有效成立 / Verified</em>{% elif session.status == 'CANCELLED' %}<em class="class-status cancelled">已取消 / Cancelled</em>{% else %}<em class="class-status scheduled">進行中 / In progress</em>{% endif %}</div>
+    </header>
+
+    {% if session.status != 'CANCELLED' and request.user.role != 'ADMIN' %}
+      <section class="class-flow" aria-label="課程完成進度 / Class completion progress">
+        <div class="{% if own_attendance %}is-done{% endif %}"><span>1</span><strong>我的簽到</strong><small>My check-in</small></div>
+        <div class="{% if own_record %}is-done{% endif %}"><span>2</span><strong>我的紀錄</strong><small>My record</small></div>
+        <div class="{% if counterpart_attendance and counterpart_record %}is-done{% endif %}"><span>3</span><strong>對方完成</strong><small>Partner completed</small></div>
+        <div class="{% if own_confirmation.status == 'CONFIRMED' %}is-done{% endif %}"><span>4</span><strong>互相確認</strong><small>Mutual review</small></div>
+      </section>
+
+      <div class="class-detail-grid">
+        <div class="class-detail-column">
+        <section class="panel class-action-panel">
+          <div class="panel-heading"><div><span class="eyebrow">ATTENDANCE</span><h2>課堂簽到 <small>Class check-in</small></h2></div></div>
+          {% if own_attendance %}
+            <div class="completion-box"><strong>已完成簽到 / Checked in</strong><span>{{ own_attendance.signed_at|date:"Y-m-d H:i" }}</span>{% if own_attendance.is_makeup %}<em>補簽到，待雙方確認及管理員審核 / Makeup check-in</em>{% endif %}</div>
+          {% else %}
+            <form action="{% url 'tutoring:class_check_in' session.pk %}" method="post" class="stack-form">
+              {% csrf_token %}<label>逾時補簽原因 / Makeup reason{% if checkin_requires_makeup_reason %}<em class="required-chip">補簽必填 / Required</em>{% endif %}<textarea name="makeup_reason" rows="3"{% if checkin_requires_makeup_reason %} required{% endif %} placeholder="準時簽到不需填寫；逾時補簽必填。&#10;Required only for a late makeup check-in."></textarea></label>
+              <button class="button button-primary" type="submit">確認簽到 / Check in</button>
+              <p class="help-text">上課前 10 分鐘開放，一般簽到至課程結束後 30 分鐘。<br>Normal check-in opens 10 minutes before class and closes 30 minutes after.</p>
+            </form>
+          {% endif %}
+        </section>
+
+        <section class="panel class-alert-panel">
+          <div class="panel-heading"><div><span class="eyebrow">CLASS ALERT</span><h2>課堂通報 <small>Class alert</small></h2></div></div>
+          {% if own_alert %}
+            <div class="alert-active-box"><strong>已通知管理員 / Administrator notified</strong><span>{{ own_alert.get_reason_display }}</span>{% if own_alert.note %}<p>{{ own_alert.note }}</p>{% endif %}<form action="{% url 'tutoring:cancel_alert' session.pk own_alert.pk %}" method="post">{% csrf_token %}<button class="button button-secondary button-small" type="submit">取消通報 / Cancel alert</button></form></div>
+          {% elif alert_window_open %}
+            <form action="{% url 'tutoring:class_alert' session.pk %}" method="post" class="stack-form">{% csrf_token %}{{ alert_form.as_p }}<button class="button button-alert" type="submit">通知管理員 / Notify administrator</button><p class="help-text">當下聯絡不到對方、未出席或課程資訊有問題時使用。<br>Use this when your partner cannot be reached, is absent, or class details are incorrect.</p></form>
+          {% else %}
+            <div class="empty-state compact">課堂通報僅於上課時間內開放。<br>Class alerts are available only during class time.</div>
+          {% endif %}
+        </section>
+        </div>
+
+        <section class="panel class-action-panel">
+          <div class="panel-heading"><div><span class="eyebrow">MY RECORD</span><h2>我的課堂紀錄 <small>My class record</small></h2></div></div>
+          <form method="post" class="stack-form">
+            {% csrf_token %}{{ record_form.as_p }}
+            <label>逾時補登原因 / Makeup reason{% if record_requires_makeup_reason %}<em class="required-chip">補登必填 / Required</em>{% endif %}<textarea name="makeup_reason" rows="3"{% if record_requires_makeup_reason %} required{% endif %} placeholder="24 小時內提交不需填寫。 / Required after the 24-hour deadline."></textarea></label>
+            <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% else %}送出紀錄 / Submit record{% endif %}</button>
+          </form>
+        </section>
+      </div>
+
+      <section class="panel counterpart-review">
+        <div class="panel-heading"><div><span class="eyebrow">MUTUAL REVIEW</span><h2>確認對方的簽到與課堂紀錄 <small>Review your partner</small></h2></div></div>
+        {% if counterpart_attendance and counterpart_record %}
+          <div class="counterpart-record-grid">
+            <div><span>簽到 / Attendance</span><strong>{{ counterpart_attendance.signed_at|date:"Y-m-d H:i" }}</strong>{% if counterpart_attendance.is_makeup %}<small>補簽到 / Makeup check-in</small>{% endif %}</div>
+            <div><span>上課地點 / Location</span><strong>{{ counterpart_record.location }}</strong></div>
+            <div><span>課堂主題 / Topic</span><strong>{{ counterpart_record.topic }}</strong></div>
+            <div class="wide"><span>課堂內容 / Content</span><p>{{ counterpart_record.content|linebreaksbr }}</p></div>
+          </div>
+          <form action="{% url 'tutoring:class_confirm' session.pk %}" method="post" class="confirmation-form">
+            {% csrf_token %}<label>說明 / Note<textarea name="note" rows="3" placeholder="要求修改或回報問題時請填寫。 / Required for revision or issue reports."></textarea></label>
+            <div class="inline-actions"><button class="button button-success" name="status" value="CONFIRMED">確認無誤 / Confirm</button><button class="button button-secondary" name="status" value="REVISION">請對方修改 / Request revision</button><button class="button button-danger" name="status" value="ISSUE">回報問題 / Report issue</button></div>
+          </form>
+          {% if own_confirmation %}<p class="review-result">目前確認結果：{{ own_confirmation.get_status_display }}{% if own_confirmation.note %}<br>{{ own_confirmation.note }}{% endif %}</p>{% endif %}
+        {% else %}<div class="empty-state">對方尚未同時完成簽到與課堂紀錄。<br>Your partner has not completed both attendance and class record.</div>{% endif %}
+      </section>
+
+      {% if request.user.role == 'TUTOR' %}
+        <details class="panel edit-details"><summary>修改上課時間 / Reschedule class</summary>
+          <form action="{% url 'tutoring:class_reschedule' session.pk %}" method="post" class="schedule-form class-edit-form">
+            {% csrf_token %}
+            <label>{{ reschedule_form.class_date.label }}{{ reschedule_form.class_date }}</label>
+            <label>{{ reschedule_form.start_time.label }}<span class="time-select-group">{{ reschedule_form.start_time }}</span></label>
+            <label>{{ reschedule_form.duration.label }}{{ reschedule_form.duration }}</label>
+            <label>{{ reschedule_form.scope.label }}{{ reschedule_form.scope }}</label>
+            <button class="button button-primary" type="submit">儲存修改 / Save changes</button>
+          </form>
+          <p class="help-text">未簽到且沒有紀錄的課程，可在原課程結束後三週內移到未來。<br>A class without activity may be moved to the future within three weeks.</p>
+        </details>
+        <details class="panel danger-details"><summary>取消這堂課 / Cancel this class</summary><form action="{% url 'tutoring:class_cancel' session.pk %}" method="post" class="stack-form">{% csrf_token %}<label>取消原因 / Reason<textarea name="reason" rows="3" required></textarea></label><button class="button button-danger" type="submit">確認取消 / Confirm cancellation</button></form></details>
+      {% endif %}
+    {% else %}
+      <section class="panel"><div class="empty-state">此課程已取消。 / This class has been cancelled.</div></section>
+    {% endif %}
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

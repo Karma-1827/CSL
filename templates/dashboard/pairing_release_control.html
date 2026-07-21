@@ -1,0 +1,31 @@
+{% with release_request=pairing.pending_release_request %}
+  {% if release_request %}
+    <div class="pairing-release-state">
+      <span class="class-status pending">等待解除審核 / Release pending</span>
+      <strong>{{ release_request.get_reason_display }}</strong>
+      {% if release_request.reason_note %}<p>{{ release_request.reason_note }}</p>{% endif %}
+      {% if release_request.auto_resolve_at %}
+        <small>若管理員未處理，預計於 {{ release_request.auto_resolve_at|date:"Y-m-d H:i" }} 自動解除。<br>Automatic release if not reviewed by this time.</small>
+      {% else %}
+        <small>此原因必須由管理員完成審核。<br>This reason requires administrator review.</small>
+      {% endif %}
+    </div>
+  {% else %}
+    <details class="pairing-release-details">
+      <summary>申請解除配對 <small>Request pairing release</small></summary>
+      <form action="{% url 'tutoring:request_pairing_release' pairing.pk %}" method="post" class="pairing-release-form">
+        {% csrf_token %}
+        <label>解除原因 / Release reason
+          <select name="reason" required>
+            <option value="">請選擇 / Select</option>
+            {% for value, label in pairing_release_reason_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>補充說明 / Additional note
+          <textarea name="note" rows="3" placeholder="態度、行為或其他原因必須填寫說明。&#10;Required for conduct, behavior, or other reasons."></textarea>
+        </label>
+        <button class="button button-danger button-small" type="submit">送出解除申請 / Submit request</button>
+      </form>
+    </details>
+  {% endif %}
+{% endwith %}

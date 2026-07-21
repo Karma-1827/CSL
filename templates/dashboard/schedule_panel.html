@@ -1,0 +1,44 @@
+<section class="dashboard-view" data-dashboard-panel="schedule">
+  <div class="view-heading">
+    <span>CLASS SCHEDULE</span>
+    <h2>我的課表 <small>My schedule</small></h2>
+  </div>
+
+  <div class="schedule-metrics{% if request.user.role == 'TUTEE' and not is_maryland %} is-single{% endif %}">
+    {% if request.user.role == 'TUTOR' or is_maryland %}<div><span>已排時數 / Reserved</span><strong>{{ reserved_hours }}</strong><small>小時 / hours</small></div>
+    <div><span>有效時數 / Verified</span><strong>{{ official_hours }}</strong><small>小時 / hours</small></div>{% endif %}
+    <div><span>本學期課程 / Classes</span><strong>{{ class_sessions|length }}</strong><small>堂 / sessions</small></div>
+  </div>
+
+  {% if request.user.role == 'TUTOR' %}
+    <section class="panel schedule-create-panel">
+      <div class="panel-heading">
+        <div><span class="eyebrow">SCHEDULE</span><h2>安排課程 <small>Schedule a class</small></h2></div>
+        <span class="privacy-chip">台灣時間 / Taiwan time · UTC/GMT+8</span>
+      </div>
+      {% if active_pairings %}
+        <form class="schedule-form" action="{% url 'tutoring:schedule_class' %}" method="post">
+          {% csrf_token %}
+          <label>{{ schedule_form.pairing.label }}{{ schedule_form.pairing }}</label>
+          <label>{{ schedule_form.class_date.label }}{{ schedule_form.class_date }}</label>
+          <label>{{ schedule_form.start_time.label }}<span class="time-select-group">{{ schedule_form.start_time }}</span></label>
+          <label>{{ schedule_form.duration.label }}{{ schedule_form.duration }}</label>
+          <label class="schedule-check">{{ schedule_form.repeat_weekly }}<span><strong>每週重複</strong><small>Repeat weekly</small></span></label>
+          <label>{{ schedule_form.repeat_until.label }}{{ schedule_form.repeat_until }}</label>
+          <button class="button button-primary schedule-submit" type="submit"><strong>加入課表</strong><small>Add to schedule</small></button>
+        </form>
+        <p class="help-text">每組每週最多 2 小時；單堂可安排 0.5、1、1.5 或 2 小時。<br>A pair may reserve up to two hours per Monday–Sunday week.</p>
+      {% else %}
+        <div class="empty-state">建立配對後即可安排課程。 / Classes can be scheduled after matching.</div>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">SEMESTER</span><h2>學期課程 <small>Semester classes</small></h2></div></div>
+    <div class="schedule-groups">
+      {% include "dashboard/class_schedule_group.html" with sessions=upcoming_sessions group_key="upcoming" heading="即將課程" heading_en="Upcoming · within 7 days" open_group=True %}
+      {% include "dashboard/class_schedule_group.html" with sessions=future_sessions group_key="future" heading="未來課程" heading_en="Future · after 7 days" open_group=True %}
+    </div>
+  </section>
+</section>

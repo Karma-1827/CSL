@@ -1,0 +1,26 @@
+{% load static %}
+<header class="app-header">
+  <a class="app-brand" href="{% url 'accounts:dashboard' %}">
+    <img src="{% static 'img/ntnu-csl-logo.png' %}" alt="華語文教學系 / Department of Chinese as a Second Language">
+    <span><strong>華語輔導系統</strong><small>Chinese Language Tutoring System</small></span>
+  </a>
+  <div class="user-menu">
+    <span class="role-pill">{{ request.user.get_role_display }}</span>
+    <div class="account-dropdown" data-account-menu>
+      <button class="account-menu-trigger" type="button" aria-haspopup="true" aria-expanded="false" data-account-menu-trigger>
+        <span class="account-menu-name">{{ request.user.bilingual_name }}</span>
+        <span class="account-menu-chevron" aria-hidden="true">⌄</span>
+      </button>
+      <div class="account-menu-popover" role="menu" hidden data-account-menu-popover>
+        <div class="account-menu-identity"><strong>{{ request.user.name_zh|default:request.user.username }}</strong><small>{{ request.user.username }}</small></div>
+        <a href="{% url 'accounts:profile' %}" role="menuitem"><span aria-hidden="true">○</span><b>個人資料<small>Profile</small></b></a>
+        <a href="{% url 'accounts:handbook' %}" role="menuitem"><span aria-hidden="true">▤</span><b>使用手冊<small>User guide</small></b></a>
+      </div>
+    </div>
+    <form action="{% url 'accounts:logout' %}" method="post">
+      {% csrf_token %}
+      <button class="button button-ghost" type="submit">登出 / Sign out</button>
+    </form>
+  </div>
+</header>
+<script src="{% static 'js/user-menu.js' %}?v=20260719-1" defer></script>

@@ -1,0 +1,5 @@
+Django==5.2.16
+psycopg[binary]==3.2.13
+Pillow==11.3.0
+reportlab==4.4.9
+pypdf==6.10.0

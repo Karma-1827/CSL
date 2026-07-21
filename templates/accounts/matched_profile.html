@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}配對資料 / Matched profile{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="profile-page-main matched-profile-page">
+    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+
+    <section class="profile-hero matched-profile-hero">
+      <div class="profile-avatar-large" aria-hidden="true">{{ counterpart.name_zh|default:counterpart.username|slice:":1" }}</div>
+      <div class="profile-hero-copy">
+        <span class="section-kicker">MATCHED PROFILE</span>
+        <h1>{{ counterpart.name_zh|default:counterpart.username }}{% if counterpart.name_en %}<small>{{ counterpart.name_en }}</small>{% endif %}</h1>
+        <div class="profile-hero-tags"><span>{{ counterpart.get_role_display }}</span><span>配對中 / Active match</span><span>{{ pairing.semester }}</span></div>
+      </div>
+      <div class="matched-profile-message"><span>聯絡對方 / Contact</span><a class="button matched-message-button" href="{% url 'tutoring:pairing_messages' pairing.pk %}">私訊 / Message</a></div>
+    </section>
+
+    <div class="profile-layout">
+      <aside class="profile-section-nav" aria-label="配對資料目錄 / Matched profile sections">
+        <span>配對資料 / Matched profile</span>
+        <a href="#basic-information">基本資料<small>Basic information</small></a>
+        {% if profile_kind == 'tutor' %}<a href="#role-information">教學資料<small>Teaching profile</small></a>{% else %}<a href="#role-information">學習資料<small>Learning profile</small></a>{% endif %}
+        <a href="#availability">上課時間<small>Availability</small></a>
+      </aside>
+
+      <div class="profile-content">
+        <section class="profile-card" id="basic-information">
+          <div class="profile-card-heading"><div><span>01</span><h2>基本資料 <small>Basic information</small></h2></div><p>此資料僅供目前配對雙方查看。<br>Visible only to the actively matched participants.</p></div>
+          <div class="profile-data-grid">
+            <div class="profile-data-item"><span>中文姓名 / Chinese name</span><strong>{{ counterpart.name_zh|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>英文姓名 / English name</span><strong>{{ counterpart.name_en|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>學號 / Student ID</span><strong>{{ counterpart.username }}</strong></div>
+            <div class="profile-data-item"><span>身分 / Role</span><strong>{{ counterpart.get_role_display }}</strong></div>
+            {% if role_profile %}
+              <div class="profile-data-item"><span>性別 / Gender</span><strong>{{ role_profile.get_gender_display }}</strong></div>
+              <div class="profile-data-item"><span>母語 / Native language</span><strong>{{ role_profile.native_language }}</strong></div>
+              <div class="profile-data-item"><span>國家／國籍 / Country</span><strong>{{ role_profile.nationality }}</strong></div>
+              <div class="profile-data-item"><span>系所 / Department</span><strong>{{ role_profile.department }}</strong></div>
+            {% endif %}
+          </div>
+        </section>
+
+        {% if role_profile and profile_kind == 'tutor' %}
+          <section class="profile-card" id="role-information">
+            <div class="profile-card-heading"><div><span>02</span><h2>教學資料 <small>Teaching profile</small></h2></div></div>
+            <div class="skill-rating-list">{% for item in skill_ratings %}<div class="skill-rating-row"><div><strong>{{ item.label }}</strong><small>{{ item.label_en }}</small></div><div class="rating-dots" aria-label="{{ item.score }} / 5"><i class="{% if item.score >= 1 %}is-filled{% endif %}"></i><i class="{% if item.score >= 2 %}is-filled{% endif %}"></i><i class="{% if item.score >= 3 %}is-filled{% endif %}"></i><i class="{% if item.score >= 4 %}is-filled{% endif %}"></i><i class="{% if item.score >= 5 %}is-filled{% endif %}"></i><b>{{ item.score }}</b></div></div>{% endfor %}</div>
+            <div class="profile-note-box"><span>教學簡介 / Teaching notes</span><p>{{ role_profile.teaching_notes|default:"尚未填寫 / Not provided"|linebreaksbr }}</p></div>
+          </section>
+        {% elif role_profile and profile_kind == 'tutee' %}
+          <section class="profile-card" id="role-information">
+            <div class="profile-card-heading"><div><span>02</span><h2>學習資料 <small>Learning profile</small></h2></div></div>
+            <div class="profile-data-grid profile-data-grid-compact"><div class="profile-data-item"><span>華語程度 / Chinese level</span><strong>{{ overall_level }}</strong></div><div class="profile-data-item"><span>學習時間 / Learning duration</span><strong>{{ learning_duration|default:"未提供 / Not provided" }}</strong></div></div>
+            <div class="profile-subsection"><span>希望加強項目 / Target skills</span><div class="profile-tag-list">{% for skill in target_skills %}<b>{{ skill }}</b>{% empty %}<em>尚未選擇 / Not selected</em>{% endfor %}</div></div>
+            <div class="skill-rating-list">{% for item in skill_ratings %}<div class="skill-rating-row"><div><strong>{{ item.label }}</strong><small>{{ item.label_en }}</small></div><div class="rating-dots" aria-label="{{ item.score }} / 5"><i class="{% if item.score >= 1 %}is-filled{% endif %}"></i><i class="{% if item.score >= 2 %}is-filled{% endif %}"></i><i class="{% if item.score >= 3 %}is-filled{% endif %}"></i><i class="{% if item.score >= 4 %}is-filled{% endif %}"></i><i class="{% if item.score >= 5 %}is-filled{% endif %}"></i><b>{{ item.score }}</b></div></div>{% endfor %}</div>
+            <div class="profile-note-box"><span>學習需求與備註 / Learning needs and notes</span><p>{{ role_profile.skills_to_improve|default:"尚未填寫 / Not provided"|linebreaksbr }}</p></div>
+          </section>
+        {% endif %}
+
+        {% if role_profile %}
+          <section class="profile-card" id="availability">
+            <div class="profile-card-heading"><div><span>03</span><h2>上課時間 <small>Availability</small></h2></div><p>台灣時間<br>Taiwan time (UTC/GMT+8)</p></div>
+            <div class="availability-profile-grid"><div><span>星期 / Days</span><div class="profile-tag-list">{% for day in availability_days %}<b>{{ day }}</b>{% empty %}<em>尚未選擇 / Not selected</em>{% endfor %}</div></div><div><span>時段 / Time slots</span><div class="profile-tag-list">{% for slot in availability_slots %}<b>{{ slot }}</b>{% empty %}<em>尚未選擇 / Not selected</em>{% endfor %}</div></div></div>
+          </section>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

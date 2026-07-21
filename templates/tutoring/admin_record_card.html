@@ -1,0 +1,15 @@
+<section class="panel admin-record-card">
+  <div class="panel-heading"><div><span class="eyebrow">SUBMISSION</span><h2>{{ heading }} <small>{{ heading_en }}</small></h2></div></div>
+  <div class="admin-record-section">
+    <h3>簽到 / Attendance</h3>
+    {% if attendance %}<dl><div><dt>簽到時間 / Signed at</dt><dd>{{ attendance.signed_at|date:"Y-m-d H:i:s" }}</dd></div><div><dt>類型 / Type</dt><dd>{% if attendance.is_makeup %}<span class="class-status pending">補簽到 / Makeup</span>{% else %}<span class="class-status verified">一般簽到 / Standard</span>{% endif %}</dd></div>{% if attendance.makeup_reason %}<div class="wide"><dt>補簽原因 / Makeup reason</dt><dd>{{ attendance.makeup_reason }}</dd></div>{% endif %}</dl>{% else %}<div class="empty-state compact">尚未簽到 / Not checked in</div>{% endif %}
+  </div>
+  <div class="admin-record-section">
+    <h3>課堂紀錄 / Class record</h3>
+    {% if record %}<dl><div><dt>提交時間 / Submitted</dt><dd>{{ record.submitted_at|date:"Y-m-d H:i" }}</dd></div><div><dt>類型 / Type</dt><dd>{% if record.is_makeup %}<span class="class-status pending">補登 / Makeup</span>{% else %}<span class="class-status verified">期限內 / On time</span>{% endif %}</dd></div><div><dt>上課地點 / Location</dt><dd>{{ record.location }}</dd></div><div><dt>課堂主題 / Topic</dt><dd>{{ record.topic }}</dd></div><div class="wide"><dt>課堂內容 / Content</dt><dd>{{ record.content|linebreaksbr }}</dd></div>{% if record.remarks %}<div class="wide"><dt>備註 / Remarks</dt><dd>{{ record.remarks|linebreaksbr }}</dd></div>{% endif %}{% if record.makeup_reason %}<div class="wide"><dt>補登原因 / Makeup reason</dt><dd>{{ record.makeup_reason }}</dd></div>{% endif %}</dl>{% else %}<div class="empty-state compact">尚未提交課堂紀錄 / No class record</div>{% endif %}
+  </div>
+  <div class="admin-record-section">
+    <h3>確認結果 / Confirmation</h3>
+    {% if confirmation %}<p class="review-result">{{ confirmation.get_status_display }}{% if confirmation.note %}<br>{{ confirmation.note }}{% endif %}</p>{% else %}<div class="empty-state compact">尚未確認 / Not confirmed</div>{% endif %}
+  </div>
+</section>

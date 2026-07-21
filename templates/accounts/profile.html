@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}個人資料 / Profile{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="profile-page-main">
+    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+
+    <section class="profile-hero">
+      <div class="profile-avatar-large" aria-hidden="true">{{ request.user.name_zh|default:request.user.username|slice:":1" }}</div>
+      <div class="profile-hero-copy">
+        <span class="section-kicker">MY PROFILE</span>
+        <h1>{{ request.user.name_zh|default:request.user.username }}{% if request.user.name_en %}<small>{{ request.user.name_en }}</small>{% endif %}</h1>
+        <div class="profile-hero-tags">
+          <span>{{ request.user.get_role_display }}</span>
+          <span>{{ request.user.get_account_status_display }}</span>
+          {% if roster and profile_kind == 'tutor' %}<span>{{ roster.get_education_level_display }}</span>{% endif %}
+          {% if roster and profile_kind == 'tutee' %}<span>{{ roster.get_program_source_display }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="profile-updated"><span>學號 / Student ID</span><strong>{{ request.user.username }}</strong></div>
+    </section>
+
+    <div class="profile-layout">
+      <aside class="profile-section-nav" aria-label="個人資料目錄 / Profile sections">
+        <span>個人資料 / Profile</span>
+        <a href="#basic-information">基本資料<small>Basic information</small></a>
+        {% if profile_kind == 'tutor' %}
+          <a href="#role-information">教學資料<small>Teaching profile</small></a>
+          <a href="#availability">上課時間<small>Availability</small></a>
+          <a href="#qualification">資格審核<small>Qualification</small></a>
+        {% elif profile_kind == 'tutee' %}
+          <a href="#role-information">學習資料<small>Learning profile</small></a>
+          <a href="#availability">上課時間<small>Availability</small></a>
+        {% endif %}
+      </aside>
+
+      <div class="profile-content">
+        <section class="profile-card" id="basic-information">
+          <div class="profile-card-heading"><div><span>01</span><h2>基本資料 <small>Basic information</small></h2></div><p>此處顯示您註冊時提交的個人資料。<br>Information submitted during registration.</p></div>
+          <div class="profile-data-grid">
+            <div class="profile-data-item"><span>中文姓名 / Chinese name</span><strong>{{ request.user.name_zh|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>英文姓名 / English name</span><strong>{{ request.user.name_en|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>學號 / Student ID</span><strong>{{ request.user.username }}</strong></div>
+            <div class="profile-data-item"><span>電話 / Phone</span><strong>{{ request.user.phone|default:"未提供 / Not provided" }}</strong></div>
+            {% if role_profile %}
+              <div class="profile-data-item"><span>性別 / Gender</span><strong>{{ role_profile.get_gender_display }}</strong></div>
+              <div class="profile-data-item"><span>母語 / Native language</span><strong>{{ role_profile.native_language }}</strong></div>
+              <div class="profile-data-item"><span>國家／國籍 / Country</span><strong>{{ role_profile.nationality }}</strong></div>
+              <div class="profile-data-item"><span>系所 / Department</span><strong>{{ role_profile.department }}</strong></div>
+            {% endif %}
+          </div>
+        </section>
+
+        {% if role_profile and profile_kind == 'tutor' %}
+          <section class="profile-card" id="role-information">
+            <div class="profile-card-heading"><div><span>02</span><h2>教學資料 <small>Teaching profile</small></h2></div></div>
+            <div class="skill-rating-list">
+              {% for item in skill_ratings %}
+                <div class="skill-rating-row"><div><strong>{{ item.label }}</strong><small>{{ item.label_en }}</small></div><div class="rating-dots" aria-label="{{ item.score }} / 5"><i class="{% if item.score >= 1 %}is-filled{% endif %}"></i><i class="{% if item.score >= 2 %}is-filled{% endif %}"></i><i class="{% if item.score >= 3 %}is-filled{% endif %}"></i><i class="{% if item.score >= 4 %}is-filled{% endif %}"></i><i class="{% if item.score >= 5 %}is-filled{% endif %}"></i><b>{{ item.score }}</b></div></div>
+              {% endfor %}
+            </div>
+            <div class="profile-note-box"><span>教學簡介 / Teaching notes</span><p>{{ role_profile.teaching_notes|default:"尚未填寫 / Not provided"|linebreaksbr }}</p></div>
+          </section>
+        {% elif role_profile and profile_kind == 'tutee' %}
+          <section class="profile-card" id="role-information">
+            <div class="profile-card-heading"><div><span>02</span><h2>學習資料 <small>Student profile</small></h2></div></div>
+            <div class="profile-data-grid profile-data-grid-compact">
+              <div class="profile-data-item"><span>華語程度 / Chinese level</span><strong>{{ overall_level }}</strong></div>
+              <div class="profile-data-item"><span>學習時間 / Learning duration</span><strong>{{ learning_duration|default:"未提供 / Not provided" }}</strong></div>
+            </div>
+            <div class="profile-subsection"><span>希望加強項目 / Target skills</span><div class="profile-tag-list">{% for skill in target_skills %}<b>{{ skill }}</b>{% empty %}<em>尚未選擇 / Not selected</em>{% endfor %}</div></div>
+            <div class="skill-rating-list">
+              {% for item in skill_ratings %}
+                <div class="skill-rating-row"><div><strong>{{ item.label }}</strong><small>{{ item.label_en }}</small></div><div class="rating-dots" aria-label="{{ item.score }} / 5"><i class="{% if item.score >= 1 %}is-filled{% endif %}"></i><i class="{% if item.score >= 2 %}is-filled{% endif %}"></i><i class="{% if item.score >= 3 %}is-filled{% endif %}"></i><i class="{% if item.score >= 4 %}is-filled{% endif %}"></i><i class="{% if item.score >= 5 %}is-filled{% endif %}"></i><b>{{ item.score }}</b></div></div>
+              {% endfor %}
+            </div>
+            <div class="profile-note-box"><span>學習需求與備註 / Learning needs and notes</span><p>{{ role_profile.skills_to_improve|default:"尚未填寫 / Not provided"|linebreaksbr }}</p></div>
+          </section>
+        {% elif profile_kind != 'admin' %}
+          <section class="profile-card"><div class="empty-state">找不到完整的個人檔案，請聯絡系辦。<br>We could not find your complete profile. Please contact the department office.</div></section>
+        {% endif %}
+
+        {% if role_profile %}
+          <section class="profile-card" id="availability">
+            <div class="profile-card-heading"><div><span>03</span><h2>上課時間 <small>Availability</small></h2></div><p>台灣時間<br>Taiwan time (UTC/GMT+8)</p></div>
+            <div class="availability-profile-grid">
+              <div><span>星期 / Days</span><div class="profile-tag-list">{% for day in availability_days %}<b>{{ day }}</b>{% empty %}<em>尚未選擇 / Not selected</em>{% endfor %}</div></div>
+              <div><span>時段 / Time slots</span><div class="profile-tag-list">{% for slot in availability_slots %}<b>{{ slot }}</b>{% empty %}<em>尚未選擇 / Not selected</em>{% endfor %}</div></div>
+            </div>
+          </section>
+        {% endif %}
+
+        {% if profile_kind == 'tutor' %}
+          <section class="profile-card" id="qualification">
+            <div class="profile-card-heading"><div><span>04</span><h2>資格審核 <small>Qualification</small></h2></div></div>
+            {% if qualification %}
+              <div class="qualification-summary"><div><span>審核狀態 / Review status</span><strong class="status-{{ qualification.status|lower }}">{{ qualification.get_status_display }}</strong></div><div><span>資格文件 / Document</span><strong>{{ qualification.original_filename }}</strong></div>{% if qualification.review_note %}<div><span>審核備註 / Review note</span><strong>{{ qualification.review_note }}</strong></div>{% endif %}</div>
+            {% else %}
+              <div class="qualification-summary"><div><span>審核狀態 / Review status</span><strong>未提交 / Not submitted</strong></div></div>
+            {% endif %}
+          </section>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

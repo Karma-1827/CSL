@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body %}
+<div class="auth-page profile-registration-page">
+  <header class="public-header">
+    <img src="{% static 'img/ntnu-csl-logo.png' %}" alt="師大華語文教學系 / NTNU Department of Chinese as a Second Language">
+  </header>
+  <main id="main-content" class="profile-registration-main">
+    <div class="profile-registration-heading">
+      <div>
+        <div class="section-kicker">{% block role_kicker %}{% endblock %}</div>
+        <h1>{% block role_title %}{% endblock %}</h1>
+        <p>{% block role_intro %}{% endblock %}</p>
+      </div>
+    </div>
+
+    {% include "components/messages.html" %}
+    {% if preview_mode %}
+      <div class="message preview-message">預覽模式：可操作欄位查看效果，但不會建立或儲存帳號。<br>Preview mode: You can interact with the fields, but no account or data will be saved.</div>
+    {% endif %}
+    <section class="roster-card" aria-label="名冊確認資料 / Verified roster information">
+      <div><span>學號 / Student ID</span><strong>{{ roster.student_id }}</strong></div>
+      <div><span>姓名 / Name</span><strong>{{ roster.name_zh }}{% if roster.name_en %} / {{ roster.name_en }}{% endif %}</strong></div>
+      <div><span>系統身分 / System role</span><strong>{{ roster.get_role_display }}</strong></div>
+      <div><span>{% block roster_detail_label %}{% endblock %}</span><strong>{% block roster_detail %}{% endblock %}</strong></div>
+    </section>
+
+    <form method="post" enctype="multipart/form-data" class="profile-registration-form" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="message message-error">{{ form.non_field_errors }}</div>{% endif %}
+      {% block role_fields %}{% endblock %}
+      {% include "accounts/registration_account_fields.html" %}
+      {% if preview_mode %}
+        <button class="button button-primary button-full" type="button" disabled>預覽模式，不會儲存 <span>Preview only — not saved</span></button>
+      {% else %}
+        <button class="button button-primary button-full" type="submit">完成註冊 <span>Complete registration</span></button>
+      {% endif %}
+    </form>
+  </main>
+  <footer class="public-footer">
+    <span>© 2026 國立臺灣師範大學華語文教學系</span>
+    <span>NTNU Department of Chinese as a Second Language</span>
+  </footer>
+</div>
+<script src="{% static 'js/profile-options.js' %}" defer></script>
+{% endblock %}

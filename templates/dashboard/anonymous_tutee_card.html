@@ -1,0 +1,44 @@
+<article class="candidate-card">
+  <div class="candidate-card-head">
+    <span class="anonymous-badge">外籍學生 / International student</span>
+    <strong>{{ candidate.overall_level }}</strong>
+  </div>
+  <dl class="candidate-facts">
+    <div><dt>性別 / Gender</dt><dd>{{ candidate.gender }}</dd></div>
+    <div><dt>母語 / Native language</dt><dd>{{ candidate.native_language }}</dd></div>
+    <div><dt>國家 / Country</dt><dd>{{ candidate.nationality }}</dd></div>
+    <div><dt>華語程度 / Chinese level</dt><dd>{{ candidate.overall_level }}</dd></div>
+  </dl>
+  <div class="candidate-details-grid">
+    <div class="candidate-detail candidate-detail-card">
+      <span>加強項目 / Learning focus</span>
+      <div class="tag-list tag-list-bounded">
+        {% for skill in candidate.target_skills %}<b>{{ skill }}</b>{% empty %}<em>未提供 / Not provided</em>{% endfor %}
+      </div>
+    </div>
+    <div class="candidate-detail candidate-detail-card">
+      <span>可上課時間 / Availability</span>
+      <div class="tag-list tag-list-bounded">
+        {% for day in candidate.days %}<b>{{ day }}</b>{% endfor %}
+        {% for slot in candidate.time_slots %}<b>{{ slot }}</b>{% endfor %}
+        {% if not candidate.days and not candidate.time_slots %}<em>未提供 / Not provided</em>{% endif %}
+      </div>
+    </div>
+    <div class="candidate-detail candidate-detail-card">
+      <span>學習時間 / Learning duration</span>
+      <strong class="candidate-value">{{ candidate.learning_duration|default:"未提供 / Not provided" }}</strong>
+    </div>
+    <div class="candidate-detail candidate-detail-card">
+      <span>備註 / Notes</span>
+      <p class="candidate-note">{{ candidate.notes|default:"無備註 / No notes" }}</p>
+    </div>
+  </div>
+  {% if action == "send" %}
+    <form action="{% url 'tutoring:invite_tutee' candidate.user_id %}" method="post">
+      {% csrf_token %}
+      <button class="button button-primary button-full" {% if candidate.pending %}disabled{% endif %}>
+        {% if candidate.pending %}待回覆{% else %}邀請學生 / Invite student{% endif %}
+      </button>
+    </form>
+  {% endif %}
+</article>

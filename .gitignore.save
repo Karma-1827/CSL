@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+
+# 環境變數與機密
+.env
+.env.*
+!.env.example
+
+# 使用者上傳與真實資料
+media/
+output/pdf/
+tmp/pdfs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+# 測試/覆蓋率
+.coverage
+htmlcov/
+.pytest_cache/

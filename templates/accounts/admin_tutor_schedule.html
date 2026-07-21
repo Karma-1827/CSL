@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tutor.bilingual_name }}－個人課表 / Tutor schedule{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="class-detail-main tutor-schedule-main">
+    {% include "components/messages.html" %}
+    <a class="back-link" href="{% url 'accounts:dashboard' %}#class-overview">← 返回全系課程總覽 / Back to class overview</a>
+    <header class="tutor-schedule-hero">
+      <div><span class="section-kicker">TUTOR SCHEDULE</span><h1>{{ tutor.bilingual_name }}</h1><p>{{ tutor.username }}</p></div>
+      <form method="get"><label>檢視學期 / Semester<select name="semester" onchange="this.form.submit()">{% for semester in semesters %}<option value="{{ semester.pk }}"{% if selected_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></form>
+    </header>
+    <div class="tutor-schedule-metrics">
+      <div><span>配對學生<small>Students</small></span><strong>{{ pairings|length }}</strong></div>
+      <div><span>課程總數<small>Classes</small></span><strong>{{ class_count }}</strong></div>
+      <div><span>已排時數<small>Reserved</small></span><strong>{{ reserved_hours }}</strong></div>
+      <div><span>有效時數<small>Verified</small></span><strong>{{ verified_hours }}</strong></div>
+      <div class="has-attention"><span>未完成課程<small>Incomplete</small></span><strong>{{ exception_count }}</strong></div>
+    </div>
+    <section class="panel tutor-pairing-strip">
+      <div class="panel-heading"><div><span class="eyebrow">MATCHED STUDENTS</span><h2>配對學生 <small>Matched students</small></h2></div></div>
+      <div>{% for pairing in pairings %}<span><strong>{{ pairing.tutee.bilingual_name }}</strong><small>{{ pairing.tutee.username }} · {{ pairing.get_status_display }}</small></span>{% empty %}<div class="empty-state compact">本學期沒有配對學生。 / No matched students this semester.</div>{% endfor %}</div>
+    </section>
+    <details class="panel tutor-schedule-section" open>
+      <summary class="tutor-schedule-section-heading"><div><span class="eyebrow">UPCOMING</span><h2>即將與未來課程 <small>Upcoming classes</small></h2></div><em>{{ future_sessions|length }}</em></summary>
+      <div class="admin-class-list">{% for session in future_sessions %}<a href="{% url 'tutoring:class_detail' session.pk %}"><time>{{ session.class_date|date:"Y-m-d" }}<small>{{ session.start_time|time:"H:i" }}</small></time><span><strong>{{ session.pairing.tutee.bilingual_name }}</strong><small>{{ session.duration }} 小時 · {{ session.get_status_display }}</small>{% for reason in session.anomaly_reasons %}<em>{{ reason }}</em>{% endfor %}</span><b>查看 / View →</b></a>{% empty %}<div class="empty-state">沒有即將到來的課程。 / No upcoming classes.</div>{% endfor %}</div>
+    </details>
+    <details class="panel tutor-schedule-section">
+      <summary class="tutor-schedule-section-heading"><div><span class="eyebrow">PAST</span><h2>過去課程 <small>Past classes</small></h2></div><em>{{ past_sessions|length }}</em></summary>
+      <div class="admin-class-list">{% for session in past_sessions %}<a href="{% url 'tutoring:class_detail' session.pk %}"><time>{{ session.class_date|date:"Y-m-d" }}<small>{{ session.start_time|time:"H:i" }}</small></time><span><strong>{{ session.pairing.tutee.bilingual_name }}</strong><small>{{ session.duration }} 小時 · {% if session.is_official %}有效成立 / Verified{% else %}{{ session.get_status_display }}{% endif %}</small>{% for reason in session.anomaly_reasons %}<em>{{ reason }}</em>{% endfor %}</span><b>查看 / View →</b></a>{% empty %}<div class="empty-state">沒有過去課程。 / No past classes.</div>{% endfor %}</div>
+    </details>
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

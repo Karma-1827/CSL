@@ -1,0 +1,56 @@
+{% extends "accounts/register_profile_base.html" %}
+
+{% block title %}學生註冊 / Student registration{% endblock %}
+{% block role_kicker %}STUDENT REGISTRATION · STEP 2 OF 2{% endblock %}
+{% block role_title %}建立個人檔案 <span>Create your profile</span>{% endblock %}
+{% block role_intro %}請完善以下資訊，讓本系華語小老師了解您的學習需求與可配合時段，並提供合適的輔導協助。<br>Complete your profile so CSL teachers can understand your learning needs and availability and provide suitable support.{% endblock %}
+{% block roster_detail_label %}所屬計畫 / Program{% endblock %}
+{% block roster_detail %}{{ roster.get_program_source_display }}{% endblock %}
+
+{% block role_fields %}
+<section class="form-section">
+  <div class="form-section-heading"><span>01</span><div><h2>聯絡與基本資料</h2><p>Contact and basic information</p></div></div>
+  <div class="two-column-fields">
+    {% include "components/form_field.html" with field=form.phone %}
+    {% include "components/form_field.html" with field=form.gender %}
+    {% include "components/form_field.html" with field=form.native_language %}
+    {% include "components/form_field.html" with field=form.nationality %}
+    {% include "components/form_field.html" with field=form.department %}
+  </div>
+  {% include "accounts/registration_security_questions.html" %}
+</section>
+<section class="form-section">
+  <div class="form-section-heading"><span>02</span><div><h2>華語學習資料</h2><p>Chinese learning profile</p></div></div>
+  <div class="two-column-fields">
+    {% include "components/form_field.html" with field=form.overall_level %}
+    {% include "components/form_field.html" with field=form.learning_duration %}
+  </div>
+  <p class="form-note bilingual-note">華語能力自我評估：1 分代表需要較多協助，5 分代表較熟練。<br>Chinese proficiency self-assessment: 1 = needs more support; 5 = more proficient.</p>
+  <div class="rating-grid">
+    {% include "accounts/registration_rating_field.html" with field=form.level_listening %}
+    {% include "accounts/registration_rating_field.html" with field=form.level_speaking %}
+    {% include "accounts/registration_rating_field.html" with field=form.level_reading %}
+    {% include "accounts/registration_rating_field.html" with field=form.level_writing %}
+  </div>
+  <div class="choice-field target-skills-card{% if form.target_skills.errors %} has-error{% endif %}">
+    <div class="target-skills-heading">
+      <div>
+        <strong>{{ form.target_skills.label }}<span class="required-mark"> *</span></strong>
+        <small>可複選 · Multiple selections allowed</small>
+      </div>
+      <span class="target-skills-icon" aria-hidden="true">＋</span>
+    </div>
+    {{ form.target_skills }}
+    {% for error in form.target_skills.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+  </div>
+  {% include "components/form_field.html" with field=form.skills_to_improve %}
+</section>
+<section class="form-section">
+  <div class="form-section-heading"><span>03</span><div><h2>上課時間</h2><p>Class schedule</p></div></div>
+  <p class="timezone-note">台灣時間 · Taiwan time (UTC/GMT+8)</p>
+  <div class="schedule-card">
+    <div class="choice-field{% if form.preferred_days.errors %} has-error{% endif %}"><label>1. {{ form.preferred_days.label }}<span class="required-mark"> *</span></label>{{ form.preferred_days }}{% for error in form.preferred_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+    <div class="choice-field{% if form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ form.preferred_time_slots }}{% for error in form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+  </div>
+</section>
+{% endblock %}

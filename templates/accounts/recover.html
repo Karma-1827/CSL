@@ -1,0 +1,24 @@
+{% extends "accounts/auth_base.html" %}
+
+{% block title %}重設密碼 / Reset password{% endblock %}
+
+{% block auth_content %}
+<div class="section-kicker">ACCOUNT RECOVERY</div>
+<h2>重設密碼 <span>Reset password</span></h2>
+<p class="section-intro">請選擇註冊時設定的三個問題並輸入答案。<br>Select the three questions used at registration and enter your answers.</p>
+<form method="post" class="stack-form" novalidate>
+  {% csrf_token %}
+  {% include "components/form_field.html" with field=form.student_id %}
+  <div class="question-grid">
+    {% include "components/form_field.html" with field=form.question_1 %}
+    {% include "components/form_field.html" with field=form.answer_1 %}
+    {% include "components/form_field.html" with field=form.question_2 %}
+    {% include "components/form_field.html" with field=form.answer_2 %}
+    {% include "components/form_field.html" with field=form.question_3 %}
+    {% include "components/form_field.html" with field=form.answer_3 %}
+  </div>
+  <button class="button button-primary button-full" type="submit">驗證身分 <span>Verify identity</span></button>
+</form>
+<p class="auth-switch"><a href="{% url 'accounts:login' %}">返回登入 / Back to sign in</a></p>
+{% endblock %}
+

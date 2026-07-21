@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}補登詳情 / Makeup review details{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="class-detail-main admin-class-detail">
+    {% include "components/messages.html" %}
+    <a class="back-link" href="{% url 'accounts:dashboard' %}#makeup-review">← 返回補登審核 / Back to makeup review</a>
+
+    <header class="class-detail-hero">
+      <div><span class="section-kicker">MAKEUP REVIEW DETAILS</span><h1>{{ session.class_date|date:"Y 年 m 月 d 日" }}</h1><p>{{ session.start_time|time:"H:i" }}–{{ session.ends_at|time:"H:i" }} · {{ session.duration }} 小時 / hours</p></div>
+      <div class="class-hero-side"><span>審核狀態 / Review status</span><strong>{% if makeup_review %}{{ makeup_review.get_status_display }}{% else %}一般課程 / Standard class{% endif %}</strong>{% if is_valid_class %}<em class="class-status verified">有效成立 / Verified</em>{% else %}<em class="class-status pending">審核中 / Under review</em>{% endif %}</div>
+    </header>
+
+    <section class="admin-participant-summary">
+      <div><span>老師 / Teacher</span><strong>{{ session.pairing.tutor.bilingual_name }}</strong><small>{{ session.pairing.tutor.username }}</small></div>
+      <div><span>學生 / Student</span><strong>{{ session.pairing.tutee.bilingual_name }}</strong><small>{{ session.pairing.tutee.username }}</small></div>
+    </section>
+
+    <div class="admin-record-grid">
+      {% include "tutoring/admin_record_card.html" with heading="老師提交資料" heading_en="Teacher submission" attendance=tutor_attendance record=tutor_record confirmation=tutor_confirmation %}
+      {% include "tutoring/admin_record_card.html" with heading="學生提交資料" heading_en="Student submission" attendance=tutee_attendance record=tutee_record confirmation=tutee_confirmation %}
+    </div>
+
+    {% if makeup_review.status == 'PENDING' %}
+      <section class="panel admin-review-decision">
+        <div class="panel-heading"><div><span class="eyebrow">DECISION</span><h2>補登審核 <small>Makeup review decision</small></h2></div></div>
+        <form action="{% url 'tutoring:makeup_review' session.pk %}" method="post" class="stack-form">
+          {% csrf_token %}<input type="hidden" name="next" value="detail"><label>審核備註 / Review note<textarea name="note" rows="3"></textarea></label>
+          <div class="inline-actions"><button class="button button-success" name="action" value="approve">核准 / Approve</button><button class="button button-danger" name="action" value="reject">不核准 / Reject</button></div>
+        </form>
+      </section>
+    {% elif makeup_review %}
+      <section class="panel"><div class="completion-box"><strong>{{ makeup_review.get_status_display }}</strong>{% if makeup_review.review_note %}<span>{{ makeup_review.review_note }}</span>{% endif %}{% if makeup_review.reviewed_by %}<small>{{ makeup_review.reviewed_by.bilingual_name }} · {{ makeup_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div></section>
+    {% endif %}
+  </main>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+</div>
+{% endblock %}

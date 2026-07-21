@@ -1,0 +1,43 @@
+<div class="invitation-row invitation-row-expandable">
+  <details class="invitation-profile-disclosure">
+    <summary>
+      <span class="invitation-teacher-mark" aria-hidden="true">師</span>
+      <span class="invitation-summary-copy">
+        <strong>華語老師 · {{ row.profile.gender }}</strong>
+        <small>{{ row.profile.native_language }} · {{ row.profile.nationality }}<br>{{ row.expires_at|date:"m/d H:i" }} 到期 / Expires</small>
+      </span>
+      <span class="invitation-view-label">查看老師資料 <small>View profile</small><i aria-hidden="true">⌄</i></span>
+    </summary>
+    <div class="invitation-profile-details">
+      <div class="invitation-profile-heading"><span>TEACHER PROFILE</span><strong>匿名老師資料 <small>Anonymous teacher profile</small></strong></div>
+      <dl class="invitation-profile-facts">
+        <div><dt>性別 / Gender</dt><dd>{{ row.profile.gender }}</dd></div>
+        <div><dt>母語 / Native language</dt><dd>{{ row.profile.native_language }}</dd></div>
+        <div><dt>國家 / Country</dt><dd>{{ row.profile.nationality }}</dd></div>
+      </dl>
+      <div class="invitation-profile-section">
+        <span>教學能力 / Teaching skills</span>
+        <div class="invitation-skill-grid">
+          {% for skill in row.profile.levels %}
+            <div><span>{{ skill.label }}<small>{{ skill.label_en }}</small></span><strong>{{ skill.score }}<small>/5</small></strong></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="invitation-profile-section">
+        <span>可上課時間 / Availability</span>
+        <div class="tag-list">
+          {% for day in row.profile.days %}<b>{{ day }}</b>{% endfor %}
+          {% for slot in row.profile.time_slots %}<b>{{ slot }}</b>{% endfor %}
+          {% if not row.profile.days and not row.profile.time_slots %}<em>未提供 / Not provided</em>{% endif %}
+        </div>
+      </div>
+      {% if row.profile.notes %}<div class="invitation-profile-note"><span>教學簡介 / Teaching notes</span><p>{{ row.profile.notes|linebreaksbr }}</p></div>{% endif %}
+      <p class="invitation-privacy-note">配對成立前不顯示姓名、學號與聯絡方式。<br>Name, student ID, and contact details remain hidden until matched.</p>
+    </div>
+  </details>
+  <form action="{% url 'tutoring:respond_invitation' row.id %}" method="post" class="inline-actions invitation-response-actions">
+    {% csrf_token %}
+    <button class="button button-small button-success" name="action" value="accept">接受 / Accept</button>
+    <button class="button button-small button-danger" name="action" value="reject">婉拒 / Decline</button>
+  </form>
+</div>
