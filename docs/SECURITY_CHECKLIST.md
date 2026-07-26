@@ -142,20 +142,14 @@
 
 沒有任何外部 CDN 或前端框架依賴(比照 `CLAUDE.md` 慣例:原生 JS + 單一 `app.css`),不需要額外列管。
 
-### 字型(`assets/fonts/`)⚠️ 有授權風險待釐清
+### 字型(`assets/fonts/`)✅ 授權風險已排除(2026-07-26)
 
 | 檔案 | 用途 | 授權狀況 |
 | --- | --- | --- |
-| `NotoSansTC.ttf` | 目前程式碼未見實際引用(留存待查,見下方註記) | Google Noto Sans TC,SIL Open Font License,開源可自由散布,無風險 |
-| `Kaiu.ttf` | 證明 PDF 標題與內文(標楷體) | **來源不明的標楷體字型檔**,若為 Windows 內建「標楷體」抽取而來,屬**微軟授權字型**,是否可合法重新散布(已直接 commit 進 git repo)待確認 |
-| `TimesNewRoman.ttf` / `TimesNewRoman-Bold.ttf` | 證明 PDF 內文的英文/數字(Times New Roman) | **微軟/Monotype 授權字型**,同上,是否可合法重新散布待確認 |
+| `TW-Kai.ttf` | 證明 PDF 標題與內文(標楷體) | 國發會/數位發展部「全字庫」開放資料([data.gov.tw/dataset/5961](https://data.gov.tw/dataset/5961)),字型內嵌授權聲明可擇一適用「政府資料開放授權條款第一版」或「SIL OFL 1.1」,可合法重製、散布與商業使用 |
+| `LiberationSerif-Regular.ttf` / `LiberationSerif-Bold.ttf` | 證明 PDF 內文的英文/數字 | Red Hat「Liberation Fonts」專案,SIL Open Font License 1.1,與原本的 Times New Roman **度量相容**,換字型不影響既有排版 |
 
-這是這次盤點意外發現的問題,不是我能自己判斷或處理的——**這三個字型檔目前直接 commit 在 git repo 裡**(不在 `.gitignore` 排除範圍),如果 `Kaiu.ttf`/`TimesNewRoman*.ttf` 確實是從 Windows/Office 抽取出來的授权字型,嚴格來說重新散布(即使只是私有 repo)可能不符合微軟的字型授權條款。建議:
-1. 先確認這三個檔案實際來源(當初怎麼取得的)。
-2. 若確認是受限授權字型,評估換成開源替代字型(如思源黑體/思源宋體、或其他 SIL OFL 授權的標楷體/襯線體替代品),或改為部署時由 VM 本機系統字型提供、不將字型檔案本身放進 repo。
-3. `NotoSansTC.ttf` 目前程式碼沒有引用到(`tutoring/reporting.py` 只註冊了 `Kaiu`/`CertificateTimesNewRoman` 字型家族),確認是否為之前留下的未使用檔案,若不需要可以移除。
-
-在系辦/資訊中心或校方法務確認前,**先不要因為這個發現就自行更換證明 PDF 的字型**——證明外觀已經跟系辦對過,貿然換字型會影響已核可的證明格式,這個問題只記錄下來,留待正式決定。
+原本盤點時發現的 `Kaiu.ttf`(來源不明的標楷體,疑似從 Windows 抽取)、`TimesNewRoman.ttf`/`-Bold.ttf`(字型內嵌 metadata 直接確認為 `(c) 2006 The Monotype Corporation`,微軟/Monotype 授權)以及完全未被程式引用的 `NotoSansTC.ttf`,已全部移除並換成上述兩款開放授權字型;來源、授權條文與下載日期記錄在 `assets/fonts/LICENSES.md`。`tutoring/reporting.py::build_hours_pdf()` 的字型註冊已改指向新檔名,內部 ReportLab 字型家族代號(`CertificateKai`/`CertificateTimesNewRoman`)維持不變,不影響其餘排版程式碼。換字型後已重新產生 NTNU 摘要版/詳細版(含跨頁)、Maryland 摘要版四種 PDF 預覽,用 Poppler 轉圖人工比對確認標題、內文、浮水印、表格排版皆正常,無缺字或跑版;126 項測試全數通過。
 
 ## 總結與行動優先序
 
@@ -165,12 +159,11 @@
 - 第 5、6 項:session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)。
 - 第 32、36 項:登入頁比照忘記密碼流程加上「同 IP+學號 15 分鐘最多 5 次」鎖定(`BilingualAuthenticationForm.clean()`)。過程中順手修正一個既有 bug:`templates/accounts/login.html` 原本不管錯誤原因一律顯示「學號或密碼不正確」的寫死文字,導致鎖定訊息永遠不會顯示給使用者;已改成顯示表單實際的錯誤訊息(連帶讓「帳號已停用」的訊息也能正確顯示,不再被蓋掉)。
 - 第 17 項:逐一覆核全部 `AuditLog` 寫入點,確認沒有密碼/安全問題答案/自由文字個資,結論見上表。
-- 第 53 項:整理第三方元件清冊,見上方「第三方元件清冊(SBOM)」一節——**過程中意外發現字型檔案授權風險**,需要另外處理,見該節。
+- 第 53 項:整理第三方元件清冊,見上方「第三方元件清冊(SBOM)」一節——過程中意外發現字型檔案授權風險,已於同日換成開放授權字型排除,見該節。
 
 ### 還可以直接改 Django 程式碼的(建議排入 V4 前期)
 
 1. **第 33、34 項:密碼效期與密碼歷程** —— 目前完全沒做,是否要做需要先跟系辦確認實際需求(全校密碼政策可能已有規範,不一定要系統自己重複做)。
-2. **字型授權風險**(見「第三方元件清冊」一節)—— 需要先確認 `Kaiu.ttf`/`TimesNewRoman*.ttf` 的實際來源與授權條款,再決定要不要換成開源替代字型;在確認前不要自行更換,以免影響已核可的證明格式。
 
 ### VM/部署層級(V4 核心,`docs/DEPLOY.md` 範圍)
 

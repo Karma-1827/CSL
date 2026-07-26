@@ -39,6 +39,7 @@
   - 候選篩選補齊 Tutee(Maryland)瀏覽 Tutor 側:`anonymous_tutor_candidates()` 比照 `anonymous_tutee_candidates()` 加上 `filters` 參數(性別、母語、星期、時段;Tutor 沒有「華語程度」/「加強項目」對應欄位,不提供這兩項),`accounts/views.py` 的 dashboard 與 `templates/dashboard/index.html` 的 `find-tutor` 分頁補上同一套收合式篩選 UI(`<details>/<summary>`,與 `find-tutee` 樣式一致)。
   - README/launch.json 校正:`README.md` 原本只列到 V0/V1、啟動指令寫 port 8000,已重寫為只放技術棧、本機啟動、建立 Admin、測試、環境變數、配對狀態排程等會持續有效的操作型內容,port 改為與日常驗收一致的 8001,並移除逐版功能清單(改為指向 `CLAUDE.md`/`docs/PROGRESS.md`,避免以後又跟實際進度脫節)。`.vscode/launch.json` 的除錯設定同步把 port 改成 8001。`docs/DEPLOY.md` 原本記錄兩者不一致的提醒也一併更新,順手補了一句「先 `ps aux | grep runserver` 確認沒有殘留舊 process 再啟動新的」——這是本次開發過程中實際踩到的坑(改完程式碼但看不到效果,後來發現是舊 runserver process 沒關掉)。
   - 真正的 Excel `.xlsx`/CSV 匯出:`tutoring/reporting.py` 把原本 `build_excel_xml()` 的逐列組資料邏輯抽成共用的 `_export_rows()`,新增 `build_excel_xlsx()`(用專案既有依賴 `openpyxl`)與 `build_export_csv()`(標準庫 `csv`,寫入 UTF-8 BOM 讓 Windows Excel 開啟中文表頭不亂碼),三種格式欄位/資料完全一致,只是輸出容器不同。`tutoring/views.py::export_excel()` 讀取表單的 `file_format`(`xlsx`/`csv`/`xls`,預設 `xls` 以維持既有呼叫端相容),依格式切換 builder、`Content-Type`、副檔名,並把選用格式一併寫進 `ADMIN_EXCEL_EXPORTED` 的 `AuditLog.metadata`。前端匯出表單(`templates/dashboard/admin_v2_panels.html`)新增「選擇格式」卡片,預設勾選 `.xlsx`(標示 Recommended),另有 `.csv`(供匯入其他系統)與 `.xls`(相容舊流程),取代原本「未來可加入其他格式」的預留文案。
+  - 證明 PDF 字型換成開放授權字型:`assets/fonts/Kaiu.ttf`、`TimesNewRoman.ttf`/`-Bold.ttf`(確認為 Windows/Monotype 授權字型,字型內嵌 metadata 直接寫 `(c) 2006 The Monotype Corporation`)與完全未使用的 `NotoSansTC.ttf` 全部移除,換成 `TW-Kai.ttf`(國發會/數位發展部「全字庫」開放資料)與 `LiberationSerif-Regular.ttf`/`-Bold.ttf`(Red Hat Liberation Fonts,SIL OFL 1.1,與 Times New Roman 度量相容),來源與授權記錄在新增的 `assets/fonts/LICENSES.md`。`tutoring/reporting.py::build_hours_pdf()` 只改 4 行字型檔案路徑,內部 ReportLab 字型家族代號維持不變,沒有動到其他排版程式碼。換字型後寫了一份一次性腳本(未留在 repo)重新產生 NTNU 摘要版/詳細版(含跨頁到第 2 頁)、Maryland 摘要版共 4 種 PDF,用 Poppler 轉圖人工比對標題、內文、表格、浮水印,排版與原本一致、無缺字;126 項測試全數通過。詳見 `docs/SECURITY_CHECKLIST.md`「第三方元件清冊(SBOM)」一節。
 - **V4 提前完成的項目(尚未走完整個 V4,但這幾項已經做完):**
   - 課堂紀錄附件:系辦確認需要後補上,`ClassRecord` 新增選填 `attachment` FileField(`migration tutoring/0014`),限 PDF/JPG/PNG、最大 500 KB。把原本 `validate_qualification_file()` 的副檔名檢查抽成共用的 `_validate_upload()`,新增的 `validate_class_record_attachment()` 只是換一個 500 KB 的上限,避免重複驗證邏輯。`ClassRecordForm` 用一般 `FileInput`(不是 `ClearableFileInput`),刻意不提供「清除附件」的 UI——重新提交表單但不選新檔案時會自動保留原本附件(這是 Django `FileField.clean()` 對 `initial` 的預設行為,不用額外寫程式處理),要移除只能用新檔案覆蓋,或請 Admin 從 Django Admin 後台處理,避免多做一個「清除」邏輯的複雜度。課程詳情頁與 Admin 課程詳情卡都加了附件下載連結(新增 `ClassRecord.attachment_filename` property 取乾淨檔名)。**異常回報(`IncidentReport`)附件確認不做**(2026-07-26 使用者確認目前不需要)。
   - Admin 個人總覽(行政檔案):比照舊版「從名單查看個資、資格、配對與部分紀錄」概念,新增 `accounts:admin_user_profile` 唯讀彙整頁,單一 Tutor/Tutee 的基本資料、Profile、資格狀態(Tutor)、全部學期配對紀錄、依學期分組課程與時數、課堂通報/異常回報(各取最近 20 筆)一次看完,不用再切 Django Admin/課程總覽/不同頁籤。刻意不做任何操作按鈕,審核/核准/標記仍在原本頁面做,這頁只負責「看」,範圍已跟使用者確認過。入口是 Django Admin 學生名冊清單新增的「查看檔案」欄位連結。順手把 `profile()`/`matched_profile()`/新頁面共用的教學/學習 Profile 組裝邏輯抽成 `_role_profile_context()`,消除原本三處幾乎一樣的程式碼。
@@ -57,17 +58,12 @@
 
 V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在校方 VM 上對外服務」,以及收尾少數還沒做完的功能缺口:
 
-1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的兩項:登入失敗鎖定(比照忘記密碼流程,同 IP+學號 15 分鐘最多 5 次,`accounts/forms.py::BilingualAuthenticationForm`)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。目前 62 項控制措施中 18 項符合、11 項部分符合、29 項未實施、4 項不適用,詳見該文件;整理過程中也意外發現 `assets/fonts/` 內有幾個字型檔案疑似授權風險(見該文件「第三方元件清冊」一節),待確認來源。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
-2. **證明 PDF 字型授權風險(新發現,建議優先處理)**:`assets/fonts/Kaiu.ttf`、`TimesNewRoman.ttf`/`-Bold.ttf` 是使用者從自己 Mac 上既有的字型檔案直接複製進專案,來源是 Windows/Office 授權字型,直接 commit 進 git repo 有重新散布授權疑慮。建議替換方案:
-   - 標楷體 → 改用[國發會全字庫標楷體](https://data.gov.tw/dataset/5961)(政府資料開放平臺,授權可選「政府資料開放授權條款第一版」或「OFL 1.1」,允許重製/散布,適合公立大學使用)。
-   - Times New Roman → 改用 [Liberation Serif](https://github.com/liberationfonts/liberation-fonts)(Red Hat 開發,SIL OFL 1.1,與 Times New Roman **度量相容**——字元寬高完全一致,換字型不會讓 PDF 排版跑掉)。
-   - `NotoSansTC.ttf` 目前完全沒被程式碼引用,確認後可直接刪除。
-   - 待使用者下載上述替代字型檔案後,再由開發端更新 `tutoring/reporting.py` 的字型註冊(檔名/字型家族名稱可以維持不變,盡量不動其他排版程式碼)。**換字型前必須重新產生 PDF 圖片人工比對,確認標題/內文排版沒有跑版**(比照 `CLAUDE.md`「PDF 改動」測試慣例)。
-3. **密碼效期與密碼歷程(檢核表第 33、34 項)**:實作方式已想清楚(見下方說明),但**開發前務必先跟系辦確認全校是否已有密碼政策**,避免系統自己訂一套跟校方规定衝突或重複的規則。若確認要做:
+1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的幾項:登入失敗鎖定(比照忘記密碼流程,同 IP+學號 15 分鐘最多 5 次,`accounts/forms.py::BilingualAuthenticationForm`)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)、換掉有授權疑慮的證明 PDF 字型(見下方「已完成」)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。目前 62 項控制措施中 18 項符合、11 項部分符合、29 項未實施、4 項不適用,詳見該文件。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
+2. **密碼效期與密碼歷程(檢核表第 33、34 項)**:實作方式已想清楚(見下方說明),但**開發前務必先跟系辦確認全校是否已有密碼政策**,避免系統自己訂一套跟校方规定衝突或重複的規則。若確認要做:
    - 效期:`User` 新增 `password_changed_at` 欄位,註冊/改密碼時更新;比照 `django.contrib.auth.middleware` 的模式寫一個輕量 middleware,登入後若 `now - password_changed_at` 超過政策天數(例如 90 天),強制導向改密碼頁面才能繼續使用系統。
    - 歷程:新增 `PasswordHistory` model(user、password_hash、created_at),改密碼時把新密碼分別跟最近 3 筆歷史雜湊比對(用 `django.contrib.auth.hashers.check_password`,不能明文比對),相同就擋下;成功變更後把最舊的一筆歷史紀錄清掉,只保留最近 3 筆。
    - 兩者都要注意:`createsuperuser`、Django Admin 直接改密碼、`set_recovered_password`(忘記密碼流程)都要一併納入更新 `password_changed_at`/寫入 `PasswordHistory`,不能只處理登入頁的改密碼表單。
-4. **視系辦後續需求評估**:站內通知中心、per-program 時數上限例外、`HourAdjustment` 是否需要支援負數(更正場景)等,都先觀察是否真的有需求再決定要不要做,不預先開發。
+3. **視系辦後續需求評估**:站內通知中心、per-program 時數上限例外、`HourAdjustment` 是否需要支援負數(更正場景)等,都先觀察是否真的有需求再決定要不要做,不預先開發。
 
 ### 舊版功能取捨
 
@@ -80,7 +76,6 @@ V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在�
 - 已完成 Git 初始化並 push 至私有 remote(`https://github.com/Karma-1827/CSL.git`),但目前僅一個 initial commit,commit history 仍很淺,尚未建立分支/PR 流程慣例。
 - 正式 VM 部署、服務管理、HTTPS proxy、備份、監控、RPO/RTO 尚未落地(V4 核心項目,細節見 `docs/DEPLOY.md`)。
 - **資安檢核表(`docs/SECURITY_CHECKLIST.md`)裡還有 29 項「未實施」**,其中密碼效期與歷程限制需要先跟系辦確認全校政策才能決定要不要做(登入鎖定、session 閒置登出、`AuditLog.metadata` 覆核、SBOM 整理都已完成)。詳見該文件「總結與行動優先序」一節。
-- **字型授權風險**:2026-07-26 已確認 `Kaiu.ttf`/`TimesNewRoman*.ttf` 是使用者從自己 Mac 上的既有字型直接複製進專案(Windows/Office 授權字型),已規劃替換方案(全字庫標楷體 + Liberation Serif,見上方「版本規劃」V4 項目 2),待使用者下載替代字型檔案後執行換字型與 PDF 排版覆核。詳見 `docs/SECURITY_CHECKLIST.md`「第三方元件清冊(SBOM)」一節。
 - **V3/V3.1/V4 目前為止的功能絕大多數只做過 Django test client 驗證,沒有真人瀏覽器操作過**(學期編輯/刪除功能例外,已用 Playwright 驗證)。這不是單一功能的缺口,而是整個開發階段持續受限於 Chrome 擴充功能未連線;下次有瀏覽器可用時應排一次完整 golden path 人工驗收(名冊匯入卡片、註冊兩階段、候選篩選、邀請/配對、排課、簽到、課堂紀錄與附件、互認、補登、通報、私訊、時數下載、Admin 個人總覽、時數調整與匯入)。
 - Profile 編輯沒有配對當下的快照機制;配對成立後若一方修改聽說讀寫程度或可上課時段,對方看到的資料會即時變動,是否需要快照或提示尚未定案。
 - 資格文件只是一個通用 upload＋Admin 結果;大學/碩士/博士各自可接受的證明種類尚未建成資料欄位或規則。

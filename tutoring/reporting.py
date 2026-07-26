@@ -110,16 +110,16 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
 
     font_name = "CertificateKai"
     bold_font_name = "CertificateKai-Bold"
-    english_font_name = "CertificateTimesNewRoman"
-    english_bold_font_name = "CertificateTimesNewRoman-Bold"
+    english_font_name = "CertificateSerif"
+    english_bold_font_name = "CertificateSerif-Bold"
     if font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(font_name, settings.BASE_DIR / "assets/fonts/Kaiu.ttf"))
+        pdfmetrics.registerFont(TTFont(font_name, settings.BASE_DIR / "assets/fonts/TW-Kai.ttf"))
     if bold_font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(bold_font_name, settings.BASE_DIR / "assets/fonts/Kaiu.ttf"))
+        pdfmetrics.registerFont(TTFont(bold_font_name, settings.BASE_DIR / "assets/fonts/TW-Kai.ttf"))
     if english_font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(english_font_name, settings.BASE_DIR / "assets/fonts/TimesNewRoman.ttf"))
+        pdfmetrics.registerFont(TTFont(english_font_name, settings.BASE_DIR / "assets/fonts/LiberationSerif-Regular.ttf"))
     if english_bold_font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(english_bold_font_name, settings.BASE_DIR / "assets/fonts/TimesNewRoman-Bold.ttf"))
+        pdfmetrics.registerFont(TTFont(english_bold_font_name, settings.BASE_DIR / "assets/fonts/LiberationSerif-Bold.ttf"))
     pdfmetrics.registerFontFamily(
         font_name,
         normal=font_name,
