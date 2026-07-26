@@ -1,3 +1,4 @@
+from datetime import timedelta
 import io
 from unittest.mock import patch
 
@@ -8,10 +9,21 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from tutoring.models import QualificationDocument, TuteeProfile, TutorProfile
 
-from .models import AuditLog, EducationLevel, IdentityCategory, PartnerProgram, RegistrationDraft, Role, RosterEntry, User
+from .models import (
+    AccountStatus,
+    AuditLog,
+    EducationLevel,
+    IdentityCategory,
+    PartnerProgram,
+    RegistrationDraft,
+    Role,
+    RosterEntry,
+    User,
+)
 
 
 class RegistrationTests(TestCase):
@@ -388,6 +400,46 @@ class AdminDashboardNavigationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         usernames = {user.username for user in response.context["cl"].result_list}
         self.assertEqual(usernames, {"NAV-TUTOR", "NAV-TUTEE"})
+
+
+class IdleAccountFilterTests(TestCase):
+    """Checklist item 3: idle accounts are flagged for manual review, never auto-disabled."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="IDLE-ADMIN", password="Admin-password-2026")
+        self.client.force_login(self.admin)
+        now = timezone.now()
+        self.recent = User.objects.create_user(
+            username="IDLE-RECENT", password="Password-2026", role=Role.TUTOR,
+        )
+        self.recent.last_login = now - timedelta(days=10)
+        self.recent.save(update_fields=["last_login"])
+        self.idle = User.objects.create_user(
+            username="IDLE-STALE", password="Password-2026", role=Role.TUTOR,
+        )
+        self.idle.last_login = now - timedelta(days=200)
+        self.idle.save(update_fields=["last_login"])
+        self.never_logged_in = User.objects.create_user(
+            username="IDLE-NEVER", password="Password-2026", role=Role.TUTEE,
+        )
+
+    def test_idle_filter_shows_only_accounts_past_threshold(self):
+        response = self.client.get(f"{reverse('admin:accounts_user_changelist')}?idle=idle")
+        self.assertEqual(response.status_code, 200)
+        usernames = {user.username for user in response.context["cl"].result_list}
+        self.assertEqual(usernames, {"IDLE-STALE"})
+
+    def test_never_logged_in_filter_excludes_users_with_a_login(self):
+        response = self.client.get(f"{reverse('admin:accounts_user_changelist')}?idle=never")
+        self.assertEqual(response.status_code, 200)
+        usernames = {user.username for user in response.context["cl"].result_list}
+        self.assertEqual(usernames, {"IDLE-NEVER"})
+
+    def test_idle_accounts_are_not_auto_suspended(self):
+        self.idle.refresh_from_db()
+        self.never_logged_in.refresh_from_db()
+        self.assertEqual(self.idle.account_status, AccountStatus.ACTIVE)
+        self.assertEqual(self.never_logged_in.account_status, AccountStatus.ACTIVE)
 
 
 class RosterImportTests(TestCase):

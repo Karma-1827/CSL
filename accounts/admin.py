@@ -1,9 +1,39 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import AuditLog, PartnerProgram, Role, RosterEntry, SecurityQuestionAnswer, User
+
+IDLE_ACCOUNT_THRESHOLD_DAYS = 180
+
+
+class IdleAccountFilter(admin.SimpleListFilter):
+    """資通系統防護基準檢核表第 3 項:標記閒置帳號供 Admin 人工複核。
+
+    刻意不自動停用——華語班有寒暑假,學生/老師超過門檻天數沒登入很正常,
+    自動停用有誤鎖到還在配對期使用者的風險;是否要停用由 Admin 自行判斷。
+    """
+
+    title = "閒置帳號 / Idle account"
+    parameter_name = "idle"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("idle", f"{IDLE_ACCOUNT_THRESHOLD_DAYS} 天以上未登入 / Idle {IDLE_ACCOUNT_THRESHOLD_DAYS}+ days"),
+            ("never", "從未登入過 / Never logged in"),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == "idle":
+            cutoff = timezone.now() - timedelta(days=IDLE_ACCOUNT_THRESHOLD_DAYS)
+            return queryset.filter(last_login__lt=cutoff)
+        if self.value() == "never":
+            return queryset.filter(last_login__isnull=True)
+        return queryset
 
 
 @admin.register(User)
@@ -14,8 +44,8 @@ class CSLUserAdmin(UserAdmin):
     add_fieldsets = UserAdmin.add_fieldsets + (
         ("華語輔導系統 / CSL Tutoring", {"fields": ("role", "name_zh", "name_en")}),
     )
-    list_display = ("username", "name_zh", "name_en", "role", "account_status", "is_staff")
-    list_filter = ("role", "account_status", "is_staff", "is_active")
+    list_display = ("username", "name_zh", "name_en", "role", "account_status", "is_staff", "last_login")
+    list_filter = ("role", "account_status", "is_staff", "is_active", IdleAccountFilter)
     search_fields = ("username", "name_zh", "name_en")
 
 
