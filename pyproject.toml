@@ -1,0 +1,10 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 119
+exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# Keep this to real-bug categories (pyflakes) rather than style rules (pycodestyle/import-sort),
+# since the existing codebase was never formatted against a style guide and a full repo-wide
+# reformat is a separate, deliberate decision — not something CI should force as a side effect.
+select = ["F", "E9"]

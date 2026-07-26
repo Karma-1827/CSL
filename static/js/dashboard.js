@@ -130,9 +130,11 @@
   document.querySelectorAll(".certificate-download-form").forEach((form) => {
     const versionRadios = Array.from(form.querySelectorAll('input[name="version"]'));
     const detailFields = form.querySelector("[data-certificate-detail-fields]");
+    const summaryNote = form.querySelector("[data-certificate-summary-note]");
     const updateCertificateVersion = () => {
       const version = versionRadios.find((item) => item.checked)?.value || "summary";
       if (detailFields) detailFields.hidden = version !== "detailed";
+      if (summaryNote) summaryNote.hidden = version === "detailed";
     };
     versionRadios.forEach((radio) => radio.addEventListener("change", updateCertificateVersion));
     updateCertificateVersion();

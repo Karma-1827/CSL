@@ -14,15 +14,23 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.models import AuditLog, Role, User
 
 from .forms import (
-    ClassAlertForm, ClassRecordForm, HoursDownloadForm, PairingMessageForm,
+    ClassAlertForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm, PairingMessageForm,
     RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
 )
 from .models import (
-    ClassAlert, ClassAlertStatus, ClassSession, ConfirmationStatus, MatchingInvitation,
+    ClassAlert, ClassAlertStatus, ClassSession, IncidentReport,
     Pairing, PairingMessage, PairingStatus, Semester,
 )
-from .reporting import build_excel_xml, build_hours_pdf, hour_report_data, user_has_hour_records
+from .reporting import (
+    build_excel_xlsx,
+    build_excel_xml,
+    build_export_csv,
+    build_hours_pdf,
+    hour_report_data,
+    user_has_hour_records,
+)
 from .services import (
+    SKILL_LABELS,
     cancel_class,
     cancel_class_alert,
     cancel_invitation,
@@ -32,10 +40,13 @@ from .services import (
     respond_to_invitation,
     reschedule_class,
     report_class_alert,
+    resolve_class_alert,
+    resolve_incident_report,
     review_pairing_release_request,
     review_makeup,
     schedule_classes,
     send_invitation,
+    submit_incident_report,
     submit_pairing_release_request,
     submit_class_record,
 )
@@ -93,6 +104,31 @@ def archive_semester(request, pk):
     return redirect(f"{reverse('accounts:dashboard')}#semesters")
 
 
+@login_required
+@require_POST
+def delete_semester(request, pk):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    semester = get_object_or_404(Semester, pk=pk)
+    if Pairing.objects.filter(semester=semester).exists():
+        messages.error(
+            request,
+            "此學期已有配對資料，無法刪除，請改用編輯修改日期。 / "
+            "This semester already has pairings and cannot be deleted; use edit instead.",
+        )
+    else:
+        semester_id = semester.pk
+        semester.delete()
+        AuditLog.objects.create(
+            actor=request.user,
+            event_type="SEMESTER_DELETED",
+            description="刪除學期設定（尚無配對資料） / Semester setting deleted (no pairings yet)",
+            metadata={"semester_id": semester_id},
+        )
+        messages.success(request, "學期設定已刪除。 / Semester setting deleted.")
+    return redirect(f"{reverse('accounts:dashboard')}#semesters")
+
+
 def _pairing_for_participant(user, pk):
     pairing = get_object_or_404(
         Pairing.objects.select_related("semester", "tutor", "tutee"), pk=pk
@@ -134,23 +170,34 @@ def pairing_messages(request, pk):
 def download_hours(request):
     if not user_has_hour_records(request.user):
         raise Http404
-    form = HoursDownloadForm(request.POST)
+    form = HoursDownloadForm(request.POST, user=request.user)
     if not form.is_valid():
         for errors in form.errors.values():
             for error in errors:
                 messages.error(request, error)
         return redirect(f"{reverse('accounts:dashboard')}#hours")
-    data = hour_report_data(request.user, form.cleaned_data["starts_on"], form.cleaned_data["ends_on"])
-    content = build_hours_pdf(
-        data,
-        version=form.cleaned_data["version"],
-        detail_fields=form.cleaned_data.get("detail_fields", []),
+    data = hour_report_data(
+        request.user, form.cleaned_data["starts_on"], form.cleaned_data["ends_on"],
+        program=form.cleaned_data.get("program"),
     )
+    try:
+        content = build_hours_pdf(
+            data,
+            version=form.cleaned_data["version"],
+            detail_fields=form.cleaned_data.get("detail_fields", []),
+            program=form.cleaned_data.get("program"),
+        )
+    except ValidationError as error:
+        _show_validation_error(request, error)
+        return redirect(f"{reverse('accounts:dashboard')}#hours")
+    is_preview = request.POST.get("intent") == "preview"
+    disposition = "inline" if is_preview else "attachment"
     response = HttpResponse(content, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="CSL-certificate-{request.user.username}-{data["ends_on"]}.pdf"'
+    response["Content-Disposition"] = f'{disposition}; filename="CSL-certificate-{request.user.username}-{data["ends_on"]}.pdf"'
     AuditLog.objects.create(
-        actor=request.user, target_user=request.user, event_type="HOURS_PDF_DOWNLOADED",
-        description="下載輔導時數紀錄 / Hours record downloaded",
+        actor=request.user, target_user=request.user,
+        event_type="HOURS_PDF_PREVIEWED" if is_preview else "HOURS_PDF_DOWNLOADED",
+        description="預覽輔導時數紀錄 / Hours record previewed" if is_preview else "下載輔導時數紀錄 / Hours record downloaded",
         metadata={
             "starts_on": str(data["starts_on"]), "ends_on": str(data["ends_on"]),
             "hours": str(data["total"]), "version": form.cleaned_data["version"],
@@ -195,15 +242,25 @@ def export_excel(request):
     else:
         messages.error(request, "請選擇匯出期間。 / Select an export period.")
         return redirect(f"{reverse('accounts:dashboard')}#export")
-    content = build_excel_xml(users, starts_on=starts_on, ends_on=ends_on)
-    response = HttpResponse(content, content_type="application/vnd.ms-excel")
-    response["Content-Disposition"] = f'attachment; filename="CSL-export-{timezone.localdate()}.xls"'
+    file_format = request.POST.get("file_format", "xls")
+    if file_format == "xlsx":
+        content = build_excel_xlsx(users, starts_on=starts_on, ends_on=ends_on)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif file_format == "csv":
+        content = build_export_csv(users, starts_on=starts_on, ends_on=ends_on)
+        content_type = "text/csv"
+    else:
+        file_format = "xls"
+        content = build_excel_xml(users, starts_on=starts_on, ends_on=ends_on)
+        content_type = "application/vnd.ms-excel"
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="CSL-export-{timezone.localdate()}.{file_format}"'
     AuditLog.objects.create(
         actor=request.user, event_type="ADMIN_EXCEL_EXPORTED",
         description="匯出輔導資料 / Tutoring data exported", metadata={
             "scope": scope, "users": users.count(), "period_mode": period_mode,
             "semester_id": semester.pk if semester else None,
-            "starts_on": str(starts_on), "ends_on": str(ends_on),
+            "starts_on": str(starts_on), "ends_on": str(ends_on), "file_format": file_format,
         },
     )
     return response
@@ -378,6 +435,9 @@ def class_detail(request, pk):
         tutee_confirmation = next(
             (row for row in session.confirmations.all() if row.reviewer_id == session.pairing.tutee_id), None
         )
+        for record in (tutor_record, tutee_record):
+            if record:
+                record.skill_labels = [SKILL_LABELS.get(skill, skill) for skill in record.skills_practiced]
         return render(
             request,
             "tutoring/admin_class_detail.html",
@@ -396,14 +456,17 @@ def class_detail(request, pk):
     counterpart = session.pairing.tutee if request.user.pk == session.pairing.tutor_id else session.pairing.tutor
     own_record = next((row for row in session.class_records.all() if row.author_id == request.user.pk), None)
     counterpart_record = next((row for row in session.class_records.all() if row.author_id == counterpart.pk), None)
+    if counterpart_record:
+        counterpart_record.skill_labels = [SKILL_LABELS.get(skill, skill) for skill in counterpart_record.skills_practiced]
     own_attendance = next((row for row in session.attendances.all() if row.participant_id == request.user.pk), None)
     counterpart_attendance = next((row for row in session.attendances.all() if row.participant_id == counterpart.pk), None)
     own_confirmation = next((row for row in session.confirmations.all() if row.reviewer_id == request.user.pk), None)
     own_alert = ClassAlert.objects.filter(
         session=session, reporter=request.user, status=ClassAlertStatus.ACTIVE
     ).first()
+    own_incident_reports = IncidentReport.objects.filter(session=session, reporter=request.user)
     now = timezone.now()
-    form = ClassRecordForm(request.POST or None, instance=own_record)
+    form = ClassRecordForm(request.POST or None, request.FILES or None, instance=own_record)
     reschedule_form = RescheduleClassForm(
         session=session,
         initial={
@@ -441,6 +504,8 @@ def class_detail(request, pk):
             "own_confirmation": own_confirmation,
             "own_alert": own_alert,
             "alert_form": ClassAlertForm(),
+            "own_incident_reports": own_incident_reports,
+            "incident_report_form": IncidentReportForm(),
             "checkin_requires_makeup_reason": now > session.ends_at + timedelta(minutes=30),
             "record_requires_makeup_reason": own_record is None and now > session.ends_at + timedelta(hours=24),
             "alert_window_open": session.starts_at <= now <= session.ends_at,
@@ -578,3 +643,75 @@ def cancel_alert(request, pk, alert_id):
     else:
         messages.success(request, "課堂通報已取消。 / Class alert cancelled.")
     return redirect("tutoring:class_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def resolve_alert(request, alert_id):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        alert = resolve_class_alert(alert_id=alert_id, admin=request.user, note=request.POST.get("note", ""))
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        AuditLog.objects.create(
+            actor=request.user,
+            event_type="CLASS_ALERT_RESOLVED",
+            description="課堂通報已紀錄 / Class alert logged",
+            metadata={"alert_id": alert.pk},
+        )
+        messages.success(request, "課堂通報已標記為已紀錄。 / Class alert marked as logged.")
+    return redirect(f"{reverse('accounts:dashboard')}#class-alerts")
+
+
+@login_required
+@require_POST
+def incident_report(request, pk):
+    _session_for_user(request.user, pk)
+    form = IncidentReportForm(request.POST)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect("tutoring:class_detail", pk=pk)
+    try:
+        report = submit_incident_report(
+            session_id=pk,
+            reporter=request.user,
+            category=form.cleaned_data["category"],
+            content=form.cleaned_data["content"],
+        )
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        AuditLog.objects.create(
+            actor=request.user,
+            event_type="INCIDENT_REPORT_SUBMITTED",
+            description="送出異常回報 / Incident report submitted",
+            metadata={"report_id": report.pk, "session_id": pk, "category": report.category},
+        )
+        messages.success(request, "異常回報已送出。 / Incident report submitted.")
+    return redirect("tutoring:class_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def resolve_incident_report_view(request, report_id):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        report = resolve_incident_report(
+            report_id=report_id, admin=request.user, note=request.POST.get("note", "")
+        )
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        AuditLog.objects.create(
+            actor=request.user,
+            event_type="INCIDENT_REPORT_RESOLVED",
+            description="異常回報已紀錄 / Incident report logged",
+            metadata={"report_id": report.pk},
+        )
+        messages.success(request, "異常回報已標記為已紀錄。 / Incident report marked as logged.")
+    return redirect(f"{reverse('accounts:dashboard')}#incident-reports")

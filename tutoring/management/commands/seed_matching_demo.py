@@ -1,11 +1,11 @@
-from datetime import timedelta
+from datetime import date
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import EducationLevel, IdentityCategory, ProgramSource, Role, RosterEntry, User
+from accounts.models import EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
 from tutoring.models import QualificationDocument, QualificationStatus, Semester, TuteeProfile, TutorProfile
 
 
@@ -21,23 +21,28 @@ class Command(BaseCommand):
             raise CommandError("This demo command is disabled when DEBUG is false.")
 
         password = options["password"]
-        today = timezone.localdate()
         Semester.objects.filter(is_active=True).update(is_active=False)
         Semester.objects.update_or_create(
-            name_zh="V1.1 本機測試學期",
+            name_zh="114學年度第3學期",
             defaults={
-                "name_en": "V1.1 local demo semester",
-                "starts_on": today - timedelta(days=14),
-                "ends_on": today + timedelta(days=120),
+                "name_en": "114-3 Semester",
+                "starts_on": date(2026, 7, 1),
+                "ends_on": date(2026, 8, 31),
                 "is_active": True,
             },
         )
 
+        ntnu_program, _ = PartnerProgram.objects.get_or_create(
+            code="NTNU", defaults={"name_zh": "師大外籍生", "name_en": "NTNU international student"}
+        )
+        maryland_program, _ = PartnerProgram.objects.get_or_create(
+            code="MARYLAND", defaults={"name_zh": "馬里蘭大學", "name_en": "University of Maryland"}
+        )
         demo_rows = [
-            ("DEMO-TUTOR", "王小華", "Alex Wang", Role.TUTOR, ProgramSource.NOT_APPLICABLE),
-            ("DEMO-TUTOR2", "陳安然", "Jamie Chen", Role.TUTOR, ProgramSource.NOT_APPLICABLE),
-            ("DEMO-TUTEE", "林安娜", "Anna Lin", Role.TUTEE, ProgramSource.NTNU),
-            ("DEMO-MARYLAND", "測試交換生", "Taylor Demo", Role.TUTEE, ProgramSource.MARYLAND),
+            ("DEMO-TUTOR", "王小華", "Alex Wang", Role.TUTOR, None),
+            ("DEMO-TUTOR2", "陳安然", "Jamie Chen", Role.TUTOR, None),
+            ("DEMO-TUTEE", "林安娜", "Anna Lin", Role.TUTEE, ntnu_program),
+            ("DEMO-MARYLAND", "測試交換生", "Taylor Demo", Role.TUTEE, maryland_program),
         ]
         for index, (student_id, name_zh, name_en, role, program) in enumerate(demo_rows, start=1):
             roster, _ = RosterEntry.objects.update_or_create(
@@ -48,7 +53,7 @@ class Command(BaseCommand):
                     "role": role,
                     "education_level": EducationLevel.MASTER if role == Role.TUTOR else EducationLevel.NOT_APPLICABLE,
                     "identity_category": IdentityCategory.LOCAL if role == Role.TUTOR else IdentityCategory.INTERNATIONAL,
-                    "program_source": program,
+                    "program": program,
                     "is_enabled": True,
                     "claimed_at": timezone.now(),
                 },
@@ -99,8 +104,8 @@ class Command(BaseCommand):
                         "native_language": "English",
                         "nationality": "United States",
                         "department": "Languages",
-                        "overall_level": "B1" if program == ProgramSource.NTNU else "A1",
-                        "learning_duration": "1_TO_2_YEARS" if program == ProgramSource.NTNU else "3_TO_6_MONTHS",
+                        "overall_level": "B1" if program == ntnu_program else "A1",
+                        "learning_duration": "1_TO_2_YEARS" if program == ntnu_program else "3_TO_6_MONTHS",
                         "target_skills": ["LISTENING", "SPEAKING"],
                         "skills_to_improve": "希望加強日常會話、課堂討論與口語表達。",
                         "preferred_days": ["TUE", "THU"],

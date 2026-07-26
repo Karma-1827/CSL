@@ -31,7 +31,8 @@
             <div class="completion-box"><strong>已完成簽到 / Checked in</strong><span>{{ own_attendance.signed_at|date:"Y-m-d H:i" }}</span>{% if own_attendance.is_makeup %}<em>補簽到，待雙方確認及管理員審核 / Makeup check-in</em>{% endif %}</div>
           {% else %}
             <form action="{% url 'tutoring:class_check_in' session.pk %}" method="post" class="stack-form">
-              {% csrf_token %}<label>逾時補簽原因 / Makeup reason{% if checkin_requires_makeup_reason %}<em class="required-chip">補簽必填 / Required</em>{% endif %}<textarea name="makeup_reason" rows="3"{% if checkin_requires_makeup_reason %} required{% endif %} placeholder="準時簽到不需填寫；逾時補簽必填。&#10;Required only for a late makeup check-in."></textarea></label>
+              {% csrf_token %}
+              {% if checkin_requires_makeup_reason %}<label>逾時補簽原因 / Makeup reason<em class="required-chip">補簽必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補簽必填。 / Required for a late makeup check-in."></textarea></label>{% endif %}
               <button class="button button-primary" type="submit">確認簽到 / Check in</button>
               <p class="help-text">上課前 10 分鐘開放，一般簽到至課程結束後 30 分鐘。<br>Normal check-in opens 10 minutes before class and closes 30 minutes after.</p>
             </form>
@@ -48,13 +49,27 @@
             <div class="empty-state compact">課堂通報僅於上課時間內開放。<br>Class alerts are available only during class time.</div>
           {% endif %}
         </section>
+
+        <section class="panel class-action-panel">
+          <div class="panel-heading"><div><span class="eyebrow">INCIDENT REPORT</span><h2>異常回報 <small>Incident report</small></h2></div></div>
+          {% if own_incident_reports %}
+            <div class="incident-report-list">
+              {% for report in own_incident_reports %}
+                <div class="profile-note-box"><span>{{ report.get_category_display }} · {% if report.status == 'RESOLVED' %}已紀錄 / Logged{% else %}待處理 / Pending{% endif %}</span><p>{{ report.content }}</p>{% if report.resolution_note %}<p><em>紀錄備註 / Note：{{ report.resolution_note }}</em></p>{% endif %}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <form action="{% url 'tutoring:incident_report' session.pk %}" method="post" class="stack-form">{% csrf_token %}{{ incident_report_form.as_p }}<button class="button button-secondary" type="submit">送出回報 / Submit report</button><p class="help-text">事後分類回報，不限上課時間內；只有管理員能標記處理完成。<br>For after-the-fact reports, not limited to class time; only administrators can mark these resolved.</p></form>
+        </section>
         </div>
 
         <section class="panel class-action-panel">
           <div class="panel-heading"><div><span class="eyebrow">MY RECORD</span><h2>我的課堂紀錄 <small>My class record</small></h2></div></div>
-          <form method="post" class="stack-form">
-            {% csrf_token %}{{ record_form.as_p }}
-            <label>逾時補登原因 / Makeup reason{% if record_requires_makeup_reason %}<em class="required-chip">補登必填 / Required</em>{% endif %}<textarea name="makeup_reason" rows="3"{% if record_requires_makeup_reason %} required{% endif %} placeholder="24 小時內提交不需填寫。 / Required after the 24-hour deadline."></textarea></label>
+          <form method="post" class="stack-form" enctype="multipart/form-data">
+            {% csrf_token %}
+            {% if own_record.attachment %}<p class="current-attachment-note">目前附件 / Current attachment：<a href="{{ own_record.attachment.url }}" target="_blank" rel="noopener">{{ own_record.attachment_filename }}</a></p>{% endif %}
+            {{ record_form.as_p }}
+            {% if record_requires_makeup_reason %}<label class="makeup-reason-field">逾時補登原因 / Makeup reason<em class="required-chip">補登必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補登必填。 / Required for a late makeup record."></textarea></label>{% endif %}
             <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% else %}送出紀錄 / Submit record{% endif %}</button>
           </form>
         </section>
@@ -68,6 +83,8 @@
             <div><span>上課地點 / Location</span><strong>{{ counterpart_record.location }}</strong></div>
             <div><span>課堂主題 / Topic</span><strong>{{ counterpart_record.topic }}</strong></div>
             <div class="wide"><span>課堂內容 / Content</span><p>{{ counterpart_record.content|linebreaksbr }}</p></div>
+            <div class="wide"><span>授課類型 / Skills practiced</span><div class="tag-list">{% for label in counterpart_record.skill_labels %}<b>{{ label }}</b>{% empty %}<em>未填寫 / Not provided</em>{% endfor %}</div></div>
+            <div><span>附件 / Attachment</span>{% if counterpart_record.attachment %}<strong><a href="{{ counterpart_record.attachment.url }}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong>{% else %}<strong>未上傳 / Not uploaded</strong>{% endif %}</div>
           </div>
           <form action="{% url 'tutoring:class_confirm' session.pk %}" method="post" class="confirmation-form">
             {% csrf_token %}<label>說明 / Note<textarea name="note" rows="3" placeholder="要求修改或回報問題時請填寫。 / Required for revision or issue reports."></textarea></label>

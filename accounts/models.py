@@ -24,13 +24,6 @@ class IdentityCategory(models.TextChoices):
     INTERNATIONAL = "INTERNATIONAL", "外籍生 / International student"
 
 
-class ProgramSource(models.TextChoices):
-    NTNU = "NTNU", "師大外籍生 / NTNU international student"
-    MARYLAND = "MARYLAND", "馬里蘭大學 / University of Maryland"
-    OTHER = "OTHER", "其他合作計畫 / Other partner program"
-    NOT_APPLICABLE = "NA", "不適用 / Not applicable"
-
-
 class AccountStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "啟用 / Active"
     SUSPENDED = "SUSPENDED", "停用 / Suspended"
@@ -43,19 +36,83 @@ class CSLUserManager(UserManager):
         return super().create_superuser(username, email, password, **extra_fields)
 
 
+class PartnerProgram(models.Model):
+    code = models.CharField("代碼 / Code", max_length=20, unique=True)
+    name_zh = models.CharField("中文名稱 / Chinese name", max_length=100)
+    name_en = models.CharField("英文名稱 / English name", max_length=150)
+    is_active = models.BooleanField("啟用中 / Active", default=True)
+    allow_tutee_initiate_invitation = models.BooleanField(
+        "Tutee 可主動邀請 Tutor / Tutee can initiate invitations", default=False
+    )
+    tutee_can_download_hours = models.BooleanField(
+        "Tutee 可下載時數證明 / Tutee can download hour certificates", default=False
+    )
+    tutee_certificate_filename = models.CharField(
+        "Tutee 證明模板檔名 / Tutee certificate template filename", max_length=150, blank=True,
+        help_text="檔名需已存在於 tutoring/resources/certificate_templates/。多個計畫可共用同一份底圖。",
+    )
+    tutee_certificate_title_zh = models.CharField(
+        "Tutee 證明標題(中) / Tutee certificate title (Chinese)", max_length=50, blank=True
+    )
+    tutee_certificate_title_en = models.CharField(
+        "Tutee 證明標題(英) / Tutee certificate title (English)", max_length=100, blank=True
+    )
+    tutee_certificate_plan_name = models.CharField(
+        "Tutee 證明計畫名稱 / Tutee certificate plan name", max_length=100, blank=True
+    )
+    tutee_certificate_activity_text = models.CharField(
+        "Tutee 證明活動描述 / Tutee certificate activity text", max_length=200, blank=True
+    )
+    tutor_certificate_filename = models.CharField(
+        "Tutor 證明模板檔名 / Tutor certificate template filename", max_length=150, blank=True,
+        help_text="檔名需已存在於 tutoring/resources/certificate_templates/。多個計畫可共用同一份底圖。",
+    )
+    tutor_certificate_title_zh = models.CharField(
+        "Tutor 證明標題(中) / Tutor certificate title (Chinese)", max_length=50, blank=True
+    )
+    tutor_certificate_title_en = models.CharField(
+        "Tutor 證明標題(英) / Tutor certificate title (English)", max_length=100, blank=True
+    )
+    tutor_certificate_plan_name = models.CharField(
+        "Tutor 證明計畫名稱 / Tutor certificate plan name", max_length=100, blank=True
+    )
+    tutor_certificate_activity_text = models.CharField(
+        "Tutor 證明活動描述 / Tutor certificate activity text", max_length=200, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name_zh"]
+        verbose_name = "合作計畫 / Partner program"
+        verbose_name_plural = "合作計畫 / Partner programs"
+
+    def __str__(self):
+        return f"{self.name_zh} ({self.code})"
+
+
 class RosterEntry(models.Model):
     student_id = models.CharField("學號 / Student ID", max_length=24, unique=True)
-    name_zh = models.CharField("中文姓名 / Chinese name", max_length=100)
+    name_zh = models.CharField(
+        "中文姓名 / Chinese name", max_length=100, blank=True,
+        help_text="匯入時可留空，由使用者註冊時自行填寫。",
+    )
     name_en = models.CharField("英文姓名 / English name", max_length=150, blank=True)
     role = models.CharField("身分 / Role", max_length=10, choices=Role.choices)
     education_level = models.CharField(
         "學制 / Degree level", max_length=12, choices=EducationLevel.choices, default=EducationLevel.NOT_APPLICABLE
     )
     identity_category = models.CharField(
-        "學生類別 / Student category", max_length=16, choices=IdentityCategory.choices
+        "學生類別 / Student category", max_length=16, choices=IdentityCategory.choices, blank=True,
+        help_text="匯入時可留空，由使用者註冊時自行填寫。",
     )
-    program_source = models.CharField(
-        "所屬計畫 / Program", max_length=16, choices=ProgramSource.choices, default=ProgramSource.NOT_APPLICABLE
+    program = models.ForeignKey(
+        PartnerProgram,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="roster_entries",
+        verbose_name="所屬計畫 / Program",
     )
     is_enabled = models.BooleanField("可註冊 / Registration enabled", default=True)
     claimed_at = models.DateTimeField("註冊時間 / Claimed at", null=True, blank=True)
@@ -68,12 +125,12 @@ class RosterEntry(models.Model):
         verbose_name_plural = "學生名冊 / Roster entries"
 
     def clean(self):
+        if self.student_id:
+            self.student_id = self.student_id.strip().upper()
         if self.role == Role.ADMIN:
             raise ValidationError("管理員不可由學生名冊建立。 / Admins cannot be created from the student roster.")
-        if self.role == Role.TUTOR and self.education_level == EducationLevel.NOT_APPLICABLE:
-            raise ValidationError({"education_level": "Tutor 必須設定學制。 / Tutor degree level is required."})
-        if self.role == Role.TUTEE and self.program_source == ProgramSource.NOT_APPLICABLE:
-            raise ValidationError({"program_source": "Tutee 必須設定所屬計畫。 / Tutee program is required."})
+        if self.role == Role.TUTEE and self.program_id is None:
+            raise ValidationError({"program": "Tutee 必須設定所屬計畫。 / Tutee program is required."})
 
     @property
     def is_claimed(self):

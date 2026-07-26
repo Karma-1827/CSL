@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.urls import reverse
+from django.utils.html import format_html
 
-from .models import AuditLog, RosterEntry, SecurityQuestionAnswer, User
+from .models import AuditLog, PartnerProgram, Role, RosterEntry, SecurityQuestionAnswer, User
 
 
 @admin.register(User)
@@ -19,10 +21,31 @@ class CSLUserAdmin(UserAdmin):
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
-    list_display = ("student_id", "name_zh", "name_en", "role", "education_level", "program_source", "is_enabled", "claimed_at")
-    list_filter = ("role", "education_level", "identity_category", "program_source", "is_enabled")
+    list_display = ("student_id", "name_zh", "name_en", "role", "education_level", "program", "is_enabled", "claimed_at", "profile_link")
+    list_filter = ("role", "education_level", "identity_category", "program", "is_enabled")
     search_fields = ("student_id", "name_zh", "name_en")
     readonly_fields = ("claimed_at", "created_at", "updated_at")
+
+    @admin.display(description="行政檔案 / Admin profile")
+    def profile_link(self, obj):
+        user = getattr(obj, "user", None)
+        if not user or user.role not in {Role.TUTOR, Role.TUTEE}:
+            return "—"
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">查看檔案 / View profile</a>',
+            reverse("accounts:admin_user_profile", args=[user.pk]),
+        )
+
+
+@admin.register(PartnerProgram)
+class PartnerProgramAdmin(admin.ModelAdmin):
+    list_display = (
+        "name_zh", "code", "is_active", "allow_tutee_initiate_invitation",
+        "tutee_can_download_hours", "tutee_certificate_filename", "tutor_certificate_filename",
+    )
+    list_filter = ("is_active", "allow_tutee_initiate_invitation", "tutee_can_download_hours")
+    search_fields = ("code", "name_zh", "name_en")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(AuditLog)

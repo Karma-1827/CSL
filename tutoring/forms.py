@@ -2,7 +2,20 @@ from datetime import time
 
 from django import forms
 
-from .models import ClassAlert, ClassRecord, ClassSession, Pairing, PairingMessage, PairingStatus, Semester
+from accounts.forms import SKILL_CHOICES
+from accounts.models import PartnerProgram, Role
+
+from .models import (
+    ClassAlert,
+    ClassRecord,
+    ClassSession,
+    IncidentReport,
+    Pairing,
+    PairingMessage,
+    PairingStatus,
+    Semester,
+)
+from .reporting import tutor_available_programs
 
 
 class FiveMinuteTimeWidget(forms.MultiWidget):
@@ -78,13 +91,22 @@ class RescheduleClassForm(forms.Form):
 
 
 class ClassRecordForm(forms.ModelForm):
+    skills_practiced = forms.MultipleChoiceField(
+        label="授課類型 / Skills practiced", choices=SKILL_CHOICES, required=False, widget=forms.CheckboxSelectMultiple
+    )
+
     class Meta:
         model = ClassRecord
-        fields = ("location", "topic", "content", "remarks")
+        fields = ("location", "topic", "content", "skills_practiced", "remarks", "attachment")
         widgets = {
             "content": forms.Textarea(attrs={"rows": 5}),
-            "remarks": forms.Textarea(attrs={"rows": 3}),
+            "remarks": forms.Textarea(attrs={"rows": 5}),
+            "attachment": forms.FileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["attachment"].help_text = "PDF、JPG、PNG，最大 500 KB（選填）。\nPDF, JPG, or PNG, up to 500 KB (optional)."
 
 
 class ClassAlertForm(forms.ModelForm):
@@ -92,6 +114,13 @@ class ClassAlertForm(forms.ModelForm):
         model = ClassAlert
         fields = ("reason", "note")
         widgets = {"note": forms.Textarea(attrs={"rows": 3})}
+
+
+class IncidentReportForm(forms.ModelForm):
+    class Meta:
+        model = IncidentReport
+        fields = ("category", "content")
+        widgets = {"content": forms.Textarea(attrs={"rows": 3})}
 
 
 class MakeupReasonForm(forms.Form):
@@ -109,8 +138,8 @@ class SemesterSettingsForm(forms.ModelForm):
             "name_zh", "name_en", "starts_on", "ends_on", "is_active",
         )
         widgets = {
-            "starts_on": forms.DateInput(attrs={"type": "date"}),
-            "ends_on": forms.DateInput(attrs={"type": "date"}),
+            "starts_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "ends_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
 
@@ -121,8 +150,8 @@ class SemesterCreateForm(forms.ModelForm):
         model = Semester
         fields = ("name_zh", "name_en", "starts_on", "ends_on")
         widgets = {
-            "starts_on": forms.DateInput(attrs={"type": "date"}),
-            "ends_on": forms.DateInput(attrs={"type": "date"}),
+            "starts_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "ends_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
 
@@ -171,11 +200,22 @@ class HoursDownloadForm(forms.Form):
         required=False,
         widget=forms.CheckboxSelectMultiple,
     )
+    program = forms.ModelChoiceField(
+        label="實習計劃 / Practicum program",
+        queryset=None,
+        required=False,
+        error_messages={"required": "請選擇實習計劃。 / Select a practicum program."},
+    )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         downloadable_ids = [row.pk for row in Semester.objects.all() if row.is_hours_downloadable]
         self.fields["semester"].queryset = Semester.objects.filter(pk__in=downloadable_ids).order_by("-starts_on")
+        if user and user.role == Role.TUTOR:
+            self.fields["program"].queryset = tutor_available_programs(user)
+            self.fields["program"].required = True
+        else:
+            del self.fields["program"]
 
     def clean(self):
         cleaned = super().clean()
@@ -210,3 +250,18 @@ class HoursDownloadForm(forms.Form):
         if cleaned.get("version") == "detailed" and not cleaned.get("detail_fields"):
             self.add_error("detail_fields", "詳細版請至少選擇一個欄位。 / Select at least one detailed field.")
         return cleaned
+
+
+class HourImportForm(forms.Form):
+    semester = forms.ModelChoiceField(label="學期 / Semester", queryset=Semester.objects.order_by("-starts_on"))
+    program = forms.ModelChoiceField(label="合作計畫 / Partner program", queryset=PartnerProgram.objects.order_by("name_zh"))
+    reason = forms.CharField(
+        label="調整原因 / Reason",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="套用到這次匯入的每一筆時數調整。 / Applied to every row in this import batch.",
+    )
+    file = forms.FileField(
+        label="時數檔案 / Hours file",
+        widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx"}),
+        help_text="兩欄：學號、時數；容忍標題列。只能是正數，只會新增不會覆蓋。\nTwo columns: student ID, hours; a header row is tolerated. Hours must be positive; this only adds records, never overwrites.",
+    )

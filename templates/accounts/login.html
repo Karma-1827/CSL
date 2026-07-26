@@ -7,13 +7,15 @@
 <h2>系統登入</h2>
 <form method="post" class="stack-form" novalidate>
   {% csrf_token %}
-  {% if form.non_field_errors %}
-    <div class="message message-error">學號或密碼不正確。 / The student ID or password is incorrect.</div>
-  {% endif %}
+  {% for error in form.non_field_errors %}
+    <div class="message message-error">{{ error }}</div>
+  {% endfor %}
   {% include "components/form_field.html" with field=form.username %}
   <div class="form-group{% if form.password.errors %} has-error{% endif %}">
-    <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
-    <div class="password-help-row"><a href="{% url 'accounts:recover' %}">忘記密碼？ / Forgot?</a></div>
+    <div class="field-label-row">
+      <label for="{{ form.password.id_for_label }}">{{ form.password.label }}{% if form.password.field.required %}<span class="required-mark" aria-hidden="true"> *</span>{% endif %}</label>
+      <a class="password-help-row" href="{% url 'accounts:recover' %}">忘記密碼？ <small>Forgot?</small></a>
+    </div>
     {{ form.password }}
     {% for error in form.password.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
   </div>

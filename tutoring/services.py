@@ -1,13 +1,17 @@
+import csv
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+import io
 import uuid
 
+import openpyxl
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from accounts.models import AuditLog, ProgramSource, Role, User
+from accounts.models import AuditLog, Role, User
 
 from .models import (
     InvitationStatus,
@@ -31,6 +35,10 @@ from .models import (
     ClassSession,
     ClassSessionStatus,
     ConfirmationStatus,
+    HourAdjustment,
+    IncidentReport,
+    IncidentReportCategory,
+    IncidentReportStatus,
     MakeupReview,
     MakeupReviewStatus,
 )
@@ -38,6 +46,7 @@ from .models import (
 
 INVITATION_VALID_DAYS = 5
 MAX_ACTIVE_TUTEES_PER_TUTOR = 2
+MAX_PENDING_INVITATIONS_PER_USER = 3
 ALLOWED_DURATIONS = {Decimal("0.5"), Decimal("1.0"), Decimal("1.5"), Decimal("2.0")}
 MAX_WEEKLY_PAIRING_HOURS = Decimal("2.0")
 MAX_SEMESTER_PAIRING_HOURS = Decimal("32.0")
@@ -300,8 +309,18 @@ def tutor_has_capacity(tutor, semester):
     ).count() < MAX_ACTIVE_TUTEES_PER_TUTOR
 
 
-def _is_maryland_tutee(tutee):
-    return bool(tutee.roster_entry and tutee.roster_entry.program_source == ProgramSource.MARYLAND)
+def _tutee_can_initiate_invitation(tutee):
+    return bool(
+        tutee.roster_entry
+        and tutee.roster_entry.program_id
+        and tutee.roster_entry.program.allow_tutee_initiate_invitation
+    )
+
+
+def _pending_invitation_count(user, semester):
+    return MatchingInvitation.objects.filter(
+        Q(tutor=user) | Q(tutee=user), semester=semester, status=InvitationStatus.PENDING
+    ).count()
 
 
 @transaction.atomic
@@ -314,7 +333,7 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
     tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
     if initiator.pk not in {tutor.pk, tutee.pk}:
         raise ValidationError("您不是這筆邀請的參與者。 / You are not a participant in this invitation.")
-    if initiator.pk == tutee.pk and not _is_maryland_tutee(tutee):
+    if initiator.pk == tutee.pk and not _tutee_can_initiate_invitation(tutee):
         raise ValidationError("此 Tutee 類別不能主動邀請 Tutor。 / This tutee type cannot initiate invitations.")
     if not tutor_has_approved_qualification(tutor):
         raise ValidationError("Tutor 尚未通過資格審查。 / The tutor qualification is not approved.")
@@ -328,6 +347,10 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
         semester=semester, tutor=tutor, tutee=tutee, status=InvitationStatus.PENDING
     ).exists():
         raise ValidationError("雙方已有一筆等待回覆的邀請。 / A pending invitation already exists.")
+    if _pending_invitation_count(tutor, semester) >= MAX_PENDING_INVITATIONS_PER_USER:
+        raise ValidationError("此 Tutor 待回覆邀請已達上限。 / This tutor has reached the pending invitation limit.")
+    if _pending_invitation_count(tutee, semester) >= MAX_PENDING_INVITATIONS_PER_USER:
+        raise ValidationError("此 Tutee 待回覆邀請已達上限。 / This tutee has reached the pending invitation limit.")
     return MatchingInvitation.objects.create(
         semester=semester,
         tutor=tutor,
@@ -382,6 +405,12 @@ def respond_to_invitation(*, invitation_id, responder, accept):
         tutee=invitation.tutee,
         status=InvitationStatus.PENDING,
     ).exclude(pk=invitation.pk).update(status=InvitationStatus.CANCELLED, responded_at=now)
+    if not tutor_has_capacity(invitation.tutor, invitation.semester):
+        MatchingInvitation.objects.filter(
+            semester=invitation.semester,
+            tutor=invitation.tutor,
+            status=InvitationStatus.PENDING,
+        ).exclude(pk=invitation.pk).update(status=InvitationStatus.CANCELLED, responded_at=now)
     return pairing
 
 
@@ -398,13 +427,32 @@ def cancel_invitation(*, invitation_id, actor):
     invitation.save(update_fields=["status", "responded_at", "updated_at"])
 
 
-def anonymous_tutee_candidates(*, semester, tutor):
+def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     if not semester:
         return []
+    filters = filters or {}
     blocked_tutees = Pairing.objects.filter(semester=semester).filter(
         Q(status=PairingStatus.ACTIVE) | Q(tutor=tutor)
     ).values_list("tutee_id", flat=True)
-    profiles = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).order_by("tutee_id")
+    queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).order_by("tutee_id")
+    gender = filters.get("gender")
+    if gender:
+        queryset = queryset.filter(gender=gender)
+    overall_level = filters.get("overall_level")
+    if overall_level:
+        queryset = queryset.filter(overall_level=overall_level)
+    native_language = filters.get("native_language")
+    if native_language:
+        queryset = queryset.filter(native_language=native_language)
+    target_skills = filters.get("target_skills") or []
+    days = filters.get("days") or []
+    time_slots = filters.get("time_slots") or []
+    profiles = [
+        profile for profile in queryset
+        if (not target_skills or all(skill in profile.target_skills for skill in target_skills))
+        and (not days or any(day in profile.preferred_days for day in days))
+        and (not time_slots or any(slot in profile.preferred_time_slots for slot in time_slots))
+    ]
     return [anonymous_tutee_profile(profile) for profile in profiles]
 
 
@@ -423,9 +471,10 @@ def anonymous_tutee_profile(profile):
     }
 
 
-def anonymous_tutor_candidates(*, semester, tutee):
+def anonymous_tutor_candidates(*, semester, tutee, filters=None):
     if not semester:
         return []
+    filters = filters or {}
     previous_tutors = Pairing.objects.filter(semester=semester, tutee=tutee).values_list("tutor_id", flat=True)
     full_tutors = Pairing.objects.filter(semester=semester, status=PairingStatus.ACTIVE).values("tutor_id").annotate(
         total=Count("id")
@@ -433,9 +482,22 @@ def anonymous_tutor_candidates(*, semester, tutee):
     approved = QualificationDocument.objects.filter(status=QualificationStatus.APPROVED).values_list(
         "tutor_id", flat=True
     )
-    profiles = TutorProfile.objects.filter(tutor_id__in=approved).exclude(
+    queryset = TutorProfile.objects.filter(tutor_id__in=approved).exclude(
         Q(tutor_id__in=previous_tutors) | Q(tutor_id__in=full_tutors)
     ).order_by("tutor_id")
+    gender = filters.get("gender")
+    if gender:
+        queryset = queryset.filter(gender=gender)
+    native_language = filters.get("native_language")
+    if native_language:
+        queryset = queryset.filter(native_language=native_language)
+    days = filters.get("days") or []
+    time_slots = filters.get("time_slots") or []
+    profiles = [
+        profile for profile in queryset
+        if (not days or any(day in profile.available_days for day in days))
+        and (not time_slots or any(slot in profile.available_time_slots for slot in time_slots))
+    ]
     return [anonymous_tutor_profile(profile) for profile in profiles]
 
 
@@ -455,6 +517,17 @@ def anonymous_tutor_profile(profile):
         "days": [DAY_LABELS.get(day, day) for day in profile.available_days],
         "time_slots": profile.available_time_slots,
     }
+
+
+def annotate_conversation_summaries(pairings, *, viewer):
+    """Attach last_message/last_activity_at/unread_count to each pairing, sorted by most recent activity."""
+    pairings = list(pairings)
+    for pairing in pairings:
+        last_message = pairing.messages.select_related("sender").order_by("-created_at", "-pk").first()
+        pairing.last_message = last_message
+        pairing.last_activity_at = last_message.created_at if last_message else pairing.started_at
+        pairing.unread_count = pairing.messages.filter(read_at__isnull=True).exclude(sender=viewer).count()
+    return sorted(pairings, key=lambda pairing: pairing.last_activity_at, reverse=True)
 
 
 def _participants(session):
@@ -771,3 +844,152 @@ def cancel_class_alert(*, alert_id, reporter):
     alert.cancelled_at = timezone.now()
     alert.save(update_fields=["status", "cancelled_at"])
     return alert
+
+
+@transaction.atomic
+def resolve_class_alert(*, alert_id, admin, note=""):
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以處理課堂通報。 / Only administrators may resolve class alerts.")
+    alert = ClassAlert.objects.select_for_update().get(pk=alert_id)
+    if alert.status != ClassAlertStatus.ACTIVE:
+        raise ValidationError("此課堂通報已無法標記為已處理。 / This class alert can no longer be resolved.")
+    alert.status = ClassAlertStatus.RESOLVED
+    alert.resolved_by = admin
+    alert.resolved_at = timezone.now()
+    alert.resolution_note = note.strip()
+    alert.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_note"])
+    return alert
+
+
+@transaction.atomic
+def submit_incident_report(*, session_id, reporter, category, content):
+    session = ClassSession.objects.select_for_update().select_related(
+        "pairing__tutor", "pairing__tutee"
+    ).get(pk=session_id)
+    _counterpart(session, reporter)
+    if category not in IncidentReportCategory.values:
+        raise ValidationError("請選擇回報分類。 / Select a report category.")
+    content = content.strip()
+    if not content:
+        raise ValidationError("請填寫回報內容。 / Report content is required.")
+    return IncidentReport.objects.create(
+        session=session, reporter=reporter, category=category, content=content
+    )
+
+
+@transaction.atomic
+def resolve_incident_report(*, report_id, admin, note=""):
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以處理異常回報。 / Only administrators may resolve incident reports.")
+    report = IncidentReport.objects.select_for_update().get(pk=report_id)
+    if report.status != IncidentReportStatus.PENDING:
+        raise ValidationError("此異常回報已處理過。 / This incident report has already been resolved.")
+    report.status = IncidentReportStatus.RESOLVED
+    report.resolved_by = admin
+    report.resolved_at = timezone.now()
+    report.resolution_note = note.strip()
+    report.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_note"])
+    return report
+
+
+class HourImportFileError(Exception):
+    """檔案本身無法解析（格式錯誤、空檔案、副檔名不支援）。"""
+
+
+@dataclass
+class HourImportResult:
+    created_count: int = 0
+    total_hours: Decimal = Decimal("0")
+    student_ids: list = dataclass_field(default_factory=list)
+    errors: list = dataclass_field(default_factory=list)
+
+
+_HOUR_IMPORT_HEADER_VALUES = {"學號", "STUDENT_ID", "STUDENT ID", "STUDENTID"}
+
+
+def _read_hour_import_rows(uploaded_file):
+    """Read (row_num, student_id, hours) triples from the first two columns of a
+    CSV/.xlsx file. Tolerant of a header row, matching the roster quick-import reader."""
+    name = uploaded_file.name.lower()
+    rows = []
+    if name.endswith(".csv"):
+        raw = uploaded_file.read().decode("utf-8-sig")
+        reader = csv.reader(io.StringIO(raw))
+        for row_num, row in enumerate(reader, start=1):
+            if row and any(cell and str(cell).strip() for cell in row):
+                rows.append((row_num, row[0] if len(row) > 0 else None, row[1] if len(row) > 1 else None))
+    elif name.endswith(".xlsx"):
+        workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+        sheet = workbook.worksheets[0]
+        for row_num, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+            if row and any(cell is not None and str(cell).strip() for cell in row):
+                rows.append((row_num, row[0] if len(row) > 0 else None, row[1] if len(row) > 1 else None))
+    else:
+        raise HourImportFileError("僅支援 .csv 或 .xlsx 檔案。 / Only .csv or .xlsx files are supported.")
+    return rows
+
+
+def hour_import_template_xlsx_bytes():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["學號 / Student ID", "時數 / Hours"])
+    sheet.append(["S10112345", "2.5"])
+    sheet.append(["S20223456", "4"])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+@transaction.atomic
+def import_hour_adjustments(uploaded_file, *, semester, program, reason, created_by):
+    """Bulk-create HourAdjustment rows from a two-column (學號, 時數) CSV/.xlsx file.
+
+    All-or-nothing: any invalid row rejects the whole batch, matching the advanced
+    roster import's validation style rather than the quick-import's skip-and-warn
+    style, since hour totals feed official certificates.
+    """
+    raw_rows = _read_hour_import_rows(uploaded_file)
+    if not raw_rows:
+        return HourImportResult(errors=["檔案沒有任何資料列。 / The file has no data rows."])
+
+    errors = []
+    adjustments = []
+    for row_num, raw_student_id, raw_hours in raw_rows:
+        student_id = str(raw_student_id).strip().upper() if raw_student_id is not None else ""
+        if not student_id or student_id in _HOUR_IMPORT_HEADER_VALUES:
+            continue
+        user = User.objects.filter(username=student_id).first()
+        if user is None:
+            errors.append(f"第 {row_num} 列：找不到學號「{student_id}」對應的使用者。 / Row {row_num}: no user found for student ID {student_id}.")
+            continue
+        if user.role not in {Role.TUTOR, Role.TUTEE}:
+            errors.append(f"第 {row_num} 列：「{student_id}」不是老師或學生帳號。 / Row {row_num}: {student_id} is not a Tutor or Tutee account.")
+            continue
+        try:
+            hours = Decimal(str(raw_hours).strip())
+        except (InvalidOperation, AttributeError):
+            errors.append(f"第 {row_num} 列：時數「{raw_hours}」不是有效數字。 / Row {row_num}: the hours value is invalid.")
+            continue
+        adjustment = HourAdjustment(
+            user=user, semester=semester, program=program, hours=hours, reason=reason, created_by=created_by,
+        )
+        try:
+            adjustment.full_clean()
+        except ValidationError as exc:
+            for messages_list in exc.message_dict.values():
+                for message in messages_list:
+                    errors.append(f"第 {row_num} 列：{message}")
+            continue
+        adjustments.append(adjustment)
+
+    if errors:
+        return HourImportResult(errors=errors)
+
+    for adjustment in adjustments:
+        adjustment.save()
+
+    return HourImportResult(
+        created_count=len(adjustments),
+        total_hours=sum((row.hours for row in adjustments), start=Decimal("0")),
+        student_ids=[row.user.username for row in adjustments],
+    )

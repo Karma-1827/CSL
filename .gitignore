@@ -14,6 +14,9 @@ db.sqlite3
 # 使用者上傳與真實資料(勿提交真實個資或資格文件)
 media/
 
+# 學校提供的內部行政/資安文件(非公開,不進版控)
+學校文件/
+
 # 本機人工檢查用 PDF 預覽,不是正式資料來源
 output/pdf/
 
@@ -27,3 +30,6 @@ tmp/pdfs/
 
 # Node(若未來有用到)
 node_modules/
+
+# macOS Finder 自訂資料夾圖示殘留檔
+Icon?

@@ -21,17 +21,19 @@
             <a class="sidebar-link" href="#matching" data-dashboard-target="matching"><span aria-hidden="true">↔</span><b>配對管理<small>Matching</small></b></a>
             <a class="sidebar-link" href="#pairing-releases" data-dashboard-target="pairing-releases"><span aria-hidden="true">⌁</span><b>解除審核<small>Pairing releases</small></b>{% if pending_pairing_releases %}<em>{{ pending_pairing_releases|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-alerts" data-dashboard-target="class-alerts"><span aria-hidden="true">!</span><b>課堂通報<small>Class alerts</small></b>{% if active_class_alerts %}<em>{{ active_class_alerts|length }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b>{% if pending_incident_reports %}<em>{{ pending_incident_reports|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#makeup-review" data-dashboard-target="makeup-review"><span aria-hidden="true">↺</span><b>補登審核<small>Makeup review</small></b>{% if pending_makeup_reviews %}<em>{{ pending_makeup_reviews|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#semesters" data-dashboard-target="semesters"><span aria-hidden="true">▣</span><b>學期設定<small>Semesters</small></b></a>
             <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#export" data-dashboard-target="export"><span aria-hidden="true">⇩</span><b>資料匯出<small>Data export</small></b></a>
+            <a class="sidebar-link" href="#roster-import" data-dashboard-target="roster-import"><span aria-hidden="true">⇧</span><b>名冊匯入<small>Roster import</small></b></a>
             <a class="sidebar-link" href="#activity" data-dashboard-target="activity"><span aria-hidden="true">◷</span><b>系統紀錄<small>Activity</small></b></a>
             <a class="sidebar-link sidebar-link-external" href="{% url 'admin:accounts_rosterentry_changelist' %}"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
           {% elif request.user.role == 'TUTOR' %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             <a class="sidebar-link" href="#schedule" data-dashboard-target="schedule"><span aria-hidden="true">▦</span><b>我的課表<small>Schedule</small></b></a>
             <a class="sidebar-link" href="#hours" data-dashboard-target="hours"><span aria-hidden="true">◷</span><b>輔導時數<small>Hours</small></b></a>
-            <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b></a>
+            <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#find-tutee" data-dashboard-target="find-tutee"><span aria-hidden="true">⌕</span><b>尋找學生<small>Find students</small></b></a>
             <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>輔導資格<small>Qualification</small></b></a>
@@ -39,7 +41,7 @@
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             <a class="sidebar-link" href="#schedule" data-dashboard-target="schedule"><span aria-hidden="true">▦</span><b>我的課表<small>Schedule</small></b></a>
             <a class="sidebar-link" href="#hours" data-dashboard-target="hours"><span aria-hidden="true">◷</span><b>輔導紀錄<small>History</small></b></a>
-            <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b></a>
+            <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
             {% if is_maryland %}<a class="sidebar-link" href="#find-tutor" data-dashboard-target="find-tutor"><span aria-hidden="true">⌕</span><b>尋找老師<small>Find teachers</small></b></a>{% endif %}
           {% endif %}
@@ -171,10 +173,49 @@
           {% if active_class_alerts %}
             <div class="makeup-review-list">
               {% for alert in active_class_alerts %}
-                <article class="makeup-review-row class-alert-row"><div><strong>{{ alert.session.class_date|date:"Y-m-d" }} · {{ alert.session.start_time|time:"H:i" }}</strong><span>通報者 / Reporter：{{ alert.reporter.bilingual_name }}</span><span>通報對象 / Subject：{{ alert.subject.bilingual_name }}</span><small>{{ alert.get_reason_display }}</small></div><div><span>通報時間 / Reported</span><strong>{{ alert.created_at|date:"Y-m-d H:i" }}</strong>{% if alert.note %}<p>{{ alert.note }}</p>{% endif %}</div></article>
+                <article class="makeup-review-row class-alert-row">
+                  <div><strong>{{ alert.session.class_date|date:"Y-m-d" }} · {{ alert.session.start_time|time:"H:i" }}</strong><span>通報者 / Reporter：{{ alert.reporter.bilingual_name }}</span><span>通報對象 / Subject：{{ alert.subject.bilingual_name }}</span><small>{{ alert.get_reason_display }}</small></div>
+                  <div><span>通報時間 / Reported</span><strong>{{ alert.created_at|date:"Y-m-d H:i" }}</strong>{% if alert.note %}<p>{{ alert.note }}</p>{% endif %}
+                    <form action="{% url 'tutoring:resolve_alert' alert.pk %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="紀錄備註 / Log note"><div class="inline-actions"><button class="button button-small button-success" type="submit">標記已紀錄 / Mark as logged</button></div></form>
+                  </div>
+                </article>
               {% endfor %}
             </div>
           {% else %}<div class="empty-state">目前沒有待處理的課堂通報。 / No active class alerts.</div>{% endif %}
+        </section>
+        <section class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>紀錄 <small>Logged alerts</small></h2></div></div>
+          {% if class_alert_history %}
+            <div class="table-wrap"><table>
+              <thead><tr><th>課程 / Class</th><th>通報者 / Reporter</th><th>原因 / Reason</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th></tr></thead>
+              <tbody>{% for alert in class_alert_history %}<tr><td>{{ alert.session.class_date|date:"Y-m-d" }}</td><td>{{ alert.reporter.bilingual_name }}</td><td>{{ alert.get_reason_display }}</td><td>{{ alert.resolution_note }}</td><td>{{ alert.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ alert.resolved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+          {% else %}<div class="empty-state">目前沒有已紀錄的通報。 / No logged alerts yet.</div>{% endif %}
+        </section>
+      </section>
+      <section class="dashboard-view" data-dashboard-panel="incident-reports">
+        <div class="view-heading"><span>INCIDENT REPORTS</span><h2>異常回報 <small>Incident reports</small></h2></div>
+        <section class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">PENDING</span><h2>待處理回報 <small>Pending reports</small></h2></div></div>
+          {% if pending_incident_reports %}
+            <div class="makeup-review-list">
+              {% for report in pending_incident_reports %}
+                <article class="makeup-review-row class-alert-row">
+                  <div><strong>{{ report.session.class_date|date:"Y-m-d" }} · {{ report.session.start_time|time:"H:i" }}</strong><span>通報者 / Reporter：{{ report.reporter.bilingual_name }}</span><small>{{ report.get_category_display }}</small><p>{{ report.content }}</p></div>
+                  <form action="{% url 'tutoring:resolve_incident_report' report.pk %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="紀錄備註 / Log note"><div class="inline-actions"><button class="button button-small button-success" type="submit">標記已紀錄 / Mark as logged</button></div></form>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}<div class="empty-state">目前沒有待處理的異常回報。 / No pending incident reports.</div>{% endif %}
+        </section>
+        <section class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>紀錄 <small>Logged reports</small></h2></div></div>
+          {% if incident_report_history %}
+            <div class="table-wrap"><table>
+              <thead><tr><th>課程 / Class</th><th>通報者 / Reporter</th><th>分類 / Category</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th></tr></thead>
+              <tbody>{% for report in incident_report_history %}<tr><td>{{ report.session.class_date|date:"Y-m-d" }}</td><td>{{ report.reporter.bilingual_name }}</td><td>{{ report.get_category_display }}</td><td>{{ report.resolution_note }}</td><td>{{ report.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ report.resolved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+          {% else %}<div class="empty-state">目前沒有已紀錄的回報。 / No logged reports yet.</div>{% endif %}
         </section>
       </section>
       <section class="dashboard-view" data-dashboard-panel="makeup-review">
@@ -254,9 +295,53 @@
       </section>
       <section class="dashboard-view" data-dashboard-panel="find-tutee">
         <div class="view-heading"><span>STUDENT MATCHING</span><h2>尋找學生 <small>Find students</small></h2></div>
-      <section class="panel">
-        <div class="panel-heading"><div><span class="eyebrow">STUDENT MATCHING</span><h2>外籍學生 <small>International students</small></h2></div><span class="privacy-chip">配對前不顯示姓名與學號 / Identity hidden before matching</span></div>
-        {% if can_match %}<div class="candidate-grid">{% for candidate in tutee_candidates %}{% include "dashboard/anonymous_tutee_card.html" with candidate=candidate action="send" %}{% empty %}<div class="empty-state">目前沒有可邀請的學生。 / No students are currently available.</div>{% endfor %}</div>
+      <section class="panel candidate-search-panel">
+        <div class="panel-heading"><div><span class="eyebrow">STUDENT MATCHING</span><h2>外籍學生 <small>International students</small></h2></div></div>
+        {% if can_match %}
+        <details class="candidate-filter-disclosure">
+          <summary class="candidate-filter-toggle">搜尋條件 / Search filters</summary>
+          <form class="candidate-filter" action="{% url 'accounts:dashboard' %}#find-tutee" method="get">
+            <div class="candidate-filter-row">
+              <label>性別 / Gender
+                <select name="tutee_gender">
+                  <option value="">全部性別 / All genders</option>
+                  {% for value, label in tutee_gender_choices %}<option value="{{ value }}"{% if tutee_candidate_filters.gender == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </label>
+              <label>華語程度 / Chinese level
+                <select name="tutee_level">
+                  <option value="">全部程度 / All levels</option>
+                  {% for value, label in tutee_level_choices %}<option value="{{ value }}"{% if tutee_candidate_filters.overall_level == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </label>
+              <label>母語 / Native language
+                <select name="tutee_language" data-profile-options="language" data-current-value="{{ tutee_candidate_filters.native_language }}">
+                  <option value="">全部語言 / All languages</option>
+                </select>
+              </label>
+            </div>
+            <div class="candidate-filter-row">
+              <fieldset class="candidate-filter-chips">
+                <legend>加強項目 / Target skills</legend>
+                {% for value, label in tutee_skill_choices %}<label class="chip-check"><input type="checkbox" name="tutee_skill" value="{{ value }}"{% if value in tutee_candidate_filters.target_skills %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+              </fieldset>
+              <fieldset class="candidate-filter-chips">
+                <legend>星期 / Days</legend>
+                {% for value, label in tutee_day_choices %}<label class="chip-check"><input type="checkbox" name="tutee_day" value="{{ value }}"{% if value in tutee_candidate_filters.days %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+              </fieldset>
+              <fieldset class="candidate-filter-chips">
+                <legend>時段 / Time slots</legend>
+                {% for value, label in tutee_slot_choices %}<label class="chip-check"><input type="checkbox" name="tutee_slot" value="{{ value }}"{% if value in tutee_candidate_filters.time_slots %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+              </fieldset>
+            </div>
+            <div class="candidate-filter-actions">
+              <span class="result-count">{{ tutee_candidates|length }} 位符合 / matching</span>
+              <a class="button button-secondary button-small" href="{% url 'accounts:dashboard' %}#find-tutee">清除篩選 / Clear filters</a>
+              <button class="button button-primary button-small" type="submit">套用篩選 / Apply filters</button>
+            </div>
+          </form>
+        </details>
+        <div class="candidate-grid">{% for candidate in tutee_candidates %}{% include "dashboard/anonymous_tutee_card.html" with candidate=candidate action="send" %}{% empty %}<div class="empty-state">目前沒有符合篩選條件的學生。 / No students match the current filters.</div>{% endfor %}</div>
         {% elif not matching_open %}<div class="empty-state">目前未開放配對。 / Matching is currently closed.</div>
         {% elif qualification.status != 'APPROVED' %}<div class="empty-state">資格審查通過後即可瀏覽學生資料。 / Student profiles become available after approval.</div>
         {% else %}<div class="empty-state">您目前已有兩位學生。 / Your two matching spaces are currently filled.</div>{% endif %}
@@ -284,7 +369,42 @@
         <div class="view-heading"><span>TEACHER MATCHING</span><h2>尋找老師 <small>Find teachers</small></h2></div>
       {% if not active_pairings %}<section class="panel">
         <div class="panel-heading"><div><span class="eyebrow">TEACHER MATCHING</span><h2>華語老師 <small>Chinese teachers</small></h2></div><span class="privacy-chip">配對前不顯示姓名與學號 / Identity hidden before matching</span></div>
-        {% if matching_open %}<div class="candidate-grid">{% for candidate in tutor_candidates %}{% include "dashboard/anonymous_tutor_card.html" with candidate=candidate action="send" %}{% empty %}<div class="empty-state">目前沒有可邀請的老師。 / No teachers are currently available.</div>{% endfor %}</div>{% else %}<div class="empty-state">目前未開放配對。 / Matching is currently closed.</div>{% endif %}
+        {% if matching_open %}
+        <details class="candidate-filter-disclosure">
+          <summary class="candidate-filter-toggle">搜尋條件 / Search filters</summary>
+          <form class="candidate-filter" action="{% url 'accounts:dashboard' %}#find-tutor" method="get">
+            <div class="candidate-filter-row">
+              <label>性別 / Gender
+                <select name="tutor_gender">
+                  <option value="">全部性別 / All genders</option>
+                  {% for value, label in tutor_gender_choices %}<option value="{{ value }}"{% if tutor_candidate_filters.gender == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </label>
+              <label>母語 / Native language
+                <select name="tutor_language" data-profile-options="language" data-current-value="{{ tutor_candidate_filters.native_language }}">
+                  <option value="">全部語言 / All languages</option>
+                </select>
+              </label>
+            </div>
+            <div class="candidate-filter-row">
+              <fieldset class="candidate-filter-chips">
+                <legend>星期 / Days</legend>
+                {% for value, label in tutor_day_choices %}<label class="chip-check"><input type="checkbox" name="tutor_day" value="{{ value }}"{% if value in tutor_candidate_filters.days %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+              </fieldset>
+              <fieldset class="candidate-filter-chips">
+                <legend>時段 / Time slots</legend>
+                {% for value, label in tutor_slot_choices %}<label class="chip-check"><input type="checkbox" name="tutor_slot" value="{{ value }}"{% if value in tutor_candidate_filters.time_slots %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+              </fieldset>
+            </div>
+            <div class="candidate-filter-actions">
+              <span class="result-count">{{ tutor_candidates|length }} 位符合 / matching</span>
+              <a class="button button-secondary button-small" href="{% url 'accounts:dashboard' %}#find-tutor">清除篩選 / Clear filters</a>
+              <button class="button button-primary button-small" type="submit">套用篩選 / Apply filters</button>
+            </div>
+          </form>
+        </details>
+        <div class="candidate-grid">{% for candidate in tutor_candidates %}{% include "dashboard/anonymous_tutor_card.html" with candidate=candidate action="send" %}{% empty %}<div class="empty-state">目前沒有符合篩選條件的老師。 / No teachers match the current filters.</div>{% endfor %}</div>
+        {% else %}<div class="empty-state">目前未開放配對。 / Matching is currently closed.</div>{% endif %}
       </section>{% else %}<section class="panel"><div class="empty-state">您已建立配對，目前不需要尋找新老師。 / You already have an active teacher.</div></section>{% endif %}
       </section>{% endif %}
     {% endif %}
@@ -293,5 +413,6 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
 </div>
-<script src="{% static 'js/dashboard.js' %}?v=20260720-9" defer></script>
+<script src="{% static 'js/dashboard.js' %}?v=20260724-hours-download-ui" defer></script>
+<script src="{% static 'js/profile-options.js' %}" defer></script>
 {% endblock %}

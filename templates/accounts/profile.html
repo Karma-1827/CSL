@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}個人資料 / Profile{% endblock %}
 
@@ -17,7 +18,7 @@
           <span>{{ request.user.get_role_display }}</span>
           <span>{{ request.user.get_account_status_display }}</span>
           {% if roster and profile_kind == 'tutor' %}<span>{{ roster.get_education_level_display }}</span>{% endif %}
-          {% if roster and profile_kind == 'tutee' %}<span>{{ roster.get_program_source_display }}</span>{% endif %}
+          {% if roster and profile_kind == 'tutee' %}<span>{{ roster.program.name_zh }} / {{ roster.program.name_en }}</span>{% endif %}
         </div>
       </div>
       <div class="profile-updated"><span>學號 / Student ID</span><strong>{{ request.user.username }}</strong></div>
@@ -35,6 +36,7 @@
           <a href="#role-information">學習資料<small>Learning profile</small></a>
           <a href="#availability">上課時間<small>Availability</small></a>
         {% endif %}
+        {% if edit_form %}<a href="#edit-profile">編輯資料<small>Edit profile</small></a>{% endif %}
       </aside>
 
       <div class="profile-content">
@@ -103,9 +105,57 @@
             {% endif %}
           </section>
         {% endif %}
+
+        {% if edit_form %}
+          <section class="profile-card" id="edit-profile">
+            <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>姓名與學號如需更正請聯絡系辦；以下欄位可自行更新，儲存後立即生效。<br>Name and student ID require the department office to correct; the fields below take effect immediately.</p></div>
+            <form method="post" action="{% url 'accounts:update_profile' %}" class="profile-registration-form" novalidate>
+              {% csrf_token %}
+              <div class="two-column-fields">
+                {% include "components/form_field.html" with field=edit_form.phone %}
+                {% include "components/form_field.html" with field=edit_form.gender %}
+                {% include "components/form_field.html" with field=edit_form.native_language %}
+                {% include "components/form_field.html" with field=edit_form.nationality %}
+                {% include "components/form_field.html" with field=edit_form.department %}
+                {% if profile_kind == 'tutee' %}
+                  {% include "components/form_field.html" with field=edit_form.overall_level %}
+                  {% include "components/form_field.html" with field=edit_form.learning_duration %}
+                {% endif %}
+              </div>
+              <p class="form-note bilingual-note">自我評估：{% if profile_kind == 'tutor' %}1 分代表經驗較少，5 分代表非常有信心。<br>1 = limited experience; 5 = very confident.{% else %}1 分代表需要較多協助，5 分代表較熟練。<br>1 = needs more support; 5 = more proficient.{% endif %}</p>
+              <div class="rating-grid">
+                {% include "accounts/registration_rating_field.html" with field=edit_form.level_listening %}
+                {% include "accounts/registration_rating_field.html" with field=edit_form.level_speaking %}
+                {% include "accounts/registration_rating_field.html" with field=edit_form.level_reading %}
+                {% include "accounts/registration_rating_field.html" with field=edit_form.level_writing %}
+              </div>
+              {% if profile_kind == 'tutor' %}
+                {% include "components/form_field.html" with field=edit_form.teaching_notes %}
+              {% else %}
+                <div class="choice-field target-skills-card{% if edit_form.target_skills.errors %} has-error{% endif %}">
+                  <div class="target-skills-heading"><div><strong>{{ edit_form.target_skills.label }}<span class="required-mark"> *</span></strong><small>可複選 · Multiple selections allowed</small></div></div>
+                  {{ edit_form.target_skills }}
+                  {% for error in edit_form.target_skills.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+                </div>
+                {% include "components/form_field.html" with field=edit_form.skills_to_improve %}
+              {% endif %}
+              <div class="schedule-card">
+                {% if profile_kind == 'tutor' %}
+                  <div class="choice-field{% if edit_form.available_days.errors %} has-error{% endif %}"><label>1. {{ edit_form.available_days.label }}<span class="required-mark"> *</span></label>{{ edit_form.available_days }}{% for error in edit_form.available_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+                  <div class="choice-field{% if edit_form.available_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.available_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.available_time_slots }}{% for error in edit_form.available_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+                {% else %}
+                  <div class="choice-field{% if edit_form.preferred_days.errors %} has-error{% endif %}"><label>1. {{ edit_form.preferred_days.label }}<span class="required-mark"> *</span></label>{{ edit_form.preferred_days }}{% for error in edit_form.preferred_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+                  <div class="choice-field{% if edit_form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.preferred_time_slots }}{% for error in edit_form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+                {% endif %}
+              </div>
+              <button class="button button-primary" type="submit">儲存變更 <small>Save changes</small></button>
+            </form>
+          </section>
+        {% endif %}
       </div>
     </div>
   </main>
+  <script src="{% static 'js/profile-options.js' %}" defer></script>
   <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
 </div>
 {% endblock %}

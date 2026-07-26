@@ -14,11 +14,27 @@
   {% if visible_semester_rows %}
     <div class="semester-setting-list">
       {% for semester in visible_semester_rows %}
-        <div class="semester-setting-row">
-          <span class="semester-setting-name"><strong>{{ semester.name_zh }}</strong><small>{{ semester.name_en }}</small></span>
-          <span class="semester-setting-dates"><time>{{ semester.starts_on|date:"Y/m/d" }}</time><i aria-hidden="true">→</i><time>{{ semester.ends_on|date:"Y/m/d" }}</time></span>
-          <span class="semester-setting-status status-{{ semester.lifecycle_status|lower }}">{% if semester.lifecycle_status == 'CURRENT' %}目前學期<small>Current</small>{% elif semester.lifecycle_status == 'FUTURE' %}未來學期<small>Upcoming</small>{% else %}已結束<small>Ended</small>{% endif %}</span>
-          {% if semester.lifecycle_status == 'PAST' %}<form action="{% url 'tutoring:archive_semester' semester.pk %}" method="post" onsubmit="return confirm('確定刪除此學期設定？歷史課程與時數仍會保留。');">{% csrf_token %}<button class="button button-danger" type="submit">刪除設定 <small>Delete</small></button></form>{% endif %}
+        <div class="semester-card">
+          <div class="semester-setting-row">
+            <span class="semester-setting-name"><strong>{{ semester.name_zh }}</strong><small>{{ semester.name_en }}</small></span>
+            <span class="semester-setting-dates"><time>{{ semester.starts_on|date:"Y/m/d" }}</time><i aria-hidden="true">→</i><time>{{ semester.ends_on|date:"Y/m/d" }}</time></span>
+            <span class="semester-setting-status status-{{ semester.lifecycle_status|lower }}">{% if semester.lifecycle_status == 'CURRENT' %}目前學期<small>Current</small>{% elif semester.lifecycle_status == 'FUTURE' %}未來學期<small>Upcoming</small>{% else %}已結束<small>Ended</small>{% endif %}</span>
+            <div class="semester-setting-actions">
+              {% if semester.pk not in semester_ids_with_pairings %}
+                <form action="{% url 'tutoring:delete_semester' semester.pk %}" method="post" onsubmit="return confirm('確定刪除此學期設定？此學期尚無配對資料，可安全刪除重建。');">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除 <small>Delete</small></button></form>
+              {% elif semester.lifecycle_status == 'PAST' %}
+                <form action="{% url 'tutoring:archive_semester' semester.pk %}" method="post" onsubmit="return confirm('確定刪除此學期設定？歷史課程與時數仍會保留。');">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除設定 <small>Delete</small></button></form>
+              {% endif %}
+            </div>
+          </div>
+          <details class="semester-edit-disclosure">
+            <summary class="semester-edit-icon-btn" aria-label="編輯學期 / Edit semester"><span aria-hidden="true">✎</span></summary>
+            <form class="schedule-form semester-form semester-edit-form" action="{% url 'tutoring:update_semester' semester.pk %}" method="post">
+              {% csrf_token %}{{ semester.edit_form.as_div }}
+              <p class="semester-edit-warning">修改日期會立即影響補登期限與證明下載開放時間，且不會回頭檢查已排課程是否超出新範圍，請謹慎修改。<br>Changing dates immediately affects makeup deadlines and certificate download availability, and does not re-check existing classes against the new range.</p>
+              <button class="button button-primary button-small" type="submit">儲存修改 / Save changes</button>
+            </form>
+          </details>
         </div>
       {% endfor %}
     </div>
@@ -67,6 +83,58 @@
       <div class="export-period-panel" data-export-period-panel="semester"><label>學期 / Semester<select name="semester_id">{% for semester in export_semesters %}<option value="{{ semester.pk }}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></div>
       <div class="export-period-panel" data-export-period-panel="range" hidden><label>開始日期 / Start date<input type="date" name="starts_on"></label><span aria-hidden="true">→</span><label>結束日期 / End date<input type="date" name="ends_on"></label></div>
     </section>
-    <div class="export-submit-row"><span>目前格式 <strong>Excel (.xls)</strong><small>未來可加入其他格式 / More formats can be added later</small></span><button class="button button-primary" type="submit">匯出資料 <small>Export data</small></button></div>
+    <section class="panel export-config-card export-format-card">
+      <div class="export-card-heading"><span>3</span><div><h2>選擇格式 <small>Select format</small></h2><p>建議使用 .xlsx；.csv 適合匯入其他系統；.xls 為早期相容格式，供仍需要的作業流程使用。</p></div></div>
+      <div class="export-choice-row export-format-choice-row"><label><input type="radio" name="file_format" value="xlsx" checked> <span><strong>Excel (.xlsx)</strong><small>Recommended</small></span></label><label><input type="radio" name="file_format" value="csv"> <span><strong>CSV (.csv)</strong><small>For other systems</small></span></label><label><input type="radio" name="file_format" value="xls"> <span><strong>Excel 2003 (.xls)</strong><small>Legacy compatibility</small></span></label></div>
+    </section>
+    <div class="export-submit-row"><button class="button button-primary" type="submit">匯出資料 <small>Export data</small></button></div>
   </form>
+</section>
+
+<section class="dashboard-view" data-dashboard-panel="roster-import">
+  <div class="view-heading"><span>ROSTER IMPORT</span><h2>名冊批次匯入 <small>Roster batch import</small></h2><p>只有學號的名單，選對應身分卡片上傳即可；姓名、身份別、學制由學生註冊時自行填寫。已存在的學號會自動略過，不會覆蓋。 / For lists that only have student IDs, pick the matching category card. Names, identity category, and degree level are filled in by students when they register. Existing student IDs are skipped automatically, never overwritten.</p></div>
+
+  <div class="quick-import-grid">
+    <section class="panel quick-import-card">
+      <div class="panel-heading"><div><span class="eyebrow">TUTOR</span><h2>華語系學生 <small>CSL students</small></h2></div></div>
+      <form action="{% url 'accounts:roster_import_quick' 'TUTOR' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="file" accept=".csv,.xlsx" required>
+        <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+      </form>
+    </section>
+    {% for program in quick_import_programs %}
+      <section class="panel quick-import-card">
+        <div class="panel-heading"><div><span class="eyebrow">{{ program.code }}</span><h2>{{ program.name_zh }} <small>{{ program.name_en }}</small></h2></div></div>
+        <form action="{% url 'accounts:roster_import_quick' program.code %}" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="file" name="file" accept=".csv,.xlsx" required>
+          <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+        </form>
+      </section>
+    {% endfor %}
+    <section class="panel quick-import-card quick-import-add">
+      <div class="panel-heading"><div><span class="eyebrow">+</span><h2>新增合作計畫 <small>Add partner program</small></h2></div></div>
+      <p>還沒看到你要的計畫？先到 <a href="{% url 'admin:accounts_partnerprogram_add' %}">Django Admin 新增一筆合作計畫</a>，這裡就會自動多一張卡片。<br>Don't see the program you need? Add it in Django Admin first and a card will appear here automatically.</p>
+    </section>
+  </div>
+
+  <details class="semester-add-disclosure">
+    <summary>
+      <span class="semester-add-icon" aria-hidden="true">⋯</span>
+      <span><strong>進階匯入</strong><small>Advanced import (full columns)</small></span>
+    </summary>
+    <div class="semester-new-form">
+      <p>已經有完整資料（姓名、身份別、學制等）時使用。欄位順序：student_id、name_zh、name_en、role（TUTOR/TUTEE）、education_level、identity_category、program_code、is_enabled。program_code 請填合作計畫代碼（如 NTNU、MARYLAND），Tutor 留空或填 NA。已存在的學號會自動略過，不會覆蓋。</p>
+      <div class="inline-actions">
+        <a class="button button-secondary button-small" href="{% url 'accounts:roster_import_template' 'csv' %}">下載 CSV 範本 <small>CSV template</small></a>
+        <a class="button button-secondary button-small" href="{% url 'accounts:roster_import_template' 'xlsx' %}">下載 Excel 範本 <small>Excel template</small></a>
+      </div>
+      <form class="roster-import-form" action="{% url 'accounts:roster_import' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ roster_import_form.as_div }}
+        <button class="button button-primary" type="submit">匯入名冊 <small>Import roster</small></button>
+      </form>
+    </div>
+  </details>
 </section>

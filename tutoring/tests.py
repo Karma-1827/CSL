@@ -1,5 +1,9 @@
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
+
+import openpyxl
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -7,13 +11,12 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import EducationLevel, IdentityCategory, ProgramSource, Role, RosterEntry, User
-from .forms import HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
-from .reporting import build_hours_pdf
+from accounts.models import AuditLog, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
+from .forms import ClassRecordForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
+from .reporting import build_hours_pdf, tutor_available_programs, user_has_hour_records
 
 from .models import (
     InvitationStatus,
-    MatchingInvitation,
     Pairing,
     PairingReleaseReason,
     PairingReleaseRequest,
@@ -27,21 +30,29 @@ from .models import (
     TutorProfile,
     Attendance,
     ClassRecord,
+    ClassConfirmation,
     ClassAlert,
     ClassAlertReason,
     ClassAlertStatus,
     ClassSession,
     ConfirmationStatus,
+    HourAdjustment,
+    IncidentReport,
+    IncidentReportCategory,
+    IncidentReportStatus,
     MakeupReviewStatus,
 )
 from .services import (
     anonymous_tutee_candidates,
+    anonymous_tutor_candidates,
     archive_expired_semesters,
     check_in,
     cancel_class_alert,
     class_is_valid,
     confirm_counterpart,
     respond_to_invitation,
+    resolve_class_alert,
+    resolve_incident_report,
     review_makeup,
     report_class_alert,
     process_pending_pairing_releases,
@@ -49,6 +60,7 @@ from .services import (
     reschedule_class,
     schedule_classes,
     send_invitation,
+    submit_incident_report,
     submit_pairing_release_request,
     submit_class_record,
 )
@@ -101,6 +113,82 @@ class SemesterTests(TestCase):
         semester.refresh_from_db()
         self.assertFalse(semester.is_active)
 
+    def test_admin_can_delete_semester_without_pairings(self):
+        today = timezone.localdate()
+        semester = Semester.objects.create(
+            name_zh="打錯的學期", name_en="Mistaken semester",
+            starts_on=today, ends_on=today + timedelta(days=60), is_active=True,
+        )
+        admin = User.objects.create_superuser(username="DELETE-SEM-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:delete_semester", args=[semester.pk]))
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#semesters")
+        self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(event_type="SEMESTER_DELETED").exists())
+
+    def test_admin_cannot_delete_semester_with_pairings(self):
+        today = timezone.localdate()
+        semester = Semester.objects.create(
+            name_zh="已有配對的學期", name_en="Semester with pairings",
+            starts_on=today, ends_on=today + timedelta(days=60), is_active=True,
+        )
+        ntnu = PartnerProgram.objects.get(code="NTNU")
+        tutor_roster = RosterEntry.objects.create(
+            student_id="DEL-SEM-TUTOR", name_zh="老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutee_roster = RosterEntry.objects.create(
+            student_id="DEL-SEM-TUTEE", name_zh="學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=ntnu,
+        )
+        tutor = User.objects.create_user(username="DEL-SEM-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
+        tutee = User.objects.create_user(username="DEL-SEM-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
+        Pairing.objects.create(semester=semester, tutor=tutor, tutee=tutee)
+
+        admin = User.objects.create_superuser(username="DELETE-SEM-ADMIN2", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:delete_semester", args=[semester.pk]))
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#semesters")
+        self.assertTrue(Semester.objects.filter(pk=semester.pk).exists())
+
+    def test_admin_can_edit_semester_dates(self):
+        today = timezone.localdate()
+        semester = Semester.objects.create(
+            name_zh="待修正學期", name_en="Semester to fix",
+            starts_on=today, ends_on=today + timedelta(days=60), is_active=True,
+        )
+        admin = User.objects.create_superuser(username="EDIT-SEM-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("tutoring:update_semester", args=[semester.pk]),
+            {
+                f"semester-{semester.pk}-name_zh": "修正後學期",
+                f"semester-{semester.pk}-name_en": "Fixed semester",
+                f"semester-{semester.pk}-starts_on": (today + timedelta(days=5)).isoformat(),
+                f"semester-{semester.pk}-ends_on": (today + timedelta(days=70)).isoformat(),
+                f"semester-{semester.pk}-is_active": "on",
+            },
+        )
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#semesters")
+        semester.refresh_from_db()
+        self.assertEqual(semester.name_zh, "修正後學期")
+        self.assertEqual(semester.starts_on, today + timedelta(days=5))
+        log = AuditLog.objects.get(event_type="SEMESTER_UPDATED")
+        self.assertEqual(log.metadata["semester_id"], semester.pk)
+
+    def test_dashboard_shows_edit_toggle_for_each_semester(self):
+        today = timezone.localdate()
+        semester = Semester.objects.create(
+            name_zh="顯示編輯用學期", name_en="Semester for edit UI",
+            starts_on=today, ends_on=today + timedelta(days=60), is_active=True,
+        )
+        admin = User.objects.create_superuser(username="EDIT-UI-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, reverse("tutoring:update_semester", args=[semester.pk]))
+        self.assertContains(response, reverse("tutoring:delete_semester", args=[semester.pk]))
+
 
 class MatchingTests(TestCase):
     def setUp(self):
@@ -112,9 +200,11 @@ class MatchingTests(TestCase):
             ends_on=today + timedelta(days=90),
             is_active=True,
         )
+        self.ntnu_program = PartnerProgram.objects.get(code="NTNU")
+        self.maryland_program = PartnerProgram.objects.get(code="MARYLAND")
         self.tutor = self.make_tutor("TUTOR100", "知名小老師", "Known Tutor")
-        self.tutee = self.make_tutee("TUTEE100", "知名外籍生", "Known Tutee", ProgramSource.NTNU)
-        self.maryland = self.make_tutee("MARY100", "馬里蘭學生", "Maryland Student", ProgramSource.MARYLAND)
+        self.tutee = self.make_tutee("TUTEE100", "知名外籍生", "Known Tutee", self.ntnu_program)
+        self.maryland = self.make_tutee("MARY100", "馬里蘭學生", "Maryland Student", self.maryland_program)
 
     def make_tutor(self, student_id, name_zh, name_en):
         roster = RosterEntry.objects.create(
@@ -124,7 +214,6 @@ class MatchingTests(TestCase):
             role=Role.TUTOR,
             education_level=EducationLevel.MASTER,
             identity_category=IdentityCategory.LOCAL,
-            program_source=ProgramSource.NOT_APPLICABLE,
         )
         user = User.objects.create_user(
             username=student_id, password="Matching-password-2026", role=Role.TUTOR,
@@ -151,7 +240,7 @@ class MatchingTests(TestCase):
             role=Role.TUTEE,
             education_level=EducationLevel.NOT_APPLICABLE,
             identity_category=IdentityCategory.INTERNATIONAL,
-            program_source=program,
+            program=program,
         )
         user = User.objects.create_user(
             username=student_id, password="Matching-password-2026", role=Role.TUTEE,
@@ -179,6 +268,63 @@ class MatchingTests(TestCase):
         self.assertContains(response, "United States")
         self.assertContains(response, "TOCFL B1")
 
+    def test_tutee_candidates_can_be_filtered_by_compound_criteria(self):
+        TuteeProfile.objects.filter(tutee=self.maryland).delete()
+        other = self.make_tutee("TUTEE200", "另一位外籍生", "Other Tutee", self.ntnu_program)
+        other.tutee_profile.gender = "MALE"
+        other.tutee_profile.native_language = "Korean"
+        other.tutee_profile.overall_level = "A1"
+        other.tutee_profile.target_skills = ["LISTENING", "READING"]
+        other.tutee_profile.preferred_days = ["WED"]
+        other.tutee_profile.preferred_time_slots = ["09:00-11:00"]
+        other.tutee_profile.save()
+
+        all_ids = {c["user_id"] for c in anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)}
+        self.assertEqual(all_ids, {self.tutee.pk, other.pk})
+
+        gender_filtered = anonymous_tutee_candidates(
+            semester=self.semester, tutor=self.tutor, filters={"gender": "MALE"}
+        )
+        self.assertEqual({c["user_id"] for c in gender_filtered}, {other.pk})
+
+        level_filtered = anonymous_tutee_candidates(
+            semester=self.semester, tutor=self.tutor, filters={"overall_level": "B1"}
+        )
+        self.assertEqual({c["user_id"] for c in level_filtered}, {self.tutee.pk})
+
+        language_filtered = anonymous_tutee_candidates(
+            semester=self.semester, tutor=self.tutor, filters={"native_language": "Korean"}
+        )
+        self.assertEqual({c["user_id"] for c in language_filtered}, {other.pk})
+
+        skills_filtered = anonymous_tutee_candidates(
+            semester=self.semester, tutor=self.tutor, filters={"target_skills": ["LISTENING", "READING"]}
+        )
+        self.assertEqual({c["user_id"] for c in skills_filtered}, {other.pk})
+
+        days_filtered = anonymous_tutee_candidates(
+            semester=self.semester, tutor=self.tutor, filters={"days": ["TUE"]}
+        )
+        self.assertEqual({c["user_id"] for c in days_filtered}, {self.tutee.pk})
+
+        slots_filtered = anonymous_tutee_candidates(
+            semester=self.semester, tutor=self.tutor, filters={"time_slots": ["09:00-11:00"]}
+        )
+        self.assertEqual({c["user_id"] for c in slots_filtered}, {other.pk})
+
+        combined_filtered = anonymous_tutee_candidates(
+            semester=self.semester,
+            tutor=self.tutor,
+            filters={"gender": "MALE", "native_language": "korean", "days": ["MON"]},
+        )
+        self.assertEqual(combined_filtered, [])
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"), {"tutee_gender": "MALE"})
+        self.assertContains(response, "1 位符合")
+        self.assertContains(response, reverse("tutoring:invite_tutee", args=[other.pk]))
+        self.assertNotContains(response, reverse("tutoring:invite_tutee", args=[self.tutee.pk]))
+
     def test_maryland_dashboard_hides_tutor_identity(self):
         self.client.force_login(self.maryland)
         response = self.client.get(reverse("accounts:dashboard"))
@@ -187,6 +333,50 @@ class MatchingTests(TestCase):
         self.assertNotContains(response, "Known Tutor")
         self.assertNotContains(response, "TUTOR100")
         self.assertContains(response, "Mandarin Chinese")
+
+    def test_tutor_candidates_can_be_filtered_by_compound_criteria(self):
+        other_tutor = self.make_tutor("TUTOR200", "另一位老師", "Other Tutor")
+        other_tutor.tutor_profile.gender = "FEMALE"
+        other_tutor.tutor_profile.native_language = "Spanish"
+        other_tutor.tutor_profile.available_days = ["WED"]
+        other_tutor.tutor_profile.available_time_slots = ["09:00-11:00"]
+        other_tutor.tutor_profile.save()
+
+        all_ids = {c["user_id"] for c in anonymous_tutor_candidates(semester=self.semester, tutee=self.maryland)}
+        self.assertEqual(all_ids, {self.tutor.pk, other_tutor.pk})
+
+        gender_filtered = anonymous_tutor_candidates(
+            semester=self.semester, tutee=self.maryland, filters={"gender": "FEMALE"}
+        )
+        self.assertEqual({c["user_id"] for c in gender_filtered}, {other_tutor.pk})
+
+        language_filtered = anonymous_tutor_candidates(
+            semester=self.semester, tutee=self.maryland, filters={"native_language": "Spanish"}
+        )
+        self.assertEqual({c["user_id"] for c in language_filtered}, {other_tutor.pk})
+
+        days_filtered = anonymous_tutor_candidates(
+            semester=self.semester, tutee=self.maryland, filters={"days": ["MON"]}
+        )
+        self.assertEqual({c["user_id"] for c in days_filtered}, {self.tutor.pk})
+
+        slots_filtered = anonymous_tutor_candidates(
+            semester=self.semester, tutee=self.maryland, filters={"time_slots": ["09:00-11:00"]}
+        )
+        self.assertEqual({c["user_id"] for c in slots_filtered}, {other_tutor.pk})
+
+        combined_filtered = anonymous_tutor_candidates(
+            semester=self.semester,
+            tutee=self.maryland,
+            filters={"gender": "FEMALE", "days": ["MON"]},
+        )
+        self.assertEqual(combined_filtered, [])
+
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:dashboard"), {"tutor_gender": "FEMALE"})
+        self.assertContains(response, "1 位符合")
+        self.assertContains(response, reverse("tutoring:invite_tutor", args=[other_tutor.pk]))
+        self.assertNotContains(response, reverse("tutoring:invite_tutor", args=[self.tutor.pk]))
 
     def test_pending_candidate_uses_short_status_label(self):
         send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
@@ -210,7 +400,7 @@ class MatchingTests(TestCase):
         self.assertNotContains(response, "TUTOR100")
 
     def test_active_pair_can_open_each_others_full_profile(self):
-        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
 
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:matched_profile", args=[self.tutee.pk]))
@@ -279,8 +469,8 @@ class MatchingTests(TestCase):
             send_invitation(initiator=other_tutor, tutor_id=other_tutor.pk, tutee_id=self.tutee.pk)
 
     def test_tutor_capacity_is_two_active_tutees(self):
-        second = self.make_tutee("TUTEE200", "第二位學生", "Second Tutee", ProgramSource.NTNU)
-        third = self.make_tutee("TUTEE300", "第三位學生", "Third Tutee", ProgramSource.NTNU)
+        second = self.make_tutee("TUTEE200", "第二位學生", "Second Tutee", self.ntnu_program)
+        third = self.make_tutee("TUTEE300", "第三位學生", "Third Tutee", self.ntnu_program)
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=second)
         with self.assertRaises(ValidationError):
@@ -407,6 +597,53 @@ class MatchingTests(TestCase):
         self.assertContains(response, "解除配對審核")
         self.assertContains(response, "已多次未到")
 
+    def test_pending_invitation_cap_blocks_new_invitations_for_tutor(self):
+        second = self.make_tutee("TUTEE210", "第二位學生", "Second Tutee", self.ntnu_program)
+        third = self.make_tutee("TUTEE220", "第三位學生", "Third Tutee", self.ntnu_program)
+        fourth = self.make_tutee("TUTEE230", "第四位學生", "Fourth Tutee", self.ntnu_program)
+        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=second.pk)
+        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=third.pk)
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=fourth.pk)
+
+    def test_pending_invitation_cap_counts_both_directions_for_tutee(self):
+        tutor_b = self.make_tutor("TUTOR210", "第二位老師", "Second Tutor")
+        tutor_c = self.make_tutor("TUTOR220", "第三位老師", "Third Tutor")
+        tutor_d = self.make_tutor("TUTOR230", "第四位老師", "Fourth Tutor")
+        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk)
+        send_invitation(initiator=tutor_b, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk)
+        send_invitation(initiator=self.maryland, tutor_id=tutor_c.pk, tutee_id=self.maryland.pk)
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.maryland, tutor_id=tutor_d.pk, tutee_id=self.maryland.pk)
+
+    def test_tutor_reaching_capacity_cancels_other_pending_invitations(self):
+        tutee_b = self.make_tutee("TUTEE240", "乙學生", "Tutee B", self.ntnu_program)
+        tutee_c = self.make_tutee("TUTEE250", "丙學生", "Tutee C", self.ntnu_program)
+        invitation_a = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        invitation_b = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=tutee_b.pk)
+        invitation_c = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=tutee_c.pk)
+
+        respond_to_invitation(invitation_id=invitation_a.pk, responder=self.tutee, accept=True)
+        invitation_c.refresh_from_db()
+        self.assertEqual(invitation_c.status, InvitationStatus.PENDING)
+
+        respond_to_invitation(invitation_id=invitation_b.pk, responder=tutee_b, accept=True)
+        invitation_c.refresh_from_db()
+        self.assertEqual(invitation_c.status, InvitationStatus.CANCELLED)
+
+    def test_maryland_initiated_invitation_cancels_tutees_other_pending_on_acceptance(self):
+        tutor_b = self.make_tutor("TUTOR240", "乙老師", "Tutor B")
+        invitation_to_tutor = send_invitation(
+            initiator=self.maryland, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk
+        )
+        invitation_to_tutor_b = send_invitation(
+            initiator=self.maryland, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk
+        )
+        respond_to_invitation(invitation_id=invitation_to_tutor.pk, responder=self.tutor, accept=True)
+        invitation_to_tutor_b.refresh_from_db()
+        self.assertEqual(invitation_to_tutor_b.status, InvitationStatus.CANCELLED)
+
 
 class ClassWorkflowTests(TestCase):
     def setUp(self):
@@ -416,15 +653,15 @@ class ClassWorkflowTests(TestCase):
             starts_on=today - timedelta(days=7), ends_on=today + timedelta(days=90),
             is_active=True,
         )
+        self.ntnu_program = PartnerProgram.objects.get(code="NTNU")
         tutor_roster = RosterEntry.objects.create(
             student_id="CLASS-TUTOR", name_zh="課程老師", name_en="Class Tutor", role=Role.TUTOR,
             education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
-            program_source=ProgramSource.NOT_APPLICABLE,
         )
         tutee_roster = RosterEntry.objects.create(
             student_id="CLASS-TUTEE", name_zh="課程學生", name_en="Class Student", role=Role.TUTEE,
             education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
-            program_source=ProgramSource.NTNU,
+            program=self.ntnu_program,
         )
         self.tutor = User.objects.create_user(
             username="CLASS-TUTOR", password="Test-password-2026", role=Role.TUTOR,
@@ -533,6 +770,115 @@ class ClassWorkflowTests(TestCase):
         )
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
+
+    def test_class_record_skills_practiced_saved_and_shown_to_counterpart_and_admin(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
+        submit_class_record(
+            session_id=session.pk,
+            author=self.tutor,
+            data={**self.record_data("聽說練習"), "skills_practiced": ["LISTENING", "SPEAKING"]},
+            now=normal_now,
+        )
+        record = ClassRecord.objects.get(session=session, author=self.tutor)
+        self.assertEqual(record.skills_practiced, ["LISTENING", "SPEAKING"])
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "<b>聽力 / Listening</b>", html=False)
+        self.assertContains(response, "<b>口說 / Speaking</b>", html=False)
+        self.assertNotContains(response, "<b>寫作 / Writing</b>", html=False)
+
+        admin = User.objects.create_superuser(username="RECORD-SKILL-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "<b>聽力 / Listening</b>", html=False)
+        self.assertContains(response, "<b>口說 / Speaking</b>", html=False)
+        self.assertNotContains(response, "<b>寫作 / Writing</b>", html=False)
+
+        response = self.client.get("/system-admin/tutoring/classrecord/?skill=LISTENING")
+        self.assertContains(response, "聽說練習")
+        response = self.client.get("/system-admin/tutoring/classrecord/?skill=WRITING")
+        self.assertNotContains(response, "聽說練習")
+
+    def test_class_record_attachment_validates_type_and_size(self):
+        base_data = {
+            "location": "綜合大樓 / General Building", "topic": "課堂主題", "content": "課堂內容", "remarks": "",
+        }
+        valid_form = ClassRecordForm(
+            data=base_data,
+            files={"attachment": SimpleUploadedFile("outcome.pdf", b"%PDF-1.4 test", content_type="application/pdf")},
+        )
+        self.assertTrue(valid_form.is_valid(), valid_form.errors)
+
+        wrong_type_form = ClassRecordForm(
+            data=base_data,
+            files={"attachment": SimpleUploadedFile("outcome.txt", b"plain text", content_type="text/plain")},
+        )
+        self.assertFalse(wrong_type_form.is_valid())
+        self.assertIn("僅接受 PDF、JPG、PNG", str(wrong_type_form.errors["attachment"]))
+
+        oversized_form = ClassRecordForm(
+            data=base_data,
+            files={"attachment": SimpleUploadedFile("outcome.pdf", b"x" * 500_001, content_type="application/pdf")},
+        )
+        self.assertFalse(oversized_form.is_valid())
+        self.assertIn("500 KB", str(oversized_form.errors["attachment"]))
+
+    def test_class_record_attachment_saved_and_downloadable_by_counterpart_and_admin(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
+        submit_class_record(
+            session_id=session.pk,
+            author=self.tutor,
+            data={
+                **self.record_data("附件測試"),
+                "attachment": SimpleUploadedFile("proof.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+            },
+            now=normal_now,
+        )
+        record = ClassRecord.objects.get(session=session, author=self.tutor)
+        self.assertTrue(record.attachment.name)
+        self.assertEqual(record.attachment_filename, Path(record.attachment.name).name)
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, record.attachment.url)
+
+        admin = User.objects.create_superuser(username="RECORD-ATTACHMENT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, record.attachment.url)
+
+    def test_makeup_reason_fields_only_shown_when_overdue(self):
+        today = timezone.localdate()
+        future_session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=today + timedelta(days=1), start_time=time(10, 0),
+            duration=1, created_by=self.tutor,
+        )
+        overdue_session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=today - timedelta(days=3), start_time=time(10, 0),
+            duration=1, created_by=self.tutor,
+        )
+        self.client.force_login(self.tutor)
+
+        response = self.client.get(reverse("tutoring:class_detail", args=[future_session.pk]))
+        self.assertNotContains(response, "逾時補簽原因")
+        self.assertNotContains(response, "逾時補登原因")
+
+        response = self.client.get(reverse("tutoring:class_detail", args=[overdue_session.pk]))
+        self.assertContains(response, "逾時補簽原因")
+        self.assertContains(response, "逾時補登原因")
 
     def test_makeup_record_requires_mutual_confirmation_and_admin_approval(self):
         class_date = timezone.localdate()
@@ -648,6 +994,168 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertNotContains(response, "聯絡不到對方")
 
+    def test_admin_can_resolve_class_alert_and_history_shows_note(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        alert = report_class_alert(
+            session_id=session.pk,
+            reporter=self.tutor,
+            reason=ClassAlertReason.CANNOT_REACH,
+            now=self.aware(class_date, time(10, 15)),
+        )
+        admin = User.objects.create_superuser(username="ALERT-RESOLVE-ADMIN", password="Admin-password-2026")
+        resolved = resolve_class_alert(alert_id=alert.pk, admin=admin, note="已與雙方確認過情況")
+        self.assertEqual(resolved.status, ClassAlertStatus.RESOLVED)
+        self.assertEqual(resolved.resolved_by, admin)
+
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "已與雙方確認過情況")
+        self.assertContains(response, "目前沒有待處理的課堂通報")
+
+    def test_resolved_class_alert_cannot_be_cancelled_and_active_cannot_be_resolved_twice(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        alert = report_class_alert(
+            session_id=session.pk,
+            reporter=self.tutor,
+            reason=ClassAlertReason.OTHER,
+            note="其他狀況",
+            now=self.aware(class_date, time(10, 15)),
+        )
+        admin = User.objects.create_superuser(username="ALERT-RESOLVE-ADMIN2", password="Admin-password-2026")
+        resolve_class_alert(alert_id=alert.pk, admin=admin, note="")
+        with self.assertRaises(ValidationError):
+            cancel_class_alert(alert_id=alert.pk, reporter=self.tutor)
+        with self.assertRaises(ValidationError):
+            resolve_class_alert(alert_id=alert.pk, admin=admin, note="")
+
+    def test_non_admin_cannot_resolve_class_alert(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        alert = report_class_alert(
+            session_id=session.pk,
+            reporter=self.tutor,
+            reason=ClassAlertReason.OTHER,
+            note="其他狀況",
+            now=self.aware(class_date, time(10, 15)),
+        )
+        with self.assertRaises(ValidationError):
+            resolve_class_alert(alert_id=alert.pk, admin=self.tutee, note="")
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("tutoring:resolve_alert", args=[alert.pk]), {"note": ""})
+        self.assertEqual(response.status_code, 404)
+
+    def test_incident_report_is_not_restricted_to_class_time_window(self):
+        class_date = timezone.localdate() - timedelta(days=3)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        report = submit_incident_report(
+            session_id=session.pk,
+            reporter=self.tutor,
+            category=IncidentReportCategory.STUDENT_ABSENT,
+            content="學生當天未出席，也聯絡不上。",
+        )
+        self.assertEqual(report.status, IncidentReportStatus.PENDING)
+        self.assertEqual(report.reporter, self.tutor)
+
+    def test_incident_report_rejects_non_participant(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        bystander = User.objects.create_user(
+            username="BYSTANDER", password="Test-password-2026", role=Role.TUTOR
+        )
+        with self.assertRaises(ValidationError):
+            submit_incident_report(
+                session_id=session.pk,
+                reporter=bystander,
+                category=IncidentReportCategory.OTHER,
+                content="不是這堂課的參與者。",
+            )
+
+    def test_incident_report_requires_valid_category_and_content(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        with self.assertRaises(ValidationError):
+            submit_incident_report(
+                session_id=session.pk, reporter=self.tutor, category="NOT_A_CATEGORY", content="測試"
+            )
+        with self.assertRaises(ValidationError):
+            submit_incident_report(
+                session_id=session.pk,
+                reporter=self.tutor,
+                category=IncidentReportCategory.OTHER,
+                content="   ",
+            )
+
+    def test_admin_can_resolve_incident_report_and_dashboard_history_updates(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        report = submit_incident_report(
+            session_id=session.pk,
+            reporter=self.tutee,
+            category=IncidentReportCategory.VENUE_ISSUE,
+            content="教室臨時被佔用。",
+        )
+        admin = User.objects.create_superuser(username="INCIDENT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "異常回報")
+        self.assertContains(response, "教室臨時被佔用")
+
+        response = self.client.post(
+            reverse("tutoring:resolve_incident_report", args=[report.pk]),
+            {"note": "已協調改到 202 教室"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+        report.refresh_from_db()
+        self.assertEqual(report.status, IncidentReportStatus.RESOLVED)
+        self.assertEqual(report.resolved_by, admin)
+        self.assertEqual(report.resolution_note, "已協調改到 202 教室")
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "已協調改到 202 教室")
+
+    def test_non_admin_cannot_resolve_incident_report(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        report = submit_incident_report(
+            session_id=session.pk,
+            reporter=self.tutor,
+            category=IncidentReportCategory.OTHER,
+            content="測試內容",
+        )
+        with self.assertRaises(ValidationError):
+            resolve_incident_report(report_id=report.pk, admin=self.tutee, note="")
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("tutoring:resolve_incident_report", args=[report.pk]), {"note": ""}
+        )
+        self.assertEqual(response.status_code, 404)
+
 
 class V2FeatureTests(TestCase):
     def setUp(self):
@@ -657,15 +1165,15 @@ class V2FeatureTests(TestCase):
             starts_on=today - timedelta(days=20), ends_on=today + timedelta(days=20),
             is_active=True,
         )
+        self.ntnu_program = PartnerProgram.objects.get(code="NTNU")
         tutor_roster = RosterEntry.objects.create(
             student_id="V2-TUTOR", name_zh="V2老師", role=Role.TUTOR,
             education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
-            program_source=ProgramSource.NOT_APPLICABLE,
         )
         tutee_roster = RosterEntry.objects.create(
             student_id="V2-TUTEE", name_zh="V2學生", role=Role.TUTEE,
             education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
-            program_source=ProgramSource.NTNU,
+            program=self.ntnu_program,
         )
         self.tutor = User.objects.create_user(username="V2-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
         self.tutee = User.objects.create_user(username="V2-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
@@ -682,6 +1190,53 @@ class V2FeatureTests(TestCase):
         response = self.client.post(url, {"body": "Should not send"}, follow=True)
         self.assertContains(response, "只能查看歷史訊息")
         self.assertEqual(PairingMessage.objects.filter(pairing=self.pairing).count(), 1)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "過往對話紀錄")
+        self.assertContains(response, "查看紀錄 / View history")
+        self.assertContains(response, url)
+        response = self.client.get(url)
+        self.assertContains(response, "明天見 / See you tomorrow")
+        self.assertContains(response, "已結束 · 僅供查看")
+        self.assertNotContains(response, reverse("accounts:matched_profile", args=[self.tutee.pk]))
+
+    def test_dashboard_shows_unread_badge_and_preview_then_clears_on_open(self):
+        self.client.force_login(self.tutee)
+        self.client.post(
+            reverse("tutoring:pairing_messages", args=[self.pairing.pk]),
+            {"body": "老師好，請問明天上課地點在哪裡？"},
+        )
+        message_url = reverse("tutoring:pairing_messages", args=[self.pairing.pk])
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "老師好，請問明天上課地點在哪裡？")
+        self.assertContains(response, "私訊<small>Messages</small></b><em>1</em>", html=False)
+        self.assertContains(response, '<b class="unread-badge">1</b>', html=False)
+
+        self.client.get(message_url)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, 'unread-badge')
+
+    def test_conversation_list_sorts_by_most_recent_message(self):
+        other_tutee_roster = RosterEntry.objects.create(
+            student_id="V2-TUTEE2", name_zh="V2學生二", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu_program,
+        )
+        other_tutee = User.objects.create_user(
+            username="V2-TUTEE2", password="Password-2026", role=Role.TUTEE, roster_entry=other_tutee_roster,
+        )
+        other_pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=other_tutee)
+
+        self.client.force_login(self.tutee)
+        self.client.post(reverse("tutoring:pairing_messages", args=[self.pairing.pk]), {"body": "第一則訊息"})
+        self.client.force_login(other_tutee)
+        self.client.post(reverse("tutoring:pairing_messages", args=[other_pairing.pk]), {"body": "比較新的訊息"})
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertLess(content.index("比較新的訊息"), content.index("第一則訊息"))
 
     def test_unrelated_user_cannot_open_messages(self):
         outsider = User.objects.create_user(username="V2-OUT", password="Password-2026", role=Role.TUTEE)
@@ -712,6 +1267,41 @@ class V2FeatureTests(TestCase):
         response = self.client.get(reverse("accounts:admin_tutor_schedule", args=[self.tutor.pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_admin_user_profile_aggregates_pairings_hours_and_reports(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=timezone.localdate(), start_time=time(10, 0),
+            duration=1, created_by=self.tutor,
+        )
+        ClassAlert.objects.create(
+            session=session, reporter=self.tutor, subject=self.tutee, reason=ClassAlertReason.CANNOT_REACH,
+        )
+        IncidentReport.objects.create(
+            session=session, reporter=self.tutee, category=IncidentReportCategory.VENUE_ISSUE, content="教室有問題",
+        )
+        admin = User.objects.create_superuser(username="PROFILE-ADMIN", password="Admin-password-2026")
+        HourAdjustment.objects.create(
+            user=self.tutor, semester=self.semester, program=self.ntnu_program,
+            hours=Decimal("2.5"), reason="舊紙本資料補登測試", created_by=admin,
+        )
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("accounts:admin_user_profile", args=[self.tutor.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.tutee.bilingual_name)
+        self.assertContains(response, "場地問題 / Venue issue")
+        self.assertContains(response, "舊紙本資料補登測試")
+        self.assertContains(response, "+2.5 小時")
+
+        response = self.client.get(reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.tutor.bilingual_name)
+        self.assertContains(response, "場地問題 / Venue issue")
+
+    def test_non_admin_cannot_open_admin_user_profile(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
+        self.assertEqual(response.status_code, 404)
+
     def test_admin_export_can_filter_by_semester_and_selected_user(self):
         session = ClassSession.objects.create(
             pairing=self.pairing,
@@ -729,6 +1319,55 @@ class V2FeatureTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/vnd.ms-excel")
         self.assertIn(str(session.class_date).encode(), response.content)
+
+    def test_admin_export_can_produce_real_xlsx(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing,
+            class_date=timezone.localdate(),
+            start_time=time(11, 0), duration=1, created_by=self.tutor,
+        )
+        admin = User.objects.create_superuser(username="EXPORT-XLSX-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "scope": "selected",
+            "user_ids": [self.tutor.pk],
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "file_format": "xlsx",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertTrue(response["Content-Disposition"].endswith('.xlsx"'))
+        workbook = openpyxl.load_workbook(BytesIO(response.content))
+        worksheet = workbook.active
+        rows = list(worksheet.iter_rows(values_only=True))
+        self.assertEqual(rows[0][0], "學號 Student ID")
+        self.assertIn(str(session.class_date), rows[1])
+
+    def test_admin_export_can_produce_csv(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing,
+            class_date=timezone.localdate(),
+            start_time=time(11, 0), duration=1, created_by=self.tutor,
+        )
+        admin = User.objects.create_superuser(username="EXPORT-CSV-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "scope": "selected",
+            "user_ids": [self.tutor.pk],
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "file_format": "csv",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertTrue(response["Content-Disposition"].endswith('.csv"'))
+        decoded = response.content.decode("utf-8-sig")
+        self.assertIn("學號 Student ID", decoded)
+        self.assertIn(str(session.class_date), decoded)
 
     def test_admin_export_rejects_reversed_date_range(self):
         admin = User.objects.create_superuser(username="EXPORT-RANGE-ADMIN", password="Admin-password-2026")
@@ -770,9 +1409,348 @@ class V2FeatureTests(TestCase):
             "user": self.tutor, "starts_on": today - timedelta(days=30), "ends_on": today,
             "sections": [], "total": 0, "generated_at": timezone.now(),
         }
-        summary = build_hours_pdf(data, version="summary")
-        detailed = build_hours_pdf(data, version="detailed", detail_fields=["date", "hours"])
+        summary = build_hours_pdf(data, version="summary", program=self.ntnu_program)
+        detailed = build_hours_pdf(data, version="detailed", detail_fields=["date", "hours"], program=self.ntnu_program)
         self.assertTrue(summary.startswith(b"%PDF"))
         self.assertTrue(detailed.startswith(b"%PDF"))
         self.assertEqual(len(PdfReader(BytesIO(summary)).pages), 1)
-        self.assertIn("輔導實習時數證明書", PdfReader(BytesIO(summary)).pages[0].extract_text())
+        self.assertIn("實習證明", PdfReader(BytesIO(summary)).pages[0].extract_text())
+
+
+class PartnerProgramCertificateTests(TestCase):
+    def setUp(self):
+        today = timezone.localdate()
+        self.semester = Semester.objects.create(
+            name_zh="方案測試學期", name_en="Program test semester",
+            starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=10),
+            is_active=False,
+        )
+        self.ntnu_program = PartnerProgram.objects.get(code="NTNU")
+        self.maryland_program = PartnerProgram.objects.get(code="MARYLAND")
+        tutor_roster = RosterEntry.objects.create(
+            student_id="PP-TUTOR", name_zh="方案老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutee_roster = RosterEntry.objects.create(
+            student_id="PP-TUTEE", name_zh="方案學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu_program,
+        )
+        self.tutor = User.objects.create_user(
+            username="PP-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster
+        )
+        self.tutee = User.objects.create_user(
+            username="PP-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster
+        )
+        self.pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        ClassSession.objects.create(
+            pairing=self.pairing, class_date=today - timedelta(days=15),
+            start_time=time(10), duration=1, created_by=self.tutor,
+        )
+
+    def test_ntnu_tutee_can_now_download_hours(self):
+        self.assertTrue(user_has_hour_records(self.tutee))
+
+    def test_tutor_available_programs_only_lists_programs_actually_tutored(self):
+        codes = {program.code for program in tutor_available_programs(self.tutor)}
+        self.assertEqual(codes, {"NTNU"})
+
+        maryland_tutee_roster = RosterEntry.objects.create(
+            student_id="PP-TUTEE-MD", name_zh="方案馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.maryland_program,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="PP-TUTEE-MD", password="Password-2026", role=Role.TUTEE, roster_entry=maryland_tutee_roster
+        )
+        maryland_pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=maryland_tutee)
+        ClassSession.objects.create(
+            pairing=maryland_pairing, class_date=timezone.localdate() - timedelta(days=15),
+            start_time=time(14), duration=1, created_by=self.tutor,
+        )
+        codes = {program.code for program in tutor_available_programs(self.tutor)}
+        self.assertEqual(codes, {"NTNU", "MARYLAND"})
+
+    def test_program_selector_is_tutor_only_and_uses_practicum_label(self):
+        tutor_form = HoursDownloadForm(user=self.tutor)
+        self.assertEqual(tutor_form.fields["program"].label, "實習計劃 / Practicum program")
+        self.assertNotIn("program", HoursDownloadForm(user=self.tutee).fields)
+
+    def test_download_hours_requires_program_for_tutor(self):
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {"mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today, "version": "summary"},
+        )
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#hours")
+        messages = list(response.wsgi_request._messages)
+        self.assertTrue(any("實習計劃" in str(message) for message in messages))
+
+    def test_tutor_can_download_ntnu_certificate_via_dropdown(self):
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
+                "version": "summary", "program": self.ntnu_program.pk,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    def test_tutor_can_preview_certificate_inline_without_forcing_download(self):
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
+                "version": "summary", "program": self.ntnu_program.pk, "intent": "preview",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("inline", response["Content-Disposition"])
+        log = AuditLog.objects.get(event_type="HOURS_PDF_PREVIEWED")
+        self.assertEqual(log.actor, self.tutor)
+
+    def test_ntnu_tutee_downloads_tutee_specific_template(self):
+        from pypdf import PdfReader
+
+        self.client.force_login(self.tutee)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {"mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today, "version": "summary"},
+        )
+        self.assertEqual(response.status_code, 200)
+        text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn("接受華語輔導", text)
+        self.assertIn("受輔導證明", text)
+
+    def test_ntnu_tutor_same_month_period_is_not_repeated(self):
+        from pypdf import PdfReader
+
+        data = {
+            "user": self.tutor,
+            "starts_on": date(2026, 7, 1),
+            "ends_on": date(2026, 7, 31),
+            "sections": [],
+            "total": 0,
+            "generated_at": timezone.now(),
+        }
+        content = build_hours_pdf(data, version="summary", program=self.ntnu_program)
+        extracted = PdfReader(BytesIO(content)).pages[0].extract_text()
+        compact_text = extracted.replace(" ", "")
+        self.assertIn("民國115年7月", compact_text)
+        self.assertNotIn("7月-7月", compact_text)
+        self.assertIn("學號PP-TUTOR，\n", compact_text)
+        self.assertNotIn("PP-TUTOR\n，", compact_text)
+
+    def test_tutor_can_download_maryland_certificate_now_that_template_is_shared(self):
+        from pypdf import PdfReader
+
+        maryland_tutee_roster = RosterEntry.objects.create(
+            student_id="PP-TUTEE-MD2", name_zh="方案馬里蘭學生二", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.maryland_program,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="PP-TUTEE-MD2", password="Password-2026", role=Role.TUTEE, roster_entry=maryland_tutee_roster
+        )
+        maryland_pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=maryland_tutee)
+        ClassSession.objects.create(
+            pairing=maryland_pairing, class_date=timezone.localdate() - timedelta(days=15),
+            start_time=time(14), duration=1, created_by=self.tutor,
+        )
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
+                "version": "summary", "program": self.maryland_program.pk,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn("語言交換服務證明", text)
+
+    def _make_verified_session(self, pairing, other_party, class_date):
+        session = ClassSession.objects.create(
+            pairing=pairing, class_date=class_date, start_time=time(10), duration=1, created_by=self.tutor,
+        )
+        signed_at = self.aware_datetime(class_date, time(10, 5))
+        for participant in (self.tutor, other_party):
+            Attendance.objects.create(session=session, participant=participant, signed_at=signed_at)
+        for author in (self.tutor, other_party):
+            ClassRecord.objects.create(
+                session=session, author=author, location="測試教室", topic="會話練習",
+                content="練習內容", reflection="回饋內容",
+            )
+        for reviewer, subject in ((self.tutor, other_party), (other_party, self.tutor)):
+            ClassConfirmation.objects.create(
+                session=session, reviewer=reviewer, subject=subject,
+                attendance_confirmed=True, record_confirmed=True, status=ConfirmationStatus.CONFIRMED,
+            )
+        return session
+
+    def aware_datetime(self, day, clock):
+        return timezone.make_aware(datetime.combine(day, clock), timezone.get_current_timezone())
+
+    def test_download_hours_only_counts_selected_programs_sessions(self):
+        maryland_tutee_roster = RosterEntry.objects.create(
+            student_id="PP-TUTEE-MD3", name_zh="方案馬里蘭學生三", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.maryland_program,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="PP-TUTEE-MD3", password="Password-2026", role=Role.TUTEE, roster_entry=maryland_tutee_roster
+        )
+        maryland_pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=maryland_tutee)
+        past_date = timezone.localdate() - timedelta(days=12)
+        self._make_verified_session(self.pairing, self.tutee, past_date)
+        self._make_verified_session(maryland_pairing, maryland_tutee, past_date)
+
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=20), "ends_on": today,
+                "version": "summary", "program": self.ntnu_program.pk,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        from pypdf import PdfReader
+        text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn("總計授課 1 小時", text)
+
+    def test_hour_adjustment_rejects_non_positive_hours_and_wrong_role(self):
+        admin = User.objects.create_superuser(username="ADJ-ADMIN", password="Admin-password-2026")
+        adjustment = HourAdjustment(
+            user=self.tutor, semester=self.semester, program=self.ntnu_program,
+            hours=Decimal("0"), reason="測試", created_by=admin,
+        )
+        with self.assertRaises(ValidationError):
+            adjustment.full_clean()
+
+        admin_as_subject = HourAdjustment(
+            user=admin, semester=self.semester, program=self.ntnu_program,
+            hours=Decimal("1"), reason="測試", created_by=admin,
+        )
+        with self.assertRaises(ValidationError):
+            admin_as_subject.full_clean()
+
+    def test_hour_adjustment_raises_certificate_total_only_for_matching_program_and_semester(self):
+        admin = User.objects.create_superuser(username="ADJ-ADMIN2", password="Admin-password-2026")
+        past_date = timezone.localdate() - timedelta(days=12)
+        self._make_verified_session(self.pairing, self.tutee, past_date)
+        HourAdjustment.objects.create(
+            user=self.tutor, semester=self.semester, program=self.ntnu_program,
+            hours=Decimal("2.5"), reason="舊紙本資料補登", created_by=admin,
+        )
+        HourAdjustment.objects.create(
+            user=self.tutor, semester=self.semester, program=self.maryland_program,
+            hours=Decimal("9"), reason="不同計畫，不應被算入", created_by=admin,
+        )
+
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=20), "ends_on": today,
+                "version": "summary", "program": self.ntnu_program.pk,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        from pypdf import PdfReader
+        text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn("總計授課 3.5 小時", text)
+
+    def test_tutor_available_programs_includes_adjustment_only_program(self):
+        admin = User.objects.create_superuser(username="ADJ-ADMIN3", password="Admin-password-2026")
+        self.assertNotIn("MARYLAND", {program.code for program in tutor_available_programs(self.tutor)})
+        HourAdjustment.objects.create(
+            user=self.tutor, semester=self.semester, program=self.maryland_program,
+            hours=Decimal("4"), reason="舊紙本資料，無資料庫課程紀錄", created_by=admin,
+        )
+        self.assertIn("MARYLAND", {program.code for program in tutor_available_programs(self.tutor)})
+
+    def test_admin_creating_hour_adjustment_writes_audit_log(self):
+        admin = User.objects.create_superuser(username="ADJ-ADMIN4", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("admin:tutoring_houradjustment_add"),
+            {
+                "user": self.tutor.pk, "semester": self.semester.pk, "program": self.ntnu_program.pk,
+                "hours": "2.0", "reason": "舊紙本資料補登",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(HourAdjustment.objects.filter(user=self.tutor).count(), 1)
+        adjustment = HourAdjustment.objects.get(user=self.tutor)
+        self.assertEqual(adjustment.created_by, admin)
+        self.assertTrue(
+            AuditLog.objects.filter(event_type="HOUR_ADJUSTMENT_CREATED", target_user=self.tutor).exists()
+        )
+
+    def _hours_csv_upload(self, filename, body):
+        return SimpleUploadedFile(filename, body.encode("utf-8"), content_type="text/csv")
+
+    def test_admin_can_import_hour_adjustments_from_csv(self):
+        admin = User.objects.create_superuser(username="IMPORT-ADMIN1", password="Admin-password-2026")
+        self.client.force_login(admin)
+        body = "學號,時數\n" f"{self.tutor.username},2.5\n" f"{self.tutee.username},1.5\n"
+        response = self.client.post(
+            reverse("admin:tutoring_houradjustment_import"),
+            {
+                "semester": self.semester.pk, "program": self.ntnu_program.pk,
+                "reason": "舊紙本資料匯入測試", "file": self._hours_csv_upload("hours.csv", body),
+            },
+        )
+        self.assertRedirects(response, reverse("admin:tutoring_houradjustment_changelist"))
+        self.assertEqual(HourAdjustment.objects.filter(semester=self.semester).count(), 2)
+        tutor_row = HourAdjustment.objects.get(user=self.tutor, semester=self.semester)
+        self.assertEqual(tutor_row.hours, Decimal("2.5"))
+        self.assertEqual(tutor_row.created_by, admin)
+        self.assertEqual(tutor_row.reason, "舊紙本資料匯入測試")
+        log = AuditLog.objects.get(event_type="HOUR_ADJUSTMENT_IMPORTED")
+        self.assertEqual(log.metadata["created_count"], 2)
+
+    def test_hour_import_rejects_whole_batch_on_any_invalid_row(self):
+        admin = User.objects.create_superuser(username="IMPORT-ADMIN2", password="Admin-password-2026")
+        self.client.force_login(admin)
+        body = "學號,時數\n" f"{self.tutor.username},2.5\n" "NO-SUCH-STUDENT,1.5\n"
+        response = self.client.post(
+            reverse("admin:tutoring_houradjustment_import"),
+            {
+                "semester": self.semester.pk, "program": self.ntnu_program.pk,
+                "reason": "應被整批擋下", "file": self._hours_csv_upload("hours.csv", body),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "找不到學號")
+        self.assertEqual(HourAdjustment.objects.count(), 0)
+
+    def test_hour_import_rejects_non_positive_hours(self):
+        admin = User.objects.create_superuser(username="IMPORT-ADMIN3", password="Admin-password-2026")
+        self.client.force_login(admin)
+        body = "學號,時數\n" f"{self.tutor.username},0\n"
+        response = self.client.post(
+            reverse("admin:tutoring_houradjustment_import"),
+            {
+                "semester": self.semester.pk, "program": self.ntnu_program.pk,
+                "reason": "不應通過", "file": self._hours_csv_upload("hours.csv", body),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(HourAdjustment.objects.count(), 0)
+
+    def test_non_admin_cannot_access_hour_import_view(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("admin:tutoring_houradjustment_import"))
+        self.assertNotEqual(response.status_code, 200)

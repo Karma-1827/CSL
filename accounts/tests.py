@@ -1,10 +1,14 @@
+import io
+
+import openpyxl
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from tutoring.models import QualificationDocument, TuteeProfile, TutorProfile
 
-from .models import EducationLevel, IdentityCategory, ProgramSource, RegistrationDraft, Role, RosterEntry, User
+from .models import AuditLog, EducationLevel, IdentityCategory, PartnerProgram, RegistrationDraft, Role, RosterEntry, User
 
 
 class RegistrationTests(TestCase):
@@ -16,9 +20,12 @@ class RegistrationTests(TestCase):
             role=Role.TUTOR,
             education_level=EducationLevel.MASTER,
             identity_category=IdentityCategory.LOCAL,
-            program_source=ProgramSource.NOT_APPLICABLE,
         )
         self.registration_data = {
+            "name_zh": "測試學生",
+            "name_en": "Test Student",
+            "identity_category": "LOCAL",
+            "education_level": "MASTER",
             "phone": "0912345678",
             "gender": "MALE",
             "native_language": "Mandarin Chinese",
@@ -99,6 +106,7 @@ class RegistrationTests(TestCase):
         self.assertIsNone(self.roster.claimed_at)
 
     def test_tutee_is_sent_to_tutee_form_and_profile_is_created(self):
+        maryland = PartnerProgram.objects.get(code="MARYLAND")
         RosterEntry.objects.create(
             student_id="TUTEE1001",
             name_zh="受輔導學生",
@@ -106,7 +114,7 @@ class RegistrationTests(TestCase):
             role=Role.TUTEE,
             education_level=EducationLevel.NOT_APPLICABLE,
             identity_category=IdentityCategory.INTERNATIONAL,
-            program_source=ProgramSource.MARYLAND,
+            program=maryland,
         )
         response = self.client.post(
             reverse("accounts:register"),
@@ -118,6 +126,9 @@ class RegistrationTests(TestCase):
         )
         self.assertRedirects(response, reverse("accounts:register_tutee"))
         data = {
+            "name_zh": "受輔導學生",
+            "name_en": "Tutee Student",
+            "identity_category": "INTERNATIONAL",
             "phone": "0900000000",
             "gender": "FEMALE",
             "native_language": "English",
@@ -199,6 +210,39 @@ class AccountRecoveryTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "資料無法驗證")
+
+
+class LoginLockoutTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username="LOGIN-LOCKOUT-TEST", password="Correct-password-2026", role=Role.TUTOR)
+
+    def test_login_locks_after_five_failed_attempts(self):
+        for _ in range(5):
+            response = self.client.post(
+                reverse("accounts:login"), {"username": "LOGIN-LOCKOUT-TEST", "password": "wrong-password"}
+            )
+            self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            reverse("accounts:login"), {"username": "LOGIN-LOCKOUT-TEST", "password": "Correct-password-2026"}
+        )
+        self.assertContains(response, "嘗試次數過多")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_successful_login_clears_failed_attempt_count(self):
+        for _ in range(3):
+            self.client.post(reverse("accounts:login"), {"username": "LOGIN-LOCKOUT-TEST", "password": "wrong-password"})
+        response = self.client.post(
+            reverse("accounts:login"), {"username": "LOGIN-LOCKOUT-TEST", "password": "Correct-password-2026"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.client.post(reverse("accounts:logout"))
+        for _ in range(3):
+            self.client.post(reverse("accounts:login"), {"username": "LOGIN-LOCKOUT-TEST", "password": "wrong-password"})
+        response = self.client.post(
+            reverse("accounts:login"), {"username": "LOGIN-LOCKOUT-TEST", "password": "Correct-password-2026"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
 
 
 class QualificationTests(TestCase):
@@ -341,3 +385,374 @@ class AdminDashboardNavigationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         usernames = {user.username for user in response.context["cl"].result_list}
         self.assertEqual(usernames, {"NAV-TUTOR", "NAV-TUTEE"})
+
+
+class RosterImportTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="IMPORT-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(username="IMPORT-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+
+    CSV_HEADER = "student_id,name_zh,name_en,role,education_level,identity_category,program_code,is_enabled"
+
+    def _csv_upload(self, filename, body):
+        return SimpleUploadedFile(filename, body.encode("utf-8"), content_type="text/csv")
+
+    def test_admin_can_import_valid_csv_roster(self):
+        self.client.force_login(self.admin)
+        body = (
+            f"{self.CSV_HEADER}\n"
+            "S10199001,王小明,Wang Xiao-Ming,TUTOR,MASTER,LOCAL,NA,TRUE\n"
+            "S20299002,陳小美,Chen Xiao-Mei,TUTEE,NA,INTERNATIONAL,NTNU,TRUE\n"
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import"), {"file": self._csv_upload("roster.csv", body)}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        self.assertEqual(RosterEntry.objects.filter(student_id__in=["S10199001", "S20299002"]).count(), 2)
+        log = AuditLog.objects.get(event_type="ROSTER_IMPORTED")
+        self.assertEqual(log.metadata["created_count"], 2)
+        self.assertEqual(set(log.metadata["student_ids"]), {"S10199001", "S20299002"})
+
+    def test_duplicate_student_id_within_file_is_deduplicated(self):
+        self.client.force_login(self.admin)
+        body = (
+            f"{self.CSV_HEADER}\n"
+            "S10199003,王小明,Wang Xiao-Ming,TUTOR,MASTER,LOCAL,NA,TRUE\n"
+            "S10199003,王小明,Wang Xiao-Ming,TUTOR,MASTER,LOCAL,NA,TRUE\n"
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import"), {"file": self._csv_upload("roster.csv", body)}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        self.assertEqual(RosterEntry.objects.filter(student_id="S10199003").count(), 1)
+        self.assertTrue(AuditLog.objects.filter(event_type="ROSTER_IMPORTED").exists())
+
+    def test_existing_student_id_is_skipped_and_new_ones_still_imported(self):
+        RosterEntry.objects.create(
+            student_id="S10199004",
+            name_zh="已存在",
+            role=Role.TUTOR,
+            education_level=EducationLevel.MASTER,
+            identity_category=IdentityCategory.LOCAL,
+        )
+        self.client.force_login(self.admin)
+        body = (
+            f"{self.CSV_HEADER}\n"
+            "S10199004,已存在,,TUTOR,MASTER,LOCAL,NA,TRUE\n"
+            "S10199005,新學生,,TUTEE,NA,LOCAL,NTNU,TRUE\n"
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import"), {"file": self._csv_upload("roster.csv", body)}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        self.assertTrue(RosterEntry.objects.filter(student_id="S10199005").exists())
+        existing = RosterEntry.objects.get(student_id="S10199004")
+        self.assertEqual(existing.name_zh, "已存在")
+
+    def test_invalid_role_rejects_entire_batch(self):
+        self.client.force_login(self.admin)
+        body = f"{self.CSV_HEADER}\nS10199006,錯誤身分,,ADMIN,NA,LOCAL,NA,TRUE\n"
+        response = self.client.post(
+            reverse("accounts:roster_import"), {"file": self._csv_upload("roster.csv", body)}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        self.assertFalse(RosterEntry.objects.filter(student_id="S10199006").exists())
+
+    def test_unsupported_file_extension_is_rejected(self):
+        self.client.force_login(self.admin)
+        upload = SimpleUploadedFile("roster.txt", b"not a real roster", content_type="text/plain")
+        response = self.client.post(reverse("accounts:roster_import"), {"file": upload})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        self.assertEqual(RosterEntry.objects.count(), 0)
+
+    def test_non_admin_cannot_import_roster(self):
+        self.client.force_login(self.tutor)
+        body = f"{self.CSV_HEADER}\nS10199007,新學生,,TUTEE,NA,LOCAL,NTNU,TRUE\n"
+        response = self.client.post(
+            reverse("accounts:roster_import"), {"file": self._csv_upload("roster.csv", body)}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertFalse(RosterEntry.objects.filter(student_id="S10199007").exists())
+
+    def test_admin_can_download_csv_and_xlsx_templates(self):
+        self.client.force_login(self.admin)
+        csv_response = self.client.get(reverse("accounts:roster_import_template", args=["csv"]))
+        self.assertEqual(csv_response.status_code, 200)
+        self.assertEqual(csv_response["Content-Type"], "text/csv; charset=utf-8")
+
+        xlsx_response = self.client.get(reverse("accounts:roster_import_template", args=["xlsx"]))
+        self.assertEqual(xlsx_response.status_code, 200)
+        self.assertIn("spreadsheetml", xlsx_response["Content-Type"])
+
+    def test_invalid_template_format_is_404(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:roster_import_template", args=["pdf"]))
+        self.assertEqual(response.status_code, 404)
+
+
+class QuickRosterImportTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="QUICK-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(username="QUICK-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        self.ntnu = PartnerProgram.objects.get(code="NTNU")
+        self.maryland = PartnerProgram.objects.get(code="MARYLAND")
+
+    def _csv_upload(self, filename, lines):
+        body = "\n".join(lines)
+        return SimpleUploadedFile(filename, body.encode("utf-8"), content_type="text/csv")
+
+    def _xlsx_upload(self, filename, rows):
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        for row in rows:
+            sheet.append([row])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        return SimpleUploadedFile(
+            filename,
+            buffer.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def test_quick_import_tutor_category_creates_roster_entries(self):
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("tutor.csv", ["S30100001", "S30100002"])
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["TUTOR"]), {"file": upload}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        entries = RosterEntry.objects.filter(student_id__in=["S30100001", "S30100002"])
+        self.assertEqual(entries.count(), 2)
+        self.assertTrue(all(entry.role == Role.TUTOR for entry in entries))
+        self.assertTrue(all(entry.program_id is None for entry in entries))
+        log = AuditLog.objects.get(event_type="ROSTER_IMPORTED")
+        self.assertEqual(log.metadata["category"], "TUTOR")
+        self.assertEqual(log.metadata["created_count"], 2)
+
+    def test_quick_import_program_category_creates_tutee_entries(self):
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("ntnu.csv", ["S30200001"])
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["NTNU"]), {"file": upload}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        entry = RosterEntry.objects.get(student_id="S30200001")
+        self.assertEqual(entry.role, Role.TUTEE)
+        self.assertEqual(entry.program_id, self.ntnu.pk)
+
+    def test_quick_import_handles_messy_xlsx_with_title_and_header_rows(self):
+        self.client.force_login(self.admin)
+        upload = self._xlsx_upload(
+            "tutor學號.xlsx",
+            ["華語系碩士班", "學  號", "60984011I", "60984011I", "60984022A"],
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["TUTOR"]), {"file": upload}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        self.assertEqual(RosterEntry.objects.filter(student_id="60984011I").count(), 1)
+        self.assertTrue(RosterEntry.objects.filter(student_id="60984022A").exists())
+        # "華語系碩士班" and "學  號" are not valid student-ID-shaped rows, so
+        # they should be silently skipped rather than imported as bogus IDs.
+        self.assertFalse(RosterEntry.objects.filter(student_id="華語系碩士班").exists())
+
+    def test_quick_import_normalizes_lowercase_student_id(self):
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("tutor.csv", ["s30300001"])
+        self.client.post(reverse("accounts:roster_import_quick", args=["TUTOR"]), {"file": upload})
+        self.assertTrue(RosterEntry.objects.filter(student_id="S30300001").exists())
+
+    def test_quick_import_skips_existing_ids_and_imports_new_ones(self):
+        RosterEntry.objects.create(student_id="S30400001", role=Role.TUTOR)
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("tutor.csv", ["S30400001", "S30400002"])
+        self.client.post(reverse("accounts:roster_import_quick", args=["TUTOR"]), {"file": upload})
+        self.assertTrue(RosterEntry.objects.filter(student_id="S30400002").exists())
+        log = AuditLog.objects.get(event_type="ROSTER_IMPORTED")
+        self.assertEqual(log.metadata["created_count"], 1)
+        self.assertEqual(log.metadata["skipped_existing_count"], 1)
+
+    def test_quick_import_invalid_format_row_is_skipped_with_warning(self):
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("tutor.csv", ["S30500001", "!!invalid!!"])
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["TUTOR"]), {"file": upload}, follow=True
+        )
+        self.assertTrue(RosterEntry.objects.filter(student_id="S30500001").exists())
+        warning_messages = [str(message) for message in response.context["messages"]]
+        self.assertTrue(any("!!invalid!!" in message for message in warning_messages))
+
+    def test_quick_import_unknown_program_code_is_404(self):
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("tutor.csv", ["S30600001"])
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["NOT-A-PROGRAM"]), {"file": upload}
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_non_admin_cannot_use_quick_import(self):
+        self.client.force_login(self.tutor)
+        upload = self._csv_upload("tutor.csv", ["S30700001"])
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["TUTOR"]), {"file": upload}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertFalse(RosterEntry.objects.filter(student_id="S30700001").exists())
+
+
+class ProfileEditTests(TestCase):
+    def setUp(self):
+        self.tutor = User.objects.create_user(
+            username="EDIT-TUTOR",
+            password="Tutor-password-2026",
+            role=Role.TUTOR,
+            name_zh="王老師",
+            name_en="Alex Wang",
+            phone="0900000000",
+        )
+        self.tutor_profile = TutorProfile.objects.create(
+            tutor=self.tutor,
+            gender="MALE",
+            native_language="Mandarin Chinese",
+            nationality="Taiwan",
+            department="華語文教學系",
+            level_listening=4,
+            level_speaking=5,
+            level_reading=4,
+            level_writing=3,
+            teaching_notes="重視口語互動",
+            available_days=["MON", "WED"],
+            available_time_slots=["13:00-15:00"],
+        )
+        self.tutee = User.objects.create_user(
+            username="EDIT-STUDENT",
+            password="Student-password-2026",
+            role=Role.TUTEE,
+            name_zh="學生甲",
+            name_en="Student A",
+        )
+        self.tutee_profile = TuteeProfile.objects.create(
+            tutee=self.tutee,
+            gender="FEMALE",
+            native_language="English",
+            nationality="United States",
+            department="Languages",
+            overall_level="B1",
+            learning_duration="1_TO_2_YEARS",
+            target_skills=["LISTENING", "SPEAKING"],
+            skills_to_improve="希望練習日常會話",
+            preferred_days=["TUE"],
+            preferred_time_slots=["15:00-17:00"],
+        )
+
+    def test_tutor_can_update_profile_fields(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "phone": "0911222333",
+                "gender": "MALE",
+                "native_language": "Mandarin Chinese",
+                "nationality": "Taiwan",
+                "department": "應用華語文學系",
+                "level_listening": 5,
+                "level_speaking": 5,
+                "level_reading": 5,
+                "level_writing": 5,
+                "teaching_notes": "更新後的教學簡介",
+                "available_days": ["MON", "TUE", "THU"],
+                "available_time_slots": ["09:00-11:00"],
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        self.tutor.refresh_from_db()
+        self.tutor_profile.refresh_from_db()
+        self.assertEqual(self.tutor.phone, "0911222333")
+        self.assertEqual(self.tutor_profile.department, "應用華語文學系")
+        self.assertEqual(self.tutor_profile.level_listening, 5)
+        self.assertEqual(self.tutor_profile.teaching_notes, "更新後的教學簡介")
+        self.assertEqual(sorted(self.tutor_profile.available_days), ["MON", "THU", "TUE"])
+        log = AuditLog.objects.get(event_type="PROFILE_UPDATED")
+        self.assertIn("department", log.metadata["fields"])
+
+    def test_tutee_can_update_profile_fields(self):
+        self.client.force_login(self.tutee)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "phone": "",
+                "gender": "FEMALE",
+                "native_language": "English",
+                "nationality": "United States",
+                "department": "Languages",
+                "overall_level": "B2",
+                "learning_duration": "GT_2_YEARS",
+                "level_listening": 4,
+                "level_speaking": 4,
+                "level_reading": 4,
+                "level_writing": 4,
+                "target_skills": ["READING"],
+                "skills_to_improve": "希望加強寫作",
+                "preferred_days": ["WED"],
+                "preferred_time_slots": ["11:00-13:00"],
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        self.tutee_profile.refresh_from_db()
+        self.assertEqual(self.tutee_profile.overall_level, "B2")
+        self.assertEqual(self.tutee_profile.skills_to_improve, "希望加強寫作")
+        self.assertEqual(self.tutee_profile.preferred_days, ["WED"])
+
+    def test_name_and_student_id_cannot_be_changed_via_profile_form(self):
+        self.client.force_login(self.tutor)
+        self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "name_zh": "偽造姓名",
+                "username": "FAKE-ID",
+                "phone": "0900000000",
+                "gender": "MALE",
+                "native_language": "Mandarin Chinese",
+                "nationality": "Taiwan",
+                "department": "華語文教學系",
+                "level_listening": 4,
+                "level_speaking": 5,
+                "level_reading": 4,
+                "level_writing": 3,
+                "teaching_notes": "重視口語互動",
+                "available_days": ["MON", "WED"],
+                "available_time_slots": ["13:00-15:00"],
+            },
+        )
+        self.tutor.refresh_from_db()
+        self.assertEqual(self.tutor.name_zh, "王老師")
+        self.assertEqual(self.tutor.username, "EDIT-TUTOR")
+
+    def test_missing_required_field_rejects_update(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "phone": "0900000000",
+                "native_language": "Mandarin Chinese",
+                "nationality": "Taiwan",
+                "department": "華語文教學系",
+                "level_listening": 4,
+                "level_speaking": 5,
+                "level_reading": 4,
+                "level_writing": 3,
+                "teaching_notes": "重視口語互動",
+                "available_days": ["MON", "WED"],
+                "available_time_slots": ["13:00-15:00"],
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        self.tutor_profile.refresh_from_db()
+        self.assertEqual(self.tutor_profile.department, "華語文教學系")
+        self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
+
+    def test_admin_cannot_access_update_profile(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("accounts:update_profile"), {})
+        self.assertEqual(response.status_code, 404)

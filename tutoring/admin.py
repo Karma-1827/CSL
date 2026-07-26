@@ -1,21 +1,30 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
 
+from accounts.forms import SKILL_CHOICES
+from accounts.models import AuditLog
+
+from .forms import HourImportForm
 from .models import (
     Attendance,
     ClassConfirmation,
     ClassAlert,
     ClassRecord,
     ClassSession,
+    HourAdjustment,
+    IncidentReport,
     MakeupReview,
     MatchingInvitation,
     Pairing,
-    PairingMessage,
     PairingReleaseRequest,
     QualificationDocument,
     Semester,
     TuteeProfile,
     TutorProfile,
 )
+from .services import HourImportFileError, hour_import_template_xlsx_bytes, import_hour_adjustments
 
 
 @admin.register(QualificationDocument)
@@ -89,10 +98,23 @@ class AttendanceAdmin(admin.ModelAdmin):
     list_filter = ("is_makeup", "session__pairing__semester")
 
 
+class SkillsPracticedFilter(admin.SimpleListFilter):
+    title = "授課類型 / Skill practiced"
+    parameter_name = "skill"
+
+    def lookups(self, request, model_admin):
+        return SKILL_CHOICES
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(skills_practiced__contains=[self.value()])
+        return queryset
+
+
 @admin.register(ClassRecord)
 class ClassRecordAdmin(admin.ModelAdmin):
-    list_display = ("session", "author", "topic", "submitted_at", "is_makeup")
-    list_filter = ("is_makeup", "session__pairing__semester")
+    list_display = ("session", "author", "topic", "skills_practiced", "submitted_at", "is_makeup")
+    list_filter = ("is_makeup", "session__pairing__semester", SkillsPracticedFilter)
     search_fields = ("author__username", "topic")
 
 
@@ -113,7 +135,107 @@ class ClassAlertAdmin(admin.ModelAdmin):
     list_display = ("session", "reporter", "subject", "reason", "status", "created_at")
     list_filter = ("status", "reason", "session__pairing__semester")
     search_fields = ("reporter__username", "subject__username", "note")
-    readonly_fields = ("created_at", "cancelled_at")
+    readonly_fields = ("created_at", "cancelled_at", "resolved_at")
+
+
+@admin.register(IncidentReport)
+class IncidentReportAdmin(admin.ModelAdmin):
+    list_display = ("session", "reporter", "category", "status", "created_at", "resolved_by")
+    list_filter = ("status", "category", "session__pairing__semester")
+    search_fields = ("reporter__username", "content")
+    readonly_fields = ("created_at", "resolved_at")
+
+
+@admin.register(HourAdjustment)
+class HourAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ("user", "semester", "program", "hours", "created_by", "created_at")
+    list_filter = ("semester", "program")
+    search_fields = ("user__username", "user__name_zh", "user__name_en", "reason")
+    autocomplete_fields = ("user",)
+    readonly_fields = ("created_by", "created_at")
+    change_list_template = "tutoring/houradjustment_changelist.html"
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+        AuditLog.objects.create(
+            actor=request.user,
+            target_user=obj.user,
+            event_type="HOUR_ADJUSTMENT_UPDATED" if change else "HOUR_ADJUSTMENT_CREATED",
+            description="更新時數調整紀錄 / Hour adjustment updated" if change else "新增時數調整紀錄 / Hour adjustment created",
+            metadata={
+                "hours": str(obj.hours),
+                "semester": str(obj.semester),
+                "program": obj.program.code,
+                "reason": obj.reason,
+            },
+        )
+
+    def get_urls(self):
+        custom_urls = [
+            path("import/", self.admin_site.admin_view(self.import_view), name="tutoring_houradjustment_import"),
+            path(
+                "import/template/",
+                self.admin_site.admin_view(self.import_template_view),
+                name="tutoring_houradjustment_import_template",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def import_template_view(self, request):
+        response = HttpResponse(
+            hour_import_template_xlsx_bytes(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="hour_adjustment_template.xlsx"'
+        return response
+
+    def import_view(self, request):
+        form = HourImportForm(request.POST or None, request.FILES or None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                result = import_hour_adjustments(
+                    form.cleaned_data["file"],
+                    semester=form.cleaned_data["semester"],
+                    program=form.cleaned_data["program"],
+                    reason=form.cleaned_data["reason"],
+                    created_by=request.user,
+                )
+            except HourImportFileError as error:
+                messages.error(request, str(error))
+            else:
+                if result.errors:
+                    for error in result.errors:
+                        messages.error(request, error)
+                else:
+                    messages.success(
+                        request,
+                        f"已匯入 {result.created_count} 筆時數調整，共 {result.total_hours} 小時。"
+                        f" / Imported {result.created_count} hour adjustments totaling {result.total_hours} hours.",
+                    )
+                    AuditLog.objects.create(
+                        actor=request.user,
+                        target_user=None,
+                        event_type="HOUR_ADJUSTMENT_IMPORTED",
+                        description="批次匯入時數調整紀錄 / Hour adjustments imported from file",
+                        metadata={
+                            "created_count": result.created_count,
+                            "total_hours": str(result.total_hours),
+                            "semester": str(form.cleaned_data["semester"]),
+                            "program": form.cleaned_data["program"].code,
+                            "reason": form.cleaned_data["reason"],
+                            "student_ids": result.student_ids,
+                        },
+                    )
+                    return redirect(reverse("admin:tutoring_houradjustment_changelist"))
+        context = self.admin_site.each_context(request)
+        context.update({
+            "form": form,
+            "title": "匯入時數調整 / Import hour adjustments",
+            "opts": self.model._meta,
+        })
+        return render(request, "tutoring/houradjustment_import.html", context)
 
 
 admin.site.site_header = "華語輔導系統管理 / CSL Tutoring Administration"

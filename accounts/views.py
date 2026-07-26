@@ -10,9 +10,10 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, Sum
-from django.http import Http404, HttpResponseBadRequest
+from django.db.models import Q
+from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
@@ -31,10 +32,13 @@ from tutoring.models import (
     ClassSessionStatus,
     ClassAlert,
     ClassAlertStatus,
+    HourAdjustment,
+    IncidentReport,
+    IncidentReportStatus,
     MakeupReview,
     MakeupReviewStatus,
 )
-from tutoring.forms import HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
+from tutoring.forms import HoursDownloadForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm
 from tutoring.reporting import user_has_hour_records
 from tutoring.services import (
     DAY_LABELS,
@@ -42,6 +46,7 @@ from tutoring.services import (
     LEVEL_LABELS,
     MAX_ACTIVE_TUTEES_PER_TUTOR,
     SKILL_LABELS,
+    annotate_conversation_summaries,
     anonymous_tutee_candidates,
     anonymous_tutee_profile,
     anonymous_tutor_candidates,
@@ -54,30 +59,39 @@ from tutoring.services import (
 
 from .decorators import role_required
 from .forms import (
+    DAYS,
+    GENDER_CHOICES,
+    OVERALL_LEVEL_CHOICES,
+    SKILL_CHOICES,
+    TIME_SLOTS,
     BilingualAuthenticationForm,
     BilingualSetPasswordForm,
     QualificationUploadForm,
+    client_ip,
     RecoveryVerificationForm,
     RegistrationLookupForm,
+    RosterImportForm,
+    TuteeProfileEditForm,
     TuteeRegistrationForm,
+    TutorProfileEditForm,
     TutorRegistrationForm,
 )
 from .models import (
     AuditLog,
-    EducationLevel,
-    IdentityCategory,
-    ProgramSource,
+    PartnerProgram,
     RegistrationDraft,
     Role,
     RosterEntry,
     SecurityQuestionAnswer,
     User,
 )
-
-
-def client_ip(request):
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return (forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR")) or None
+from .services import (
+    RosterImportFileError,
+    import_roster_entries,
+    import_roster_ids,
+    roster_template_csv_bytes,
+    roster_template_xlsx_bytes,
+)
 
 
 def log_event(request, event_type, description, target_user=None, metadata=None):
@@ -184,22 +198,16 @@ def _registration_preview(request, role, form_class, template_name):
     if role == Role.TUTOR:
         roster = RosterEntry(
             student_id="PREVIEW-TUTOR",
-            name_zh="Tutor 預覽學生",
-            name_en="Tutor Preview Student",
             role=Role.TUTOR,
-            education_level=EducationLevel.MASTER,
-            identity_category=IdentityCategory.LOCAL,
-            program_source=ProgramSource.NOT_APPLICABLE,
         )
     else:
+        preview_program = PartnerProgram.objects.filter(code="NTNU").first() or PartnerProgram(
+            code="NTNU", name_zh="師大外籍生", name_en="NTNU international student"
+        )
         roster = RosterEntry(
             student_id="PREVIEW-TUTEE",
-            name_zh="Tutee 預覽學生",
-            name_en="Tutee Preview Student",
             role=Role.TUTEE,
-            education_level=EducationLevel.NOT_APPLICABLE,
-            identity_category=IdentityCategory.INTERNATIONAL,
-            program_source=ProgramSource.NTNU,
+            program=preview_program,
         )
     form = form_class(roster=roster, draft=None)
     return render(request, template_name, {"form": form, "roster": roster, "preview_mode": True})
@@ -228,6 +236,8 @@ def dashboard(request):
     context = {"current_semester": current_semester, "matching_open": matching_open}
     if request.user.role == Role.ADMIN:
         semester_rows = list(Semester.objects.order_by("-starts_on"))
+        for row in semester_rows:
+            row.edit_form = SemesterSettingsForm(instance=row, prefix=f"semester-{row.pk}")
         overview_semesters = semester_rows
         overview_semester = current_semester or (overview_semesters[0] if overview_semesters else None)
         requested_semester_id = request.GET.get("class_semester")
@@ -328,6 +338,9 @@ def dashboard(request):
                 "semester_rows": semester_rows,
                 "visible_semester_rows": [row for row in semester_rows if row.is_active],
                 "new_semester_form": SemesterCreateForm(),
+                "semester_ids_with_pairings": set(
+                    Pairing.objects.filter(semester__in=semester_rows).values_list("semester_id", flat=True)
+                ),
                 "configured_non_past_semester_count": sum(row.ends_on >= today and row.is_active for row in semester_rows),
                 "overview_semesters": overview_semesters,
                 "overview_semester": overview_semester,
@@ -344,6 +357,8 @@ def dashboard(request):
                 "anomaly_class_sessions": incomplete_classes[:5],
                 "export_users": User.objects.exclude(role=Role.ADMIN).order_by("username"),
                 "export_semesters": overview_semesters,
+                "roster_import_form": RosterImportForm(),
+                "quick_import_programs": PartnerProgram.objects.filter(is_active=True).order_by("name_zh"),
             }
         )
     elif request.user.role == Role.TUTOR:
@@ -364,7 +379,18 @@ def dashboard(request):
             }
             (sent_rows if invitation.initiated_by_id == request.user.pk else received_rows).append(row)
         can_match = matching_open and tutor_has_approved_qualification(request.user) and pairings.count() < MAX_ACTIVE_TUTEES_PER_TUTOR
-        candidates = anonymous_tutee_candidates(semester=current_semester, tutor=request.user) if can_match else []
+        candidate_filters = {
+            "gender": request.GET.get("tutee_gender", "").strip(),
+            "overall_level": request.GET.get("tutee_level", "").strip(),
+            "native_language": request.GET.get("tutee_language", "").strip(),
+            "target_skills": request.GET.getlist("tutee_skill"),
+            "days": request.GET.getlist("tutee_day"),
+            "time_slots": request.GET.getlist("tutee_slot"),
+        }
+        candidates = (
+            anonymous_tutee_candidates(semester=current_semester, tutor=request.user, filters=candidate_filters)
+            if can_match else []
+        )
         pending_tutee_ids = {row["profile"]["user_id"] for row in sent_rows + received_rows}
         for candidate in candidates:
             candidate["pending"] = candidate["user_id"] in pending_tutee_ids
@@ -376,6 +402,12 @@ def dashboard(request):
                 "active_pairing_count": pairings.count(),
                 "can_match": can_match,
                 "tutee_candidates": candidates,
+                "tutee_candidate_filters": candidate_filters,
+                "tutee_gender_choices": [choice for choice in GENDER_CHOICES if choice[0]],
+                "tutee_level_choices": OVERALL_LEVEL_CHOICES,
+                "tutee_skill_choices": SKILL_CHOICES,
+                "tutee_day_choices": DAYS,
+                "tutee_slot_choices": TIME_SLOTS,
                 "sent_invitations": sent_rows,
                 "received_invitations": received_rows,
                 "pairing_release_reason_choices": PairingReleaseReason.choices,
@@ -397,13 +429,20 @@ def dashboard(request):
                 "profile": anonymous_tutor_profile(invitation.tutor.tutor_profile),
             }
             (sent_rows if invitation.initiated_by_id == request.user.pk else received_rows).append(row)
-        is_maryland = bool(
+        can_initiate_invitation = bool(
             request.user.roster_entry
-            and request.user.roster_entry.program_source == ProgramSource.MARYLAND
+            and request.user.roster_entry.program_id
+            and request.user.roster_entry.program.allow_tutee_initiate_invitation
         )
+        tutor_candidate_filters = {
+            "gender": request.GET.get("tutor_gender", "").strip(),
+            "native_language": request.GET.get("tutor_language", "").strip(),
+            "days": request.GET.getlist("tutor_day"),
+            "time_slots": request.GET.getlist("tutor_slot"),
+        }
         candidates = (
-            anonymous_tutor_candidates(semester=current_semester, tutee=request.user)
-            if matching_open and is_maryland and not pairings.exists()
+            anonymous_tutor_candidates(semester=current_semester, tutee=request.user, filters=tutor_candidate_filters)
+            if matching_open and can_initiate_invitation and not pairings.exists()
             else []
         )
         pending_tutor_ids = {row["profile"]["user_id"] for row in sent_rows + received_rows}
@@ -412,14 +451,24 @@ def dashboard(request):
         context.update(
             {
                 "active_pairings": pairings,
-                "is_maryland": is_maryland,
+                "is_maryland": can_initiate_invitation,
                 "tutor_candidates": candidates,
+                "tutor_candidate_filters": tutor_candidate_filters,
+                "tutor_gender_choices": [choice for choice in GENDER_CHOICES if choice[0]],
+                "tutor_day_choices": DAYS,
+                "tutor_slot_choices": TIME_SLOTS,
                 "sent_invitations": sent_rows,
                 "received_invitations": received_rows,
                 "pairing_release_reason_choices": PairingReleaseReason.choices,
             }
         )
     if request.user.role in {Role.TUTOR, Role.TUTEE}:
+        participant_pairings = list(
+            Pairing.objects.filter(
+                Q(tutor=request.user) | Q(tutee=request.user)
+            ).select_related("semester", "tutor", "tutee").order_by("-started_at")
+        )
+        conversation_pairings = annotate_conversation_summaries(participant_pairings, viewer=request.user)
         participant_filter = Q(pairing__tutor=request.user) if request.user.role == Role.TUTOR else Q(pairing__tutee=request.user)
         class_sessions = ClassSession.objects.filter(participant_filter).select_related(
             "pairing__semester", "pairing__tutor", "pairing__tutee"
@@ -487,7 +536,7 @@ def dashboard(request):
                 "official_hours": official_hours,
                 "schedule_form": ScheduleClassForm(tutor=request.user) if request.user.role == Role.TUTOR else None,
                 "hours_download_allowed": user_has_hour_records(request.user),
-                "hours_download_form": HoursDownloadForm() if user_has_hour_records(request.user) else None,
+                "hours_download_form": HoursDownloadForm(user=request.user) if user_has_hour_records(request.user) else None,
                 "semester_history": semester_history,
                 "cumulative_reserved_hours": sum(
                     (session.duration for session in all_rows if session.status != ClassSessionStatus.CANCELLED),
@@ -499,6 +548,13 @@ def dashboard(request):
                 "cumulative_session_count": sum(
                     session.status != ClassSessionStatus.CANCELLED for session in all_rows
                 ),
+                "active_conversations": [
+                    pairing for pairing in conversation_pairings if pairing.status == PairingStatus.ACTIVE
+                ],
+                "ended_conversations": [
+                    pairing for pairing in conversation_pairings if pairing.status == PairingStatus.ENDED
+                ],
+                "unread_message_total": sum(pairing.unread_count for pairing in conversation_pairings),
             }
         )
     elif request.user.role == Role.ADMIN:
@@ -541,6 +597,15 @@ def dashboard(request):
         context["active_class_alerts"] = ClassAlert.objects.filter(
             status=ClassAlertStatus.ACTIVE
         ).select_related("session__pairing__semester", "reporter", "subject")
+        context["class_alert_history"] = ClassAlert.objects.filter(
+            status=ClassAlertStatus.RESOLVED
+        ).select_related("session__pairing__semester", "reporter", "resolved_by")[:30]
+        context["pending_incident_reports"] = IncidentReport.objects.filter(
+            status=IncidentReportStatus.PENDING
+        ).select_related("session__pairing__semester", "reporter")
+        context["incident_report_history"] = IncidentReport.objects.filter(
+            status=IncidentReportStatus.RESOLVED
+        ).select_related("session__pairing__semester", "reporter", "resolved_by")[:30]
     return render(request, "dashboard/index.html", context)
 
 
@@ -599,6 +664,87 @@ def admin_tutor_schedule(request, user_id):
     })
 
 
+@login_required
+def admin_user_profile(request, user_id):
+    """Read-only aggregated view of one Tutor/Tutee's roster, qualification, pairings, hours, and reports."""
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    subject = get_object_or_404(
+        User.objects.select_related("roster_entry", "roster_entry__program"),
+        pk=user_id, role__in=[Role.TUTOR, Role.TUTEE],
+    )
+    context = {"subject": subject, "roster": subject.roster_entry}
+    context.update(_role_profile_context(subject))
+
+    if subject.role == Role.TUTOR:
+        context["qualification"] = QualificationDocument.objects.filter(tutor=subject).select_related("reviewed_by").first()
+
+    context["pairings"] = list(
+        Pairing.objects.filter(Q(tutor=subject) | Q(tutee=subject))
+        .select_related("semester", "tutor", "tutee")
+        .order_by("-started_at")
+    )
+
+    participant_filter = Q(pairing__tutor=subject) if subject.role == Role.TUTOR else Q(pairing__tutee=subject)
+    sessions = list(
+        ClassSession.objects.filter(participant_filter)
+        .select_related("pairing__semester", "pairing__tutor", "pairing__tutee")
+        .prefetch_related("attendances", "class_records", "confirmations")
+        .order_by("class_date", "start_time")
+    )
+    for session in sessions:
+        session.is_official = class_is_valid(session)
+    active_sessions = [row for row in sessions if row.status != ClassSessionStatus.CANCELLED]
+
+    hour_adjustments = list(
+        HourAdjustment.objects.filter(user=subject)
+        .select_related("semester", "program", "created_by")
+        .order_by("-created_at")
+    )
+    adjustment_by_semester = {}
+    for adjustment in hour_adjustments:
+        adjustment_by_semester[adjustment.semester_id] = (
+            adjustment_by_semester.get(adjustment.semester_id, Decimal("0")) + adjustment.hours
+        )
+    total_adjustment_hours = sum((row.hours for row in hour_adjustments), start=Decimal("0"))
+
+    semester_ids = {session.pairing.semester_id for session in sessions} | set(adjustment_by_semester)
+    semester_history = []
+    for semester in Semester.objects.filter(pk__in=semester_ids).order_by("-starts_on"):
+        rows = [row for row in active_sessions if row.pairing.semester_id == semester.pk]
+        adjustment_hours = adjustment_by_semester.get(semester.pk, Decimal("0"))
+        semester_history.append(
+            {
+                "semester": semester,
+                "session_count": len(rows),
+                "reserved_hours": sum((row.duration for row in rows), start=Decimal("0")),
+                "verified_hours": sum((row.duration for row in rows if row.is_official), start=Decimal("0")) + adjustment_hours,
+                "adjustment_hours": adjustment_hours,
+            }
+        )
+    context.update(
+        {
+            "semester_history": semester_history,
+            "hour_adjustments": hour_adjustments,
+            "total_adjustment_hours": total_adjustment_hours,
+            "cumulative_session_count": len(active_sessions),
+            "cumulative_reserved_hours": sum((row.duration for row in active_sessions), start=Decimal("0")),
+            "cumulative_verified_hours": sum(
+                (row.duration for row in active_sessions if row.is_official), start=Decimal("0")
+            ) + total_adjustment_hours,
+        }
+    )
+
+    context["class_alerts"] = ClassAlert.objects.filter(
+        Q(reporter=subject) | Q(subject=subject)
+    ).select_related("session__pairing", "resolved_by").order_by("-created_at")[:20]
+    context["incident_reports"] = IncidentReport.objects.filter(
+        Q(session__pairing__tutor=subject) | Q(session__pairing__tutee=subject)
+    ).select_related("session__pairing", "reporter", "resolved_by").order_by("-created_at")[:20]
+
+    return render(request, "accounts/admin_user_profile.html", context)
+
+
 def _skill_ratings(profile, labels):
     return [
         {"label": label, "label_en": label_en, "score": getattr(profile, field)}
@@ -606,25 +752,18 @@ def _skill_ratings(profile, labels):
     ]
 
 
-@login_required
-def profile(request):
-    """Present the signed-in user's full profile outside the matching workflow."""
+def _role_profile_context(subject):
+    """Build the shared teaching/learning profile display data for a Tutor or Tutee."""
     context = {
-        "roster": request.user.roster_entry,
         "role_profile": None,
         "skill_ratings": [],
         "availability_days": [],
         "availability_slots": [],
+        "profile_kind": None,
     }
-    if request.user.role == Role.TUTOR:
-        role_profile = getattr(request.user, "tutor_profile", None)
-        context.update(
-            {
-                "role_profile": role_profile,
-                "qualification": QualificationDocument.objects.filter(tutor=request.user).first(),
-                "profile_kind": "tutor",
-            }
-        )
+    if subject.role == Role.TUTOR:
+        role_profile = getattr(subject, "tutor_profile", None)
+        context.update({"role_profile": role_profile, "profile_kind": "tutor"})
         if role_profile:
             context.update(
                 {
@@ -641,8 +780,8 @@ def profile(request):
                     "availability_slots": role_profile.available_time_slots,
                 }
             )
-    elif request.user.role == Role.TUTEE:
-        role_profile = getattr(request.user, "tutee_profile", None)
+    elif subject.role == Role.TUTEE:
+        role_profile = getattr(subject, "tutee_profile", None)
         context.update({"role_profile": role_profile, "profile_kind": "tutee"})
         if role_profile:
             context.update(
@@ -667,7 +806,52 @@ def profile(request):
             )
     else:
         context["profile_kind"] = "admin"
+    return context
+
+
+@login_required
+def profile(request):
+    """Present the signed-in user's full profile outside the matching workflow."""
+    context = {"roster": request.user.roster_entry, "edit_form": None}
+    context.update(_role_profile_context(request.user))
+    role_profile = context["role_profile"]
+    if request.user.role == Role.TUTOR:
+        context["qualification"] = QualificationDocument.objects.filter(tutor=request.user).first()
+        if role_profile:
+            context["edit_form"] = TutorProfileEditForm(profile=role_profile, user=request.user)
+    elif request.user.role == Role.TUTEE and role_profile:
+        context["edit_form"] = TuteeProfileEditForm(profile=role_profile, user=request.user)
     return render(request, "accounts/profile.html", context)
+
+
+@login_required
+@require_POST
+def update_profile(request):
+    role_profile = getattr(request.user, "tutor_profile", None) if request.user.role == Role.TUTOR else (
+        getattr(request.user, "tutee_profile", None) if request.user.role == Role.TUTEE else None
+    )
+    if role_profile is None:
+        raise Http404
+    form_class = TutorProfileEditForm if request.user.role == Role.TUTOR else TuteeProfileEditForm
+    form = form_class(request.POST, profile=role_profile, user=request.user)
+    if form.is_valid():
+        changed_fields = form.save()
+        if changed_fields:
+            log_event(
+                request,
+                "PROFILE_UPDATED",
+                "更新個人資料 / Profile updated",
+                request.user,
+                {"fields": changed_fields},
+            )
+            messages.success(request, "個人資料已更新。 / Your profile has been updated.")
+        else:
+            messages.success(request, "沒有欄位變更。 / No changes were made.")
+    else:
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+    return redirect(reverse("accounts:profile") + "#edit-profile")
 
 
 @login_required
@@ -690,54 +874,8 @@ def matched_profile(request, user_id):
         "counterpart": counterpart,
         "pairing": pairing,
         "roster": counterpart.roster_entry,
-        "role_profile": None,
-        "skill_ratings": [],
-        "availability_days": [],
-        "availability_slots": [],
     }
-    if counterpart.role == Role.TUTOR:
-        role_profile = getattr(counterpart, "tutor_profile", None)
-        context.update({"role_profile": role_profile, "profile_kind": "tutor"})
-        if role_profile:
-            context.update(
-                {
-                    "skill_ratings": _skill_ratings(
-                        role_profile,
-                        [
-                            ("level_listening", "聽力教學", "Listening"),
-                            ("level_speaking", "口說教學", "Speaking"),
-                            ("level_reading", "閱讀教學", "Reading"),
-                            ("level_writing", "寫作教學", "Writing"),
-                        ],
-                    ),
-                    "availability_days": [DAY_LABELS.get(day, day) for day in role_profile.available_days],
-                    "availability_slots": role_profile.available_time_slots,
-                }
-            )
-    elif counterpart.role == Role.TUTEE:
-        role_profile = getattr(counterpart, "tutee_profile", None)
-        context.update({"role_profile": role_profile, "profile_kind": "tutee"})
-        if role_profile:
-            context.update(
-                {
-                    "skill_ratings": _skill_ratings(
-                        role_profile,
-                        [
-                            ("level_listening", "聽力", "Listening"),
-                            ("level_speaking", "口說", "Speaking"),
-                            ("level_reading", "閱讀", "Reading"),
-                            ("level_writing", "寫作", "Writing"),
-                        ],
-                    ),
-                    "overall_level": LEVEL_LABELS.get(role_profile.overall_level, role_profile.overall_level),
-                    "learning_duration": LEARNING_DURATION_LABELS.get(
-                        role_profile.learning_duration, role_profile.learning_duration
-                    ),
-                    "target_skills": [SKILL_LABELS.get(skill, skill) for skill in role_profile.target_skills],
-                    "availability_days": [DAY_LABELS.get(day, day) for day in role_profile.preferred_days],
-                    "availability_slots": role_profile.preferred_time_slots,
-                }
-            )
+    context.update(_role_profile_context(counterpart))
     return render(request, "accounts/matched_profile.html", context)
 
 
@@ -749,7 +887,7 @@ def handbook(request):
         "accounts/handbook.html",
         {
             "roster": roster,
-            "is_maryland": bool(roster and roster.program_source == ProgramSource.MARYLAND),
+            "is_maryland": bool(roster and roster.program_id and roster.program.allow_tutee_initiate_invitation),
         },
     )
 
@@ -799,6 +937,124 @@ def review_qualification(request, pk):
     )
     messages.success(request, "審核結果已儲存。 / Review result saved.")
     return redirect("accounts:dashboard")
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def roster_import(request):
+    form = RosterImportForm(request.POST, request.FILES)
+    redirect_target = reverse("accounts:dashboard") + "#roster-import"
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(redirect_target)
+
+    uploaded_file = form.cleaned_data["file"]
+    try:
+        result = import_roster_entries(uploaded_file)
+    except RosterImportFileError as exc:
+        messages.error(request, str(exc))
+        return redirect(redirect_target)
+
+    if result.errors:
+        messages.error(
+            request,
+            f"匯入失敗，共 {len(result.errors)} 列有誤，未寫入任何資料。 / "
+            f"Import failed: {len(result.errors)} row(s) invalid, nothing was saved.",
+        )
+        for error in result.errors[:50]:
+            messages.error(request, error)
+    else:
+        log_event(
+            request,
+            "ROSTER_IMPORTED",
+            f"批次匯入名冊 {result.created_count} 筆 / Batch imported {result.created_count} roster entries",
+            metadata={
+                "created_count": result.created_count,
+                "student_ids": result.created_ids,
+                "skipped_existing_count": len(result.skipped_existing_ids),
+                "filename": uploaded_file.name,
+            },
+        )
+        success_text = f"已新增 {result.created_count} 筆名冊資料。 / Added {result.created_count} roster entries."
+        if result.skipped_existing_ids:
+            success_text += (
+                f" 略過 {len(result.skipped_existing_ids)} 筆已存在的學號（保留系統原有資料）。 / "
+                f"Skipped {len(result.skipped_existing_ids)} student ID(s) already on the roster (kept as-is)."
+            )
+        messages.success(request, success_text)
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def roster_import_quick(request, category_code):
+    redirect_target = reverse("accounts:dashboard") + "#roster-import"
+    if category_code == "TUTOR":
+        role, program = Role.TUTOR, None
+        category_label = "華語系學生 / CSL students"
+    else:
+        program = get_object_or_404(PartnerProgram, code=category_code, is_active=True)
+        role, category_label = Role.TUTEE, program.name_zh
+
+    form = RosterImportForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(redirect_target)
+
+    uploaded_file = form.cleaned_data["file"]
+    try:
+        result = import_roster_ids(uploaded_file, role=role, program=program)
+    except RosterImportFileError as exc:
+        messages.error(request, str(exc))
+        return redirect(redirect_target)
+
+    if result.errors:
+        messages.error(request, "、".join(result.errors[:20]))
+        return redirect(redirect_target)
+
+    log_event(
+        request,
+        "ROSTER_IMPORTED",
+        f"快速匯入名冊（{category_label}）{result.created_count} 筆 / "
+        f"Quick roster import ({category_label}): {result.created_count} entries",
+        metadata={
+            "category": category_code,
+            "created_count": result.created_count,
+            "student_ids": result.created_ids,
+            "skipped_existing_count": len(result.skipped_existing_ids),
+            "skipped_invalid_count": len(result.skipped_invalid),
+            "filename": uploaded_file.name,
+        },
+    )
+    success_text = f"「{category_label}」已新增 {result.created_count} 筆學號。 / Added {result.created_count} student ID(s) to {category_label}."
+    if result.skipped_existing_ids:
+        success_text += f" 略過 {len(result.skipped_existing_ids)} 筆已存在的學號。 / Skipped {len(result.skipped_existing_ids)} existing ID(s)."
+    messages.success(request, success_text)
+    for warning in result.skipped_invalid[:20]:
+        messages.warning(request, warning)
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_GET
+def download_roster_template(request, file_format):
+    if file_format == "csv":
+        content = roster_template_csv_bytes()
+        response = HttpResponse(content, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="roster_import_template.csv"'
+        return response
+    if file_format == "xlsx":
+        content = roster_template_xlsx_bytes()
+        response = HttpResponse(
+            content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="roster_import_template.xlsx"'
+        return response
+    raise Http404
 
 
 def recover_account(request):

@@ -4,8 +4,7 @@
 {% block role_kicker %}TEACHER REGISTRATION · STEP 2 OF 2{% endblock %}
 {% block role_title %}建立您的個人檔案 <span>Create your profile</span>{% endblock %}
 {% block role_intro %}請完善您的教學履歷，以便瀏覽並邀請適合的外籍學生。<br>Complete your teaching profile so you can browse and invite suitable international students.{% endblock %}
-{% block roster_detail_label %}學制 / Degree{% endblock %}
-{% block roster_detail %}{{ roster.get_education_level_display }}{% endblock %}
+{% block roster_detail_row %}{% endblock %}
 
 {% block role_fields %}
 <section class="form-section">
@@ -17,6 +16,10 @@
     </div>
   </div>
   <div class="two-column-fields">
+    {% include "components/form_field.html" with field=form.name_zh %}
+    {% include "components/form_field.html" with field=form.name_en %}
+    {% include "components/form_field.html" with field=form.identity_category %}
+    {% include "components/form_field.html" with field=form.education_level %}
     {% include "components/form_field.html" with field=form.phone %}
     {% include "components/form_field.html" with field=form.gender %}
     {% include "components/form_field.html" with field=form.native_language %}

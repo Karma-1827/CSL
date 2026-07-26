@@ -24,6 +24,7 @@
         <section class="certificate-option-card">
           <div class="certificate-option-heading"><span>1</span><div><strong>選擇資料範圍</strong><small>Select period</small></div></div>
           <div class="certificate-period-grid">
+            {% if hours_download_form.program %}<label>{{ hours_download_form.program.label }}{{ hours_download_form.program }}</label>{% endif %}
             <label>{{ hours_download_form.mode.label }}{{ hours_download_form.mode }}</label>
             <label>{{ hours_download_form.semester.label }}{{ hours_download_form.semester }}</label>
             <label>{{ hours_download_form.starts_on.label }}{{ hours_download_form.starts_on }}</label>
@@ -33,9 +34,19 @@
         <section class="certificate-option-card certificate-version-card">
           <div class="certificate-option-heading"><span>2</span><div><strong>選擇證明版本</strong><small>Certificate version</small></div></div>
           <div class="certificate-version-options">{% for radio in hours_download_form.version %}<label>{{ radio.tag }}<span>{{ radio.choice_label }}</span></label>{% endfor %}</div>
+          <div class="certificate-summary-note" data-certificate-summary-note>
+            <span aria-hidden="true">✓</span>
+            <div>
+              <strong>摘要版將呈現基本證明資訊與有效總時數</strong>
+              <small>The summary includes essential certificate details and total verified hours.</small>
+            </div>
+          </div>
           <div class="certificate-detail-fields" data-certificate-detail-fields hidden><strong>詳細版顯示欄位 <small>Detailed fields</small></strong><p>欄位將依「日期、學生國籍、學生程度、時數」的固定順序呈現。</p><div>{% for checkbox in hours_download_form.detail_fields %}<label>{{ checkbox.tag }}<span class="certificate-field-label">{% if checkbox.data.value == "date" %}<strong>日期</strong><small>Date</small>{% elif checkbox.data.value == "nationality" %}<strong>學生國籍</strong><small>Student nationality</small>{% elif checkbox.data.value == "level" %}<strong>學生程度</strong><small>Student level</small>{% elif checkbox.data.value == "hours" %}<strong>時數</strong><small>Hours</small>{% endif %}</span></label>{% endfor %}</div></div>
         </section>
-        <button class="button button-primary schedule-submit download-hours-button" type="submit"><strong>下載時數紀錄</strong><small>Download PDF</small></button>
+        <div class="certificate-submit-row">
+          <button class="button button-secondary schedule-submit download-hours-button" type="submit" name="intent" value="preview" formtarget="_blank"><strong>預覽</strong><small>Preview</small></button>
+          <button class="button button-primary schedule-submit download-hours-button" type="submit" name="intent" value="download"><strong>下載時數紀錄</strong><small>Download PDF</small></button>
+        </div>
       </form>
     </div>
   </section>
@@ -46,8 +57,19 @@
 <section class="dashboard-view" data-dashboard-panel="messages">
   <div class="view-heading"><span>MESSAGES</span><h2>私訊 <small>Messages</small></h2></div>
   <section class="panel conversation-launcher">
-    {% for pairing in active_pairings %}
-      <a href="{% url 'tutoring:pairing_messages' pairing.pk %}"><span>{% if request.user.role == 'TUTOR' %}學生 / Student{% else %}老師 / Teacher{% endif %}</span><strong>{% if request.user.role == 'TUTOR' %}{{ pairing.tutee.bilingual_name }}{% else %}{{ pairing.tutor.bilingual_name }}{% endif %}</strong><small>{{ pairing.semester }}</small><em>開啟對話 / Open →</em></a>
-    {% empty %}<div class="empty-state">建立配對後即可使用私訊。 / Messaging is available after matching.</div>{% endfor %}
+    <div class="conversation-group-heading"><span><strong>進行中的對話</strong><small>Active conversations</small></span><b>{{ active_conversations|length }}</b></div>
+    <div class="conversation-link-list">
+      {% for pairing in active_conversations %}
+        <a href="{% url 'tutoring:pairing_messages' pairing.pk %}" class="{% if pairing.unread_count %}has-unread{% endif %}"><span>{% if request.user.role == 'TUTOR' %}學生 / Student{% else %}老師 / Teacher{% endif %}</span><strong>{% if request.user.role == 'TUTOR' %}{{ pairing.tutee.bilingual_name }}{% else %}{{ pairing.tutor.bilingual_name }}{% endif %}{% if pairing.unread_count %}<b class="unread-badge">{{ pairing.unread_count }}</b>{% endif %}</strong><small>{{ pairing.semester }}</small><p class="conversation-preview">{% if pairing.last_message %}{% if pairing.last_message.sender_id == request.user.pk %}我：{% endif %}{{ pairing.last_message.body|truncatechars:36 }}{% else %}尚無訊息 / No messages yet{% endif %}</p>{% if pairing.last_message %}<time class="conversation-time">{{ pairing.last_activity_at|date:"m/d H:i" }}</time>{% endif %}<em>開啟對話 / Open →</em></a>
+      {% empty %}<div class="empty-state compact">目前沒有進行中的對話。 / No active conversations.</div>{% endfor %}
+    </div>
+    <details class="conversation-history"{% if not active_conversations and ended_conversations %} open{% endif %}>
+      <summary><span><strong>過往對話紀錄</strong><small>Conversation history</small></span><b>{{ ended_conversations|length }}</b><i aria-hidden="true">⌄</i></summary>
+      <div class="conversation-link-list">
+        {% for pairing in ended_conversations %}
+          <a class="is-ended{% if pairing.unread_count %} has-unread{% endif %}" href="{% url 'tutoring:pairing_messages' pairing.pk %}"><span>{% if request.user.role == 'TUTOR' %}學生 / Student{% else %}老師 / Teacher{% endif %} · 已結束 / Ended</span><strong>{% if request.user.role == 'TUTOR' %}{{ pairing.tutee.bilingual_name }}{% else %}{{ pairing.tutor.bilingual_name }}{% endif %}{% if pairing.unread_count %}<b class="unread-badge">{{ pairing.unread_count }}</b>{% endif %}</strong><small>{{ pairing.semester }}</small><p class="conversation-preview">{% if pairing.last_message %}{% if pairing.last_message.sender_id == request.user.pk %}我：{% endif %}{{ pairing.last_message.body|truncatechars:36 }}{% else %}尚無訊息 / No messages yet{% endif %}</p>{% if pairing.last_message %}<time class="conversation-time">{{ pairing.last_activity_at|date:"m/d H:i" }}</time>{% endif %}<em>查看紀錄 / View history →</em></a>
+        {% empty %}<div class="empty-state compact">目前沒有過往對話紀錄。 / No conversation history.</div>{% endfor %}
+      </div>
+    </details>
   </section>
 </section>

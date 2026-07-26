@@ -5,12 +5,15 @@
 {% block role_title %}建立個人檔案 <span>Create your profile</span>{% endblock %}
 {% block role_intro %}請完善以下資訊，讓本系華語小老師了解您的學習需求與可配合時段，並提供合適的輔導協助。<br>Complete your profile so CSL teachers can understand your learning needs and availability and provide suitable support.{% endblock %}
 {% block roster_detail_label %}所屬計畫 / Program{% endblock %}
-{% block roster_detail %}{{ roster.get_program_source_display }}{% endblock %}
+{% block roster_detail %}{{ roster.program.name_zh }} / {{ roster.program.name_en }}{% endblock %}
 
 {% block role_fields %}
 <section class="form-section">
   <div class="form-section-heading"><span>01</span><div><h2>聯絡與基本資料</h2><p>Contact and basic information</p></div></div>
   <div class="two-column-fields">
+    {% include "components/form_field.html" with field=form.name_zh %}
+    {% include "components/form_field.html" with field=form.name_en %}
+    {% include "components/form_field.html" with field=form.identity_category %}
     {% include "components/form_field.html" with field=form.phone %}
     {% include "components/form_field.html" with field=form.gender %}
     {% include "components/form_field.html" with field=form.native_language %}

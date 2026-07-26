@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -17,7 +18,12 @@ from tutoring.models import (
     validate_qualification_file,
 )
 
-from .models import RegistrationDraft, Role, RosterEntry, SecurityQuestionAnswer, User
+from .models import EducationLevel, IdentityCategory, RegistrationDraft, Role, RosterEntry, SecurityQuestionAnswer, User
+
+
+def client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    return (forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR")) or None
 
 
 def add_form_classes(form):
@@ -49,6 +55,32 @@ class BilingualAuthenticationForm(AuthenticationForm):
         super().confirm_login_allowed(user)
         if user.account_status != "ACTIVE":
             raise ValidationError("此帳號目前已停用。 / This account is currently suspended.", code="inactive")
+
+    def get_invalid_login_error(self):
+        return ValidationError(
+            "學號或密碼不正確。 / The student ID or password is incorrect.", code="invalid_login"
+        )
+
+    def _throttle_key(self, username):
+        return f"login:{client_ip(self.request)}:{username.strip().upper()}"
+
+    def clean(self):
+        username = self.cleaned_data.get("username")
+        if not username:
+            return super().clean()
+        throttle_key = self._throttle_key(username)
+        if cache.get(throttle_key, 0) >= 5:
+            raise ValidationError(
+                "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.",
+                code="throttled",
+            )
+        try:
+            cleaned = super().clean()
+        except ValidationError:
+            cache.set(throttle_key, cache.get(throttle_key, 0) + 1, 900)
+            raise
+        cache.delete(throttle_key)
+        return cleaned
 
 
 class RegistrationForm(forms.Form):
@@ -168,6 +200,16 @@ GENDER_CHOICES = [
     (Gender.FEMALE, "女 / Female"),
     (Gender.NON_BINARY, "非二元 / Non-binary"),
 ]
+OVERALL_LEVEL_CHOICES = [
+    ("UNKNOWN", "不知道 / Unknown"),
+    ("N", "TOCFL N"),
+    ("A1", "TOCFL A1"),
+    ("A2", "TOCFL A2"),
+    ("B1", "TOCFL B1"),
+    ("B2", "TOCFL B2"),
+    ("C1", "TOCFL C1"),
+    ("C2", "TOCFL C2"),
+]
 
 
 class RegistrationLookupForm(forms.Form):
@@ -234,6 +276,9 @@ class RegistrationLookupForm(forms.Form):
 
 
 class BaseRoleRegistrationForm(forms.Form):
+    name_zh = forms.CharField(label="中文姓名 / Chinese name", max_length=100)
+    name_en = forms.CharField(label="英文姓名（選填） / English name (optional)", max_length=150, required=False)
+    identity_category = forms.ChoiceField(label="身份別 / Identity category", choices=IdentityCategory.choices)
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
@@ -268,6 +313,14 @@ class BaseRoleRegistrationForm(forms.Form):
     def __init__(self, *args, roster, draft, **kwargs):
         self.roster = roster
         self.draft = draft
+        initial = kwargs.pop("initial", {})
+        if roster.name_zh:
+            initial.setdefault("name_zh", roster.name_zh)
+        if roster.name_en:
+            initial.setdefault("name_en", roster.name_en)
+        if roster.identity_category:
+            initial.setdefault("identity_category", roster.identity_category)
+        kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
         add_form_classes(self)
         if self.is_bound:
@@ -292,6 +345,13 @@ class BaseRoleRegistrationForm(forms.Form):
             raise ValidationError("此學號已完成註冊。 / This student ID has already been registered.")
         if self.draft.is_expired or self.draft.roster_entry_id != roster.pk:
             raise ValidationError("註冊資料已逾時，請重新開始。 / Registration expired. Please start again.")
+        roster.name_zh = self.cleaned_data["name_zh"]
+        roster.name_en = self.cleaned_data.get("name_en", "")
+        roster.identity_category = self.cleaned_data["identity_category"]
+        if "education_level" in self.cleaned_data:
+            roster.education_level = self.cleaned_data["education_level"]
+        roster.full_clean()
+        roster.save()
         user = User(
             username=roster.student_id,
             password=self.draft.password_hash,
@@ -317,6 +377,10 @@ class BaseRoleRegistrationForm(forms.Form):
 
 class TutorRegistrationForm(BaseRoleRegistrationForm):
     expected_role = Role.TUTOR
+    education_level = forms.ChoiceField(
+        label="學制 / Degree level",
+        choices=[choice for choice in EducationLevel.choices if choice[0] != EducationLevel.NOT_APPLICABLE],
+    )
     level_listening = forms.TypedChoiceField(label="聽力 / Listening", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     level_speaking = forms.TypedChoiceField(label="口說 / Speaking", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     level_reading = forms.TypedChoiceField(label="閱讀 / Reading", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
@@ -337,6 +401,11 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
         widget=forms.ClearableFileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         help_text="目前可先略過；PDF、JPG、PNG，最大 1 MB。\nOptional for now; PDF, JPG, or PNG, up to 1 MB.",
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.roster.education_level != EducationLevel.NOT_APPLICABLE:
+            self.fields["education_level"].initial = self.roster.education_level
 
     @transaction.atomic
     def save(self):
@@ -371,16 +440,7 @@ class TuteeRegistrationForm(BaseRoleRegistrationForm):
     expected_role = Role.TUTEE
     overall_level = forms.ChoiceField(
         label="整體華語程度 / Overall Chinese level",
-        choices=[
-            ("UNKNOWN", "不知道 / Unknown"),
-            ("N", "TOCFL N"),
-            ("A1", "TOCFL A1"),
-            ("A2", "TOCFL A2"),
-            ("B1", "TOCFL B1"),
-            ("B2", "TOCFL B2"),
-            ("C1", "TOCFL C1"),
-            ("C2", "TOCFL C2"),
-        ],
+        choices=OVERALL_LEVEL_CHOICES,
     )
     learning_duration = forms.ChoiceField(
         label="華語學習時間 / Learning duration",
@@ -471,3 +531,184 @@ class QualificationUploadForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         add_form_classes(self)
         self.fields["file"].help_text = "PDF、JPG、PNG，最大 1 MB。\nPDF, JPG, or PNG, up to 1 MB."
+
+
+class TutorProfileEditForm(forms.Form):
+    phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
+    gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
+    native_language = forms.CharField(
+        label="母語 / Native language",
+        max_length=80,
+        widget=forms.Select(
+            attrs={"data-profile-options": "language"},
+            choices=[("", "請選擇母語 / Select native language")],
+        ),
+    )
+    nationality = forms.CharField(
+        label="國家／地區 / Country or region",
+        max_length=80,
+        widget=forms.Select(
+            attrs={"data-profile-options": "region"},
+            choices=[("", "請選擇國家／地區 / Select country or region")],
+        ),
+    )
+    department = forms.CharField(label="系所 / Department", max_length=150)
+    level_listening = forms.TypedChoiceField(label="聽力 / Listening", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    level_speaking = forms.TypedChoiceField(label="口說 / Speaking", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    level_reading = forms.TypedChoiceField(label="閱讀 / Reading", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    level_writing = forms.TypedChoiceField(label="寫作 / Writing", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    teaching_notes = forms.CharField(
+        label="教學簡介 / Teaching notes", required=False, widget=forms.Textarea(attrs={"rows": 4})
+    )
+    available_days = forms.MultipleChoiceField(
+        label="可配合星期 / Available days", choices=DAYS, widget=forms.CheckboxSelectMultiple
+    )
+    available_time_slots = forms.MultipleChoiceField(
+        label="可配合時段 / Available time slots", choices=TIME_SLOTS, widget=forms.CheckboxSelectMultiple
+    )
+
+    profile_fields = (
+        "gender", "native_language", "nationality", "department",
+        "level_listening", "level_speaking", "level_reading", "level_writing",
+        "teaching_notes", "available_days", "available_time_slots",
+    )
+
+    def __init__(self, *args, profile, user, **kwargs):
+        self.profile_instance = profile
+        self.user = user
+        kwargs.setdefault(
+            "initial",
+            {
+                "phone": user.phone,
+                **{name: getattr(profile, name) for name in self.profile_fields},
+            },
+        )
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+        current_language = self.data.get("native_language") if self.is_bound else self.initial.get("native_language")
+        current_nationality = self.data.get("nationality") if self.is_bound else self.initial.get("nationality")
+        self.fields["native_language"].widget.attrs["data-current-value"] = current_language or ""
+        self.fields["nationality"].widget.attrs["data-current-value"] = current_nationality or ""
+
+    def save(self):
+        changed = []
+        if self.user.phone != self.cleaned_data["phone"]:
+            changed.append("phone")
+            self.user.phone = self.cleaned_data["phone"]
+            self.user.save(update_fields=["phone"])
+        for field_name in self.profile_fields:
+            if getattr(self.profile_instance, field_name) != self.cleaned_data[field_name]:
+                changed.append(field_name)
+                setattr(self.profile_instance, field_name, self.cleaned_data[field_name])
+        if changed:
+            self.profile_instance.full_clean()
+            self.profile_instance.save()
+        return changed
+
+
+class TuteeProfileEditForm(forms.Form):
+    phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
+    gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
+    native_language = forms.CharField(
+        label="母語 / Native language",
+        max_length=80,
+        widget=forms.Select(
+            attrs={"data-profile-options": "language"},
+            choices=[("", "請選擇母語 / Select native language")],
+        ),
+    )
+    nationality = forms.CharField(
+        label="國家／地區 / Country or region",
+        max_length=80,
+        widget=forms.Select(
+            attrs={"data-profile-options": "region"},
+            choices=[("", "請選擇國家／地區 / Select country or region")],
+        ),
+    )
+    department = forms.CharField(label="系所 / Department", max_length=150)
+    overall_level = forms.ChoiceField(
+        label="整體華語程度 / Overall Chinese level",
+        choices=OVERALL_LEVEL_CHOICES,
+    )
+    learning_duration = forms.ChoiceField(
+        label="華語學習時間 / Learning duration",
+        choices=[
+            ("", "請選擇學習時間 / Select learning duration"),
+            ("LT_3_MONTHS", "3 個月以下 / Less than 3 months"),
+            ("3_TO_6_MONTHS", "3 個月～半年 / 3–6 months"),
+            ("6_TO_12_MONTHS", "半年～1 年 / 6–12 months"),
+            ("1_TO_2_YEARS", "1～2 年 / 1–2 years"),
+            ("GT_2_YEARS", "2 年以上 / More than 2 years"),
+        ],
+    )
+    level_listening = forms.TypedChoiceField(label="聽力 / Listening", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    level_speaking = forms.TypedChoiceField(label="口說 / Speaking", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    level_reading = forms.TypedChoiceField(label="閱讀 / Reading", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    level_writing = forms.TypedChoiceField(label="寫作 / Writing", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
+    target_skills = forms.MultipleChoiceField(
+        label="希望加強項目 / Skills to improve", choices=SKILL_CHOICES, widget=forms.CheckboxSelectMultiple
+    )
+    skills_to_improve = forms.CharField(
+        label="學習需求說明 / Learning needs", required=False, widget=forms.Textarea(attrs={"rows": 4})
+    )
+    preferred_days = forms.MultipleChoiceField(
+        label="偏好星期 / Preferred days", choices=DAYS, widget=forms.CheckboxSelectMultiple
+    )
+    preferred_time_slots = forms.MultipleChoiceField(
+        label="偏好時段 / Preferred time slots", choices=TIME_SLOTS, widget=forms.CheckboxSelectMultiple
+    )
+
+    profile_fields = (
+        "gender", "native_language", "nationality", "department",
+        "overall_level", "learning_duration",
+        "level_listening", "level_speaking", "level_reading", "level_writing",
+        "target_skills", "skills_to_improve", "preferred_days", "preferred_time_slots",
+    )
+
+    def __init__(self, *args, profile, user, **kwargs):
+        self.profile_instance = profile
+        self.user = user
+        kwargs.setdefault(
+            "initial",
+            {
+                "phone": user.phone,
+                **{name: getattr(profile, name) for name in self.profile_fields},
+            },
+        )
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+        current_language = self.data.get("native_language") if self.is_bound else self.initial.get("native_language")
+        current_nationality = self.data.get("nationality") if self.is_bound else self.initial.get("nationality")
+        self.fields["native_language"].widget.attrs["data-current-value"] = current_language or ""
+        self.fields["nationality"].widget.attrs["data-current-value"] = current_nationality or ""
+
+    def save(self):
+        changed = []
+        if self.user.phone != self.cleaned_data["phone"]:
+            changed.append("phone")
+            self.user.phone = self.cleaned_data["phone"]
+            self.user.save(update_fields=["phone"])
+        for field_name in self.profile_fields:
+            if getattr(self.profile_instance, field_name) != self.cleaned_data[field_name]:
+                changed.append(field_name)
+                setattr(self.profile_instance, field_name, self.cleaned_data[field_name])
+        if changed:
+            self.profile_instance.full_clean()
+            self.profile_instance.save()
+        return changed
+
+
+class RosterImportForm(forms.Form):
+    file = forms.FileField(widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx"}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+        self.fields["file"].help_text = "CSV 或 Excel（.xlsx），需含標題列。\nCSV or Excel (.xlsx), with a header row."
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        name = upload.name.lower()
+        if not (name.endswith(".csv") or name.endswith(".xlsx")):
+            raise ValidationError("僅支援 .csv 或 .xlsx 檔案。 / Only .csv or .xlsx files are supported.")
+        return upload

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from accounts.models import EducationLevel, IdentityCategory, ProgramSource, Role, RosterEntry
+from accounts.models import EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry
 
 
 class Command(BaseCommand):
@@ -14,6 +14,10 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         password = options["password"]
+        ntnu_program, _ = PartnerProgram.objects.get_or_create(
+            code="NTNU",
+            defaults={"name_zh": "師大外籍生", "name_en": "NTNU international student"},
+        )
         roster_rows = [
             {
                 "student_id": "DEMO-TUTOR",
@@ -22,7 +26,7 @@ class Command(BaseCommand):
                 "role": Role.TUTOR,
                 "education_level": EducationLevel.MASTER,
                 "identity_category": IdentityCategory.LOCAL,
-                "program_source": ProgramSource.NOT_APPLICABLE,
+                "program": None,
             },
             {
                 "student_id": "DEMO-TUTEE",
@@ -31,7 +35,7 @@ class Command(BaseCommand):
                 "role": Role.TUTEE,
                 "education_level": EducationLevel.NOT_APPLICABLE,
                 "identity_category": IdentityCategory.INTERNATIONAL,
-                "program_source": ProgramSource.NTNU,
+                "program": ntnu_program,
             },
         ]
         for row in roster_rows:

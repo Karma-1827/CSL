@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from accounts.models import EducationLevel, IdentityCategory, ProgramSource, RegistrationDraft, Role, RosterEntry, User
+from accounts.models import EducationLevel, IdentityCategory, PartnerProgram, RegistrationDraft, Role, RosterEntry, User
 
 
 TEST_ROSTER = [
@@ -12,7 +12,7 @@ TEST_ROSTER = [
         "role": Role.TUTOR,
         "education_level": EducationLevel.MASTER,
         "identity_category": IdentityCategory.LOCAL,
-        "program_source": ProgramSource.NOT_APPLICABLE,
+        "program_code": None,
     },
     {
         "student_id": "TEST-TUTOR-BACHELOR",
@@ -21,7 +21,7 @@ TEST_ROSTER = [
         "role": Role.TUTOR,
         "education_level": EducationLevel.BACHELOR,
         "identity_category": IdentityCategory.LOCAL,
-        "program_source": ProgramSource.NOT_APPLICABLE,
+        "program_code": None,
     },
     {
         "student_id": "TEST-TUTEE-NTNU",
@@ -30,7 +30,7 @@ TEST_ROSTER = [
         "role": Role.TUTEE,
         "education_level": EducationLevel.NOT_APPLICABLE,
         "identity_category": IdentityCategory.INTERNATIONAL,
-        "program_source": ProgramSource.NTNU,
+        "program_code": "NTNU",
     },
     {
         "student_id": "TEST-TUTEE-MARYLAND",
@@ -39,7 +39,7 @@ TEST_ROSTER = [
         "role": Role.TUTEE,
         "education_level": EducationLevel.NOT_APPLICABLE,
         "identity_category": IdentityCategory.INTERNATIONAL,
-        "program_source": ProgramSource.MARYLAND,
+        "program_code": "MARYLAND",
     },
 ]
 
@@ -62,8 +62,11 @@ class Command(BaseCommand):
             RegistrationDraft.objects.filter(roster_entry__student_id__in=student_ids).delete()
             RosterEntry.objects.filter(student_id__in=student_ids).update(claimed_at=None)
             self.stdout.write(self.style.WARNING("Existing fake registrations were reset."))
+        programs_by_code = {program.code: program for program in PartnerProgram.objects.all()}
         for row in TEST_ROSTER:
-            roster, created = RosterEntry.objects.get_or_create(student_id=row["student_id"], defaults=row)
+            defaults = {**row, "program": programs_by_code.get(row["program_code"])}
+            del defaults["program_code"]
+            roster, created = RosterEntry.objects.get_or_create(student_id=row["student_id"], defaults=defaults)
             state = "created" if created else ("available" if not roster.is_claimed else "already registered")
             self.stdout.write(f"{roster.student_id}: {state}")
         self.stdout.write(self.style.SUCCESS("Local test roster is ready."))

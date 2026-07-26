@@ -21,9 +21,9 @@
     {% endif %}
     <section class="roster-card" aria-label="名冊確認資料 / Verified roster information">
       <div><span>學號 / Student ID</span><strong>{{ roster.student_id }}</strong></div>
-      <div><span>姓名 / Name</span><strong>{{ roster.name_zh }}{% if roster.name_en %} / {{ roster.name_en }}{% endif %}</strong></div>
+      {% if roster.name_zh %}<div><span>姓名 / Name</span><strong>{{ roster.name_zh }}{% if roster.name_en %} / {{ roster.name_en }}{% endif %}</strong></div>{% endif %}
       <div><span>系統身分 / System role</span><strong>{{ roster.get_role_display }}</strong></div>
-      <div><span>{% block roster_detail_label %}{% endblock %}</span><strong>{% block roster_detail %}{% endblock %}</strong></div>
+      {% block roster_detail_row %}<div><span>{% block roster_detail_label %}{% endblock %}</span><strong>{% block roster_detail %}{% endblock %}</strong></div>{% endblock %}
     </section>
 
     <form method="post" enctype="multipart/form-data" class="profile-registration-form" novalidate>

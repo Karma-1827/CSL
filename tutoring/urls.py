@@ -8,6 +8,7 @@ urlpatterns = [
     path("semesters/save/", views.save_semester, name="save_semester"),
     path("semesters/<int:pk>/save/", views.save_semester, name="update_semester"),
     path("semesters/<int:pk>/archive/", views.archive_semester, name="archive_semester"),
+    path("semesters/<int:pk>/delete/", views.delete_semester, name="delete_semester"),
     path("pairings/<int:pk>/messages/", views.pairing_messages, name="pairing_messages"),
     path("hours/download/", views.download_hours, name="download_hours"),
     path("admin/export-excel/", views.export_excel, name="export_excel"),
@@ -29,5 +30,12 @@ urlpatterns = [
     path("classes/<int:pk>/reschedule/", views.class_reschedule, name="class_reschedule"),
     path("classes/<int:pk>/alert/", views.class_alert, name="class_alert"),
     path("classes/<int:pk>/alert/<int:alert_id>/cancel/", views.cancel_alert, name="cancel_alert"),
+    path("alerts/<int:alert_id>/resolve/", views.resolve_alert, name="resolve_alert"),
+    path("classes/<int:pk>/incident-report/", views.incident_report, name="incident_report"),
+    path(
+        "incident-reports/<int:report_id>/resolve/",
+        views.resolve_incident_report_view,
+        name="resolve_incident_report",
+    ),
     path("classes/<int:pk>/makeup-review/", views.makeup_review, name="makeup_review"),
 ]

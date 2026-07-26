@@ -89,6 +89,10 @@ LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "accounts:dashboard"
 LOGOUT_REDIRECT_URL = "accounts:login"
 
+# 30 分鐘閒置逾時自動登出(資通系統防護基準檢核表「中級」第 5、6 項);
+# SESSION_SAVE_EVERY_REQUEST 讓有操作的使用者每次請求都重新計時，只有真正閒置才會逾時。
+SESSION_COOKIE_AGE = 60 * 30
+SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"

@@ -1,22 +1,29 @@
 from datetime import datetime, time, timedelta
 from pathlib import Path
-import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import Role, User
+from accounts.models import PartnerProgram, Role, User
 
 
-def validate_qualification_file(upload):
+def _validate_upload(upload, *, max_bytes, size_label):
     allowed = {".pdf", ".jpg", ".jpeg", ".png"}
     extension = Path(upload.name).suffix.lower()
     if extension not in allowed:
         raise ValidationError("僅接受 PDF、JPG、PNG。 / Only PDF, JPG, and PNG files are accepted.")
-    if upload.size > 1_000_000:
-        raise ValidationError("檔案不可超過 1 MB。 / File size must not exceed 1 MB.")
+    if upload.size > max_bytes:
+        raise ValidationError(f"檔案不可超過 {size_label}。 / File size must not exceed {size_label}.")
+
+
+def validate_qualification_file(upload):
+    _validate_upload(upload, max_bytes=1_000_000, size_label="1 MB")
+
+
+def validate_class_record_attachment(upload):
+    _validate_upload(upload, max_bytes=500_000, size_label="500 KB")
 
 
 class QualificationStatus(models.TextChoices):
@@ -433,7 +440,14 @@ class ClassRecord(models.Model):
     topic = models.CharField("課堂主題 / Topic", max_length=200)
     content = models.TextField("課堂內容 / Class content")
     reflection = models.TextField("學習成果與回饋 / Outcome and reflection")
+    skills_practiced = models.JSONField("授課類型 / Skills practiced", default=list, blank=True)
     remarks = models.TextField("備註 / Remarks", blank=True)
+    attachment = models.FileField(
+        "附件 / Attachment",
+        upload_to="class_record_attachments/%Y/%m/",
+        blank=True,
+        validators=[validate_class_record_attachment],
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_makeup = models.BooleanField("補課堂紀錄 / Makeup class record", default=False)
@@ -441,6 +455,10 @@ class ClassRecord(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["session", "author"], name="one_record_per_person")]
+
+    @property
+    def attachment_filename(self):
+        return Path(self.attachment.name).name if self.attachment else ""
 
 
 class ConfirmationStatus(models.TextChoices):
@@ -485,6 +503,7 @@ class MakeupReview(models.Model):
 class ClassAlertStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "待處理 / Active"
     CANCELLED = "CANCELLED", "已取消 / Cancelled"
+    RESOLVED = "RESOLVED", "已紀錄 / Logged"
 
 
 class ClassAlertReason(models.TextChoices):
@@ -503,6 +522,11 @@ class ClassAlert(models.Model):
     status = models.CharField(max_length=12, choices=ClassAlertStatus.choices, default=ClassAlertStatus.ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name="resolved_class_alerts"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_note = models.TextField("紀錄備註 / Log note", blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -515,3 +539,64 @@ class ClassAlert(models.Model):
         ]
         verbose_name = "課堂通報 / Class alert"
         verbose_name_plural = "課堂通報 / Class alerts"
+
+
+class IncidentReportStatus(models.TextChoices):
+    PENDING = "PENDING", "待處理 / Pending"
+    RESOLVED = "RESOLVED", "已紀錄 / Logged"
+
+
+class IncidentReportCategory(models.TextChoices):
+    STUDENT_ABSENT = "STUDENT_ABSENT", "學生缺席 / Student absent"
+    TUTOR_ABSENT = "TUTOR_ABSENT", "老師缺席 / Tutor absent"
+    VENUE_ISSUE = "VENUE_ISSUE", "場地問題 / Venue issue"
+    LEARNING_PROGRESS = "LEARNING_PROGRESS", "學習進度問題 / Learning progress issue"
+    SAFETY = "SAFETY", "人身安全 / Safety concern"
+    OTHER = "OTHER", "其他 / Other"
+
+
+class IncidentReport(models.Model):
+    session = models.ForeignKey(ClassSession, on_delete=models.CASCADE, related_name="incident_reports")
+    reporter = models.ForeignKey(User, on_delete=models.PROTECT, related_name="reported_incident_reports")
+    category = models.CharField("分類 / Category", max_length=20, choices=IncidentReportCategory.choices)
+    content = models.TextField("回報內容 / Report content")
+    status = models.CharField(max_length=12, choices=IncidentReportStatus.choices, default=IncidentReportStatus.PENDING)
+    resolved_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name="resolved_incident_reports"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_note = models.TextField("紀錄備註 / Log note", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "異常回報 / Incident report"
+        verbose_name_plural = "異常回報 / Incident reports"
+
+
+class HourAdjustment(models.Model):
+    """Manual credit for hours not captured by a real ClassSession (e.g. paper records
+    predating this system). Additive only, never itemized on the official certificate PDF
+    (see CLAUDE.md 4.9) — it only raises the printed total."""
+
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="hour_adjustments")
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name="hour_adjustments")
+    program = models.ForeignKey(PartnerProgram, on_delete=models.PROTECT, related_name="hour_adjustments")
+    hours = models.DecimalField("調整時數 / Adjustment hours", max_digits=4, decimal_places=1)
+    reason = models.TextField("調整原因 / Reason")
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="created_hour_adjustments")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "時數調整紀錄 / Hour adjustment"
+        verbose_name_plural = "時數調整紀錄 / Hour adjustments"
+
+    def clean(self):
+        if self.hours is not None and self.hours <= 0:
+            raise ValidationError({"hours": "調整時數必須大於 0，只能用來加註歷史時數。 / Adjustment hours must be greater than zero; this can only add hours."})
+        if self.user_id and self.user.role not in {Role.TUTOR, Role.TUTEE}:
+            raise ValidationError("只能為老師或學生新增時數調整。 / Adjustments can only be made for a Tutor or Tutee account.")
+
+    def __str__(self):
+        return f"{self.user.username} +{self.hours} 小時 ({self.semester})"
