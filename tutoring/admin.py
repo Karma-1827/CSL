@@ -159,7 +159,7 @@ class HourAdjustmentAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             target_user=obj.user,
             event_type="HOUR_ADJUSTMENT_UPDATED" if change else "HOUR_ADJUSTMENT_CREATED",
@@ -214,7 +214,7 @@ class HourAdjustmentAdmin(admin.ModelAdmin):
                         f"已匯入 {result.created_count} 筆時數調整，共 {result.total_hours} 小時。"
                         f" / Imported {result.created_count} hour adjustments totaling {result.total_hours} hours.",
                     )
-                    AuditLog.objects.create(
+                    AuditLog.record(
                         actor=request.user,
                         target_user=None,
                         event_type="HOUR_ADJUSTMENT_IMPORTED",

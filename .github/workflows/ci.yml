@@ -44,6 +44,14 @@ jobs:
       - name: Lint (ruff — real-bug rules only, see pyproject.toml)
         run: ruff check .
 
+      - name: Dependency vulnerability scan (pip-audit)
+        # Non-blocking for now: pip-audit already found real CVEs in currently-pinned
+        # Pillow/pypdf versions (see docs/SECURITY_CHECKLIST.md #56/#57) that need a
+        # deliberate upgrade + regression test of image/PDF handling, not a CI-red
+        # surprise. Flip to blocking once requirements.txt is clean.
+        continue-on-error: true
+        run: pip-audit
+
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
 

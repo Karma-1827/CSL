@@ -215,7 +215,7 @@ def submit_pairing_release_request(*, pairing_id, requester, reason, note="", no
     )
     release_request.full_clean()
     release_request.save()
-    AuditLog.objects.create(
+    AuditLog.record(
         actor=requester,
         target_user=pairing.tutee if requester.pk == pairing.tutor_id else pairing.tutor,
         event_type="PAIRING_RELEASE_REQUESTED",
@@ -246,7 +246,7 @@ def review_pairing_release_request(*, request_id, admin, approve, note="", now=N
     release_request.save(
         update_fields=["status", "reviewed_by", "reviewed_at", "review_note", "updated_at"]
     )
-    AuditLog.objects.create(
+    AuditLog.record(
         actor=admin,
         target_user=release_request.requested_by,
         event_type="PAIRING_RELEASE_APPROVED" if approve else "PAIRING_RELEASE_REJECTED",
@@ -278,7 +278,7 @@ def process_pending_pairing_releases(*, now=None):
         release_request.reviewed_at = now
         release_request.review_note = "管理員三日內未處理，系統依原因自動解除。 / Automatically released after three days."
         release_request.save(update_fields=["status", "reviewed_at", "review_note", "updated_at"])
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=None,
             target_user=release_request.requested_by,
             event_type="PAIRING_RELEASE_AUTO_APPROVED",

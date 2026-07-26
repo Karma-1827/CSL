@@ -336,6 +336,7 @@ output/pdf/             本機人工檢查用預覽,不是正式使用者資料�
 - 建立領域物件時使用 `full_clean()` 或表單驗證,並同時保留 DB constraint;不要只依前端驗證。
 - 未授權的資源型操作多數回 404,角色頁面也可用 `role_required`;新增 endpoint 應延續相鄰程式的模式。
 - 所有重要行為(登入、註冊、資格審核、解除、下載、匯出)應寫 `AuditLog`,metadata 不放密碼/安全問題答案。
+- 寫入 `AuditLog` 一律呼叫 `AuditLog.record(**kwargs)`,不要直接用 `AuditLog.objects.create(**kwargs)`。`record()` 把寫入包在自己的 nested `transaction.atomic()`(在外層 `@transaction.atomic` 內等於一個 savepoint)裡,失敗時只回滾這筆 insert 並記錄到 `logging.getLogger("csl.audit")`,不會讓稽核紀錄寫入失敗連帶弄壞呼叫端原本的資料庫交易(資通系統防護基準檢核表第 19 項)。
 - 日期時間使用 `django.utils.timezone`,不要建立 naive datetime;業務時區是 `Asia/Taipei`。
 - 時數用 `Decimal`,不可改用 float 做 quota 加總。
 - 檔案刪除/帳號刪除需保守;多數關聯使用 `PROTECT` 是為保留稽核與時數紀錄。

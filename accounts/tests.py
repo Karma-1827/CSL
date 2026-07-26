@@ -1,9 +1,12 @@
 import io
+from unittest.mock import patch
 
 import openpyxl
+from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.db import transaction
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from tutoring.models import QualificationDocument, TuteeProfile, TutorProfile
@@ -756,3 +759,41 @@ class ProfileEditTests(TestCase):
         self.client.force_login(admin)
         response = self.client.post(reverse("accounts:update_profile"), {})
         self.assertEqual(response.status_code, 404)
+
+
+class AuditLogResilienceTests(TestCase):
+    def test_record_returns_saved_entry_on_success(self):
+        log = AuditLog.record(event_type="TEST_EVENT", description="test")
+        self.assertIsNotNone(log)
+        self.assertTrue(AuditLog.objects.filter(pk=log.pk).exists())
+
+    def test_record_swallows_failure_without_poisoning_outer_transaction(self):
+        with transaction.atomic():
+            with patch.object(AuditLog.objects, "create", side_effect=Exception("boom")):
+                result = AuditLog.record(event_type="TEST_EVENT", description="boom test")
+            self.assertIsNone(result)
+            # A failed AuditLog.record() call must not break the caller's own
+            # @transaction.atomic block; further ORM operations here must still work.
+            User.objects.create_user(username="AUDIT-RESILIENCE-TEST", password="Password-2026")
+        self.assertTrue(User.objects.filter(username="AUDIT-RESILIENCE-TEST").exists())
+
+
+class ProductionErrorPageTests(TestCase):
+    """Checklist item 45: error pages must not leak stack traces/paths when DEBUG=False."""
+
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+    def test_unhandled_exception_shows_generic_page_not_debug_traceback(self):
+        roster = RosterEntry.objects.create(
+            student_id="ERRPAGE-TUTOR", name_zh="錯誤頁測試", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        user = User.objects.create_user(username="ERRPAGE-TUTOR", password="Password-2026", roster_entry=roster)
+        client = Client(raise_request_exception=False)
+        client.force_login(user)
+        with patch("accounts.views.render", side_effect=Exception("Simulated failure for error-page test")):
+            response = client.get(reverse("accounts:handbook"))
+        self.assertEqual(response.status_code, 500)
+        body = response.content.decode(errors="ignore")
+        self.assertNotIn("Traceback", body)
+        self.assertNotIn(str(settings.BASE_DIR), body)
+        self.assertNotIn("Simulated failure", body)

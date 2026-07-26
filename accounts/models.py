@@ -1,8 +1,12 @@
+import logging
+
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
+
+logger = logging.getLogger("csl.audit")
 
 
 class Role(models.TextChoices):
@@ -260,3 +264,23 @@ class AuditLog(models.Model):
         ordering = ["-created_at"]
         verbose_name = "稽核紀錄 / Audit log"
         verbose_name_plural = "稽核紀錄 / Audit logs"
+
+    @classmethod
+    def record(cls, **kwargs):
+        """Best-effort audit log write.
+
+        Wrapped in its own nested atomic() (a savepoint when called from inside an
+        outer @transaction.atomic block) so a failure here only rolls back this one
+        insert instead of poisoning the caller's whole transaction. The failure is
+        logged rather than swallowed, and the caller's primary action still succeeds
+        without an audit trail rather than being blocked by a logging failure.
+        """
+        try:
+            with transaction.atomic():
+                return cls.objects.create(**kwargs)
+        except Exception:
+            logger.exception(
+                "Failed to write AuditLog entry: event_type=%s target_user_id=%s",
+                kwargs.get("event_type"), getattr(kwargs.get("target_user"), "pk", None),
+            )
+            return None

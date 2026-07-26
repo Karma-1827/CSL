@@ -69,7 +69,7 @@ def save_semester(request, pk=None):
         if instance is None:
             semester.is_active = True
         semester.save()
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             event_type="SEMESTER_UPDATED" if instance else "SEMESTER_CREATED",
             description="更新學期設定 / Semester settings saved",
@@ -94,7 +94,7 @@ def archive_semester(request, pk):
     else:
         semester.is_active = False
         semester.save(update_fields=["is_active"])
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             event_type="SEMESTER_ARCHIVED",
             description="刪除過期學期設定 / Expired semester setting removed",
@@ -119,7 +119,7 @@ def delete_semester(request, pk):
     else:
         semester_id = semester.pk
         semester.delete()
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             event_type="SEMESTER_DELETED",
             description="刪除學期設定（尚無配對資料） / Semester setting deleted (no pairings yet)",
@@ -194,7 +194,7 @@ def download_hours(request):
     disposition = "inline" if is_preview else "attachment"
     response = HttpResponse(content, content_type="application/pdf")
     response["Content-Disposition"] = f'{disposition}; filename="CSL-certificate-{request.user.username}-{data["ends_on"]}.pdf"'
-    AuditLog.objects.create(
+    AuditLog.record(
         actor=request.user, target_user=request.user,
         event_type="HOURS_PDF_PREVIEWED" if is_preview else "HOURS_PDF_DOWNLOADED",
         description="預覽輔導時數紀錄 / Hours record previewed" if is_preview else "下載輔導時數紀錄 / Hours record downloaded",
@@ -255,7 +255,7 @@ def export_excel(request):
         content_type = "application/vnd.ms-excel"
     response = HttpResponse(content, content_type=content_type)
     response["Content-Disposition"] = f'attachment; filename="CSL-export-{timezone.localdate()}.{file_format}"'
-    AuditLog.objects.create(
+    AuditLog.record(
         actor=request.user, event_type="ADMIN_EXCEL_EXPORTED",
         description="匯出輔導資料 / Tutoring data exported", metadata={
             "scope": scope, "users": users.count(), "period_mode": period_mode,
@@ -655,7 +655,7 @@ def resolve_alert(request, alert_id):
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
     else:
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             event_type="CLASS_ALERT_RESOLVED",
             description="課堂通報已紀錄 / Class alert logged",
@@ -685,7 +685,7 @@ def incident_report(request, pk):
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
     else:
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             event_type="INCIDENT_REPORT_SUBMITTED",
             description="送出異常回報 / Incident report submitted",
@@ -707,7 +707,7 @@ def resolve_incident_report_view(request, report_id):
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
     else:
-        AuditLog.objects.create(
+        AuditLog.record(
             actor=request.user,
             event_type="INCIDENT_REPORT_RESOLVED",
             description="異常回報已紀錄 / Incident report logged",

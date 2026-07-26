@@ -95,7 +95,7 @@ from .services import (
 
 
 def log_event(request, event_type, description, target_user=None, metadata=None):
-    AuditLog.objects.create(
+    AuditLog.record(
         actor=request.user if request.user.is_authenticated else None,
         target_user=target_user,
         event_type=event_type,
