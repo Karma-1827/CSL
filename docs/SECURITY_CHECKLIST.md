@@ -54,7 +54,7 @@
 | - | - | - | - | - |
 | 13 | 普 | 日誌留存至少 6 個月 | 🟡 | `AuditLog` 目前沒有自動清除機制(等於預設無限期保留,已滿足最低 6 個月),但沒有明訂的留存政策文件,也沒有評估過儲存空間成長。 |
 | 14 | 普 | 記錄特定事件之功能 | ✅ | `AuditLog` 記錄登入、註冊、資格審核、解除配對、Profile 更新、下載、匯出、時數調整等重要事件。 |
-| 15 | 普 | 記錄管理者帳號執行之功能 | 🟡 | 透過自訂 view 的 Admin 動作(核准資格、解除配對、名冊匯入、時數調整)有寫 `AuditLog`;但直接在 Django Admin 後台做的 CRUD,只有 Django 內建的 `admin.LogEntry` 記錄,跟我們自己的 `AuditLog` 是兩條不同的紀錄,沒有整合查詢。 |
+| 15 | 普 | 記錄管理者帳號執行之功能 | ✅ | 2026-07-26 新增 `accounts/signals.py::mirror_admin_log_entry_to_audit_log()`,監聽 Django 內建 `admin.LogEntry` 的 `post_save`,把每一筆 Admin 後台的新增/修改/刪除都鏡射寫進 `AuditLog`(`event_type` 為 `ADMIN_ADDED_<MODEL>`/`ADMIN_CHANGED_<MODEL>`/`ADMIN_DELETED_<MODEL>`,`metadata` 含 model/object_id/change_message;若異動對象本身是 `User`,`target_user` 會指向該使用者)。在 `AccountsConfig.ready()` 連接,涵蓋所有註冊在 Django Admin 的 model,不用逐一改每個 `ModelAdmin`。少數已有專屬 `AuditLog`(如 `HourAdjustment`)的動作會出現兩筆(一筆專屬事件、一筆通用鏡射),刻意不處理去重,對唯讀稽核紀錄而言多一筆冗餘比漏記更安全。 |
 | 16 | 中 | 定期審查日誌 | ❌ | 屬管理程序,尚無排程審查機制或負責人。 |
 | 17 | 普 | 日誌內容含事件類型/時間/位置/身分,單一機制,不含個資 | ✅ | 2026-07-26 已逐一覆核 `accounts/`、`tutoring/` 全部 `AuditLog.objects.create()`/`log_event()` 呼叫點(約 20 處)。結論:沒有密碼、安全問題答案,也沒有課堂紀錄/異常回報/解除配對的**自由文字內容**(那些欄位只存代碼,如 `status`/`category`/`reason` enum 值,真正的文字內容留在 `IncidentReport.content`/`ClassAlert.note`/`PairingReleaseRequest.reason_note` 本體,沒有複製進日誌)。`ROSTER_IMPORTED`/`HOUR_ADJUSTMENT_IMPORTED` 的 `student_ids` 清單、`PROFILE_UPDATED` 的 `fields` 只列欄位名不列內容,學號本來就是系統各處(含 Django Admin 的 `target_user` 顯示)公開可見的識別碼,不算新增揭露。唯一的自由文字例外是 `HourAdjustment.reason`(如「舊紙本資料補登」),但那是 **Admin 自己輸入的行政理由**,不是學生的個人陳述,為了保留可歸責性(為什麼要調整這筆時數)刻意保留,判斷風險可接受。 |
 | 18 | 普 | 配置足夠日誌儲存容量 | ❌ | VM 層級,PostgreSQL 儲存空間規劃需納入 `AuditLog` 成長評估。 |
@@ -153,7 +153,7 @@
 
 ## 總結與行動優先序
 
-統計(共 62 項):✅ 符合 20、🟡 部分符合 13、❌ 未實施 25、⬜ 不適用 4。
+統計(共 62 項):✅ 符合 21、🟡 部分符合 12、❌ 未實施 25、⬜ 不適用 4。
 
 **已完成(2026-07-26 補做)**:
 - 第 5、6 項:session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)。
@@ -164,6 +164,7 @@
 - 第 45 項:實際寫測試驗證 `DEBUG=False` 時未處理例外只會顯示 Django 內建通用 500 頁面,不含 traceback/路徑/例外訊息。
 - 第 56、57 項(部分):`pip-audit` 掛進 CI 自動掃依賴套件已知漏洞,但**掃描本身完成不等於漏洞已修復**——當天就掃出 Pillow/pypdf 的真實 CVE,詳見下方待辦。
 - 第 3 項(部分):新增 Django Admin「閒置帳號」篩選器(180 天以上未登入/從未登入),供 Admin 人工複核;刻意只標記不自動停用,避免寒暑假空窗誤鎖使用者。
+- 第 15 項:Django Admin 後台的新增/修改/刪除透過 `post_save` 訊號鏡射進 `AuditLog`,補齊原本只有內建 `LogEntry`、查不到我們自己稽核表的缺口。
 
 ### 還可以直接改 Django 程式碼的(建議排入 V4 前期)
 

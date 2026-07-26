@@ -442,6 +442,39 @@ class IdleAccountFilterTests(TestCase):
         self.assertEqual(self.never_logged_in.account_status, AccountStatus.ACTIVE)
 
 
+class AdminAuditLogMirrorTests(TestCase):
+    """Checklist item 15: Django Admin CRUD should also land in our own AuditLog."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="MIRROR-ADMIN", password="Admin-password-2026")
+        self.client.force_login(self.admin)
+
+    def test_admin_addition_is_mirrored_into_audit_log(self):
+        response = self.client.post(
+            reverse("admin:accounts_partnerprogram_add"),
+            {"code": "MIRROR-TEST", "name_zh": "測試計畫", "name_en": "Test program"},
+        )
+        self.assertEqual(response.status_code, 302)
+        log = AuditLog.objects.get(event_type="ADMIN_ADDED_PARTNERPROGRAM")
+        self.assertEqual(log.actor, self.admin)
+        self.assertIn("測試計畫", log.description)
+        self.assertEqual(log.metadata["model"], "PartnerProgram")
+
+    def test_admin_change_to_user_sets_target_user(self):
+        subject = User.objects.create_user(username="MIRROR-SUBJECT", password="Password-2026", role=Role.TUTOR)
+        response = self.client.post(
+            reverse("admin:accounts_user_change", args=[subject.pk]),
+            {
+                "username": subject.username, "role": Role.TUTOR, "account_status": AccountStatus.ACTIVE,
+                "date_joined_0": "2026-01-01", "date_joined_1": "00:00:00",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        log = AuditLog.objects.get(event_type="ADMIN_CHANGED_USER")
+        self.assertEqual(log.actor, self.admin)
+        self.assertEqual(log.target_user, subject)
+
+
 class RosterImportTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser(username="IMPORT-ADMIN", password="Admin-password-2026")

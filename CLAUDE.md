@@ -337,6 +337,7 @@ output/pdf/             本機人工檢查用預覽,不是正式使用者資料�
 - 未授權的資源型操作多數回 404,角色頁面也可用 `role_required`;新增 endpoint 應延續相鄰程式的模式。
 - 所有重要行為(登入、註冊、資格審核、解除、下載、匯出)應寫 `AuditLog`,metadata 不放密碼/安全問題答案。
 - 寫入 `AuditLog` 一律呼叫 `AuditLog.record(**kwargs)`,不要直接用 `AuditLog.objects.create(**kwargs)`。`record()` 把寫入包在自己的 nested `transaction.atomic()`(在外層 `@transaction.atomic` 內等於一個 savepoint)裡,失敗時只回滾這筆 insert 並記錄到 `logging.getLogger("csl.audit")`,不會讓稽核紀錄寫入失敗連帶弄壞呼叫端原本的資料庫交易(資通系統防護基準檢核表第 19 項)。
+- Django Admin 後台直接做的新增/修改/刪除(不經過自訂 view/service)會由 `accounts/signals.py::mirror_admin_log_entry_to_audit_log()` 自動鏡射進 `AuditLog`(監聽內建 `admin.LogEntry` 的 `post_save`,在 `AccountsConfig.ready()` 連接),涵蓋所有註冊在 Admin 的 model,新增 `ModelAdmin` 不用額外處理。已經在自訂 view/service 裡手動寫 `AuditLog.record()` 的動作(如 `HourAdjustment`)會因此多出一筆通用的鏡射紀錄,這是刻意接受的重複,不做去重。
 - 日期時間使用 `django.utils.timezone`,不要建立 naive datetime;業務時區是 `Asia/Taipei`。
 - 時數用 `Decimal`,不可改用 float 做 quota 加總。
 - 檔案刪除/帳號刪除需保守;多數關聯使用 `PROTECT` 是為保留稽核與時數紀錄。
