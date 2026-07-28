@@ -9,7 +9,7 @@
     <div class="account-dropdown" data-account-menu>
       <button class="account-menu-trigger" type="button" aria-haspopup="true" aria-expanded="false" data-account-menu-trigger>
         <span class="account-menu-name">{{ request.user.bilingual_name }}</span>
-        <span class="account-menu-chevron" aria-hidden="true">⌄</span>
+        <span class="account-menu-chevron" aria-hidden="true"></span>
       </button>
       <div class="account-menu-popover" role="menu" hidden data-account-menu-popover>
         <div class="account-menu-identity"><strong>{{ request.user.name_zh|default:request.user.username }}</strong><small>{{ request.user.username }}</small></div>

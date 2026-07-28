@@ -944,13 +944,18 @@ a {
   font-weight: 750;
 }
 .account-menu-chevron {
-  color: var(--blue);
-  font-size: 1rem;
-  line-height: 1;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: -3px;
+  border-right: 2px solid var(--blue);
+  border-bottom: 2px solid var(--blue);
+  transform: rotate(45deg);
   transition: transform 160ms ease;
 }
 .account-menu-trigger[aria-expanded="true"] .account-menu-chevron {
-  transform: rotate(180deg);
+  transform: rotate(225deg);
+  margin-top: 3px;
 }
 .account-menu-popover {
   position: absolute;
