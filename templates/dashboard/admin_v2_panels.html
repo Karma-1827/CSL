@@ -28,7 +28,7 @@
             </div>
           </div>
           <details class="semester-edit-disclosure">
-            <summary class="semester-edit-icon-btn">編輯 <small>Edit</small></summary>
+            <summary class="semester-edit-icon-btn" aria-label="編輯學期 / Edit semester"><span aria-hidden="true">✎</span></summary>
             <form class="schedule-form semester-form semester-edit-form" action="{% url 'tutoring:update_semester' semester.pk %}" method="post">
               {% csrf_token %}{{ semester.edit_form.as_div }}
               <p class="semester-edit-warning">修改日期會立即影響補登期限與證明下載開放時間，且不會回頭檢查已排課程是否超出新範圍，請謹慎修改。<br>Changing dates immediately affects makeup deadlines and certificate download availability, and does not re-check existing classes against the new range.</p>

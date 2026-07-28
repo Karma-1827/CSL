@@ -3282,16 +3282,14 @@ td small {
 .semester-setting-row .button { min-height: 38px; padding: 7px 13px; }
 .semester-setting-row .button small { display: block; }
 .semester-card { position: relative; display: grid; gap: 8px; }
-.semester-card .semester-setting-row { padding-right: 92px; }
+.semester-card .semester-setting-row { padding-right: 52px; }
 .semester-setting-actions { display: flex; justify-content: flex-end; }
 .semester-edit-icon-btn {
   position: absolute; top: 12px; right: 15px; z-index: 1;
-  display: flex; align-items: center; gap: 4px; white-space: nowrap;
-  padding: 7px 13px; min-height: 30px;
-  border-radius: 999px; border: 1px solid #d7e2ea; background: #f4f8fb;
-  color: #0f4c75; font-size: .72rem; font-weight: 800; cursor: pointer; list-style: none;
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border-radius: 50%; border: 1px solid #d7e2ea; background: #f4f8fb;
+  color: #0f4c75; font-size: .85rem; cursor: pointer; list-style: none;
 }
-.semester-edit-icon-btn small { font-weight: 650; }
 .semester-edit-icon-btn::-webkit-details-marker { display: none; }
 .semester-edit-icon-btn:hover { background: #e4f3fc; border-color: #9fc7e0; }
 .semester-edit-disclosure[open] .semester-edit-icon-btn { background: #0f4c75; border-color: #0f4c75; color: #fff; }
