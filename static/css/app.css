@@ -2333,9 +2333,18 @@ td small {
   font-size: 0.9em;
 }
 .invitation-view-label i {
-  font-size: 0.88rem;
+  display: inline-block;
   font-style: normal;
   transition: transform 160ms ease;
+}
+.invitation-view-label i::before {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
 }
 .invitation-profile-disclosure[open] .invitation-view-label i {
   transform: rotate(180deg);
@@ -3319,6 +3328,7 @@ td small {
 .conversation-history > summary { display:grid; grid-template-columns:minmax(0,1fr) auto 28px; align-items:center; gap:12px; min-height:64px; padding:12px 14px; cursor:pointer; list-style:none; }
 .conversation-history > summary::-webkit-details-marker { display:none; }
 .conversation-history > summary > i { display:grid; width:28px; height:28px; place-items:center; border-radius:50%; color:#0f4c75; background:#dde6ed; font-style:normal; transition:transform .18s ease; }
+.conversation-history > summary > i::before { content:""; width:7px; height:7px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(45deg); }
 .conversation-history[open] > summary { border-bottom:1px solid #dce5ed; background:#f8fafc; }
 .conversation-history[open] > summary > i { transform:rotate(180deg); }
 .conversation-history > .conversation-link-list { padding:12px; }
@@ -3356,7 +3366,7 @@ td small {
 .class-exception-preview > summary,.tutor-schedule-section > summary { display: flex; align-items: center; gap: 12px; padding: 19px 22px; cursor: pointer; list-style: none; }.class-exception-preview > summary::-webkit-details-marker,.tutor-schedule-section > summary::-webkit-details-marker { display:none; }.class-exception-preview > summary span,.tutor-schedule-section > summary span { display:grid; }.class-exception-preview > summary small,.tutor-schedule-section > summary small { color:#526d82; }.class-exception-preview > summary em,.tutor-schedule-section > summary em { margin-left:auto; min-width:32px; padding:5px 10px; border-radius:999px; background:#fff0c8; color:#8a6418; font-style:normal; font-weight:850; text-align:center; }.class-exception-preview .admin-class-list,.tutor-schedule-section > .admin-class-list { padding: 0 20px 20px; }
 .tutor-overview-panel { overflow: hidden; }.result-count { color:#526d82; font-weight:750; }.tutor-overview-head,.tutor-overview-list > a { display:grid; grid-template-columns:minmax(240px,1.5fr) repeat(5,minmax(72px,.55fr)) minmax(120px,.7fr); align-items:center; gap:10px; }.tutor-overview-head { padding:11px 18px; border-radius:10px; background:#edf3f7; color:#526d82; font-size:.76rem; font-weight:850; }.tutor-overview-list > a { padding:14px 18px; border-bottom:1px solid #e1e9ef; color:#27374d; text-decoration:none; transition:background .16s ease,transform .16s ease; }.tutor-overview-list > a:hover { background:#f3f8fb; transform:translateX(2px); }.tutor-overview-name { display:grid; }.tutor-overview-name small { color:#526d82; }.tutor-overview-list b { text-align:center; }.tutor-overview-list b.has-exception { justify-self:center; min-width:30px; padding:4px 9px; border-radius:999px; color:#9b6810; background:#fff0c8; }.tutor-overview-list em { color:#0f4c75; font-style:normal; font-size:.82rem; font-weight:850; text-align:right; }.simple-pagination { display:flex; align-items:center; justify-content:center; gap:18px; padding:18px; }.simple-pagination a { color:#0f4c75; font-weight:800; text-decoration:none; }
 .tutor-schedule-main { width:min(1380px,calc(100% - 40px)); }.tutor-schedule-hero { display:flex; align-items:end; justify-content:space-between; gap:24px; margin:22px 0; padding:24px 28px; border-radius:20px; color:#fff; background:linear-gradient(120deg,#27374d,#0f4c75); }.tutor-schedule-hero h1 { margin:5px 0; font-size:2rem; }.tutor-schedule-hero p { margin:0; color:#bbe1fa; }.tutor-schedule-hero form { min-width:min(360px,100%); }.tutor-schedule-hero label { display:grid; gap:7px; font-weight:750; }.tutor-schedule-hero select { min-height:44px; padding:8px 12px; border:0; border-radius:10px; }.tutor-pairing-strip > div:last-child { display:flex; flex-wrap:wrap; gap:10px; }.tutor-pairing-strip > div:last-child > span { display:grid; min-width:220px; padding:12px 14px; border-radius:11px; background:#edf4f7; }.tutor-pairing-strip small { color:#526d82; }
-.tutor-schedule-section-heading { display:flex; align-items:center; gap:14px; min-height:86px; margin:0; padding:18px 22px; }.tutor-schedule-section-heading > div { display:grid; gap:2px; }.tutor-schedule-section-heading h2 { margin:0; color:#27374d; font-size:1.15rem; }.tutor-schedule-section-heading h2 small { color:#526d82; font-size:.72rem; }.tutor-schedule-section-heading > em { display:grid; place-items:center; margin-left:auto; min-width:36px; height:36px; padding:0 10px; border-radius:999px; color:#0f4c75; background:#dceef9; font-style:normal; font-weight:850; }.tutor-schedule-section > summary.tutor-schedule-section-heading { padding:18px 22px; cursor:pointer; list-style:none; border-radius:inherit; transition:background .16s ease; }.tutor-schedule-section > summary.tutor-schedule-section-heading:hover { background:#f4f8fb; }.tutor-schedule-section > summary.tutor-schedule-section-heading::-webkit-details-marker { display:none; }.tutor-schedule-section > summary.tutor-schedule-section-heading::after { content:"⌄"; color:#526d82; font-size:1.1rem; font-weight:900; transition:transform .18s ease; }.tutor-schedule-section[open] > summary.tutor-schedule-section-heading::after { transform:rotate(180deg); }
+.tutor-schedule-section-heading { display:flex; align-items:center; gap:14px; min-height:86px; margin:0; padding:18px 22px; }.tutor-schedule-section-heading > div { display:grid; gap:2px; }.tutor-schedule-section-heading h2 { margin:0; color:#27374d; font-size:1.15rem; }.tutor-schedule-section-heading h2 small { color:#526d82; font-size:.72rem; }.tutor-schedule-section-heading > em { display:grid; place-items:center; margin-left:auto; min-width:36px; height:36px; padding:0 10px; border-radius:999px; color:#0f4c75; background:#dceef9; font-style:normal; font-weight:850; }.tutor-schedule-section > summary.tutor-schedule-section-heading { padding:18px 22px; cursor:pointer; list-style:none; border-radius:inherit; transition:background .16s ease; }.tutor-schedule-section > summary.tutor-schedule-section-heading:hover { background:#f4f8fb; }.tutor-schedule-section > summary.tutor-schedule-section-heading::-webkit-details-marker { display:none; }.tutor-schedule-section > summary.tutor-schedule-section-heading::after { content:""; display:block; width:8px; height:8px; margin-left:auto; border-right:2px solid #526d82; border-bottom:2px solid #526d82; transform:rotate(45deg); transition:transform .18s ease; }.tutor-schedule-section[open] > summary.tutor-schedule-section-heading::after { transform:rotate(225deg); }
 .export-scope { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }.export-scope label { padding: 11px 14px; border: 1px solid #cbd9e5; border-radius: 10px; }
 .export-user-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; max-height: 390px; overflow: auto; margin-bottom: 18px; padding: 3px; }
 .export-user-grid label { display: flex; gap: 9px; align-items: start; padding: 11px; border-radius: 10px; background: #f5f8fb; }.export-user-grid span { display: grid; }.export-user-grid small { color: #526d82; }
@@ -3478,6 +3488,7 @@ td small {
 .semester-hours-total strong { color: #0f4c75; font-size: 1.35rem; }
 .semester-hours-total small { color: #526d82; font-size: .65rem; }
 .semester-hours-card > summary > i { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; background: #dde6ed; color: #0f4c75; font-style: normal; transition: transform .18s ease; }
+.semester-hours-card > summary > i::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
 .semester-hours-card[open] > summary > i { transform: rotate(180deg); }
 .semester-hours-card[open] > summary { border-bottom: 1px solid #dce5ed; background: #f8fafc; }
 .semester-hours-content { padding: 14px; }

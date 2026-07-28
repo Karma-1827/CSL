@@ -8,7 +8,7 @@
       <div class="semester-hours-list">
         {% for group in semester_history %}
           <details class="semester-hours-card"{% if forloop.first %} open{% endif %}>
-            <summary><span><strong>{{ group.semester.name_zh }}</strong><small>{{ group.semester.name_en }} · {{ group.semester.starts_on|date:"Y/m/d" }}–{{ group.semester.ends_on|date:"Y/m/d" }}</small></span><span class="semester-hours-total">{% if hours_download_allowed %}<strong>{{ group.official_hours }}</strong><small>有效小時 / verified hours</small>{% else %}<strong>{{ group.past_session_count }}</strong><small>堂課 / sessions</small>{% endif %}</span><i aria-hidden="true">⌄</i></summary>
+            <summary><span><strong>{{ group.semester.name_zh }}</strong><small>{{ group.semester.name_en }} · {{ group.semester.starts_on|date:"Y/m/d" }}–{{ group.semester.ends_on|date:"Y/m/d" }}</small></span><span class="semester-hours-total">{% if hours_download_allowed %}<strong>{{ group.official_hours }}</strong><small>有效小時 / verified hours</small>{% else %}<strong>{{ group.past_session_count }}</strong><small>堂課 / sessions</small>{% endif %}</span><i aria-hidden="true"></i></summary>
             <div class="semester-hours-content">{% include "dashboard/class_history_list.html" with sessions=group.sessions %}</div>
           </details>
         {% endfor %}
@@ -64,7 +64,7 @@
       {% empty %}<div class="empty-state compact">目前沒有進行中的對話。 / No active conversations.</div>{% endfor %}
     </div>
     <details class="conversation-history"{% if not active_conversations and ended_conversations %} open{% endif %}>
-      <summary><span><strong>過往對話紀錄</strong><small>Conversation history</small></span><b>{{ ended_conversations|length }}</b><i aria-hidden="true">⌄</i></summary>
+      <summary><span><strong>過往對話紀錄</strong><small>Conversation history</small></span><b>{{ ended_conversations|length }}</b><i aria-hidden="true"></i></summary>
       <div class="conversation-link-list">
         {% for pairing in ended_conversations %}
           <a class="is-ended{% if pairing.unread_count %} has-unread{% endif %}" href="{% url 'tutoring:pairing_messages' pairing.pk %}"><span>{% if request.user.role == 'TUTOR' %}學生 / Student{% else %}老師 / Teacher{% endif %} · 已結束 / Ended</span><strong>{% if request.user.role == 'TUTOR' %}{{ pairing.tutee.bilingual_name }}{% else %}{{ pairing.tutor.bilingual_name }}{% endif %}{% if pairing.unread_count %}<b class="unread-badge">{{ pairing.unread_count }}</b>{% endif %}</strong><small>{{ pairing.semester }}</small><p class="conversation-preview">{% if pairing.last_message %}{% if pairing.last_message.sender_id == request.user.pk %}我：{% endif %}{{ pairing.last_message.body|truncatechars:36 }}{% else %}尚無訊息 / No messages yet{% endif %}</p>{% if pairing.last_message %}<time class="conversation-time">{{ pairing.last_activity_at|date:"m/d H:i" }}</time>{% endif %}<em>查看紀錄 / View history →</em></a>
