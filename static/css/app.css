@@ -736,6 +736,7 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   gap: 8px;
   min-height: 42px;
   padding: 9px 16px;
@@ -744,6 +745,7 @@ a {
   cursor: pointer;
   font-weight: 750;
   text-decoration: none;
+  white-space: nowrap;
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
@@ -2751,7 +2753,7 @@ td small {
 .status-group-approved { border-left: 4px solid var(--success); background: linear-gradient(100deg, var(--success-soft), #fff 22%); }
 .status-group-rejected { border-left: 4px solid var(--danger); background: linear-gradient(100deg, var(--danger-soft), #fff 22%); }
 .makeup-review-row { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(320px, .8fr); gap: 20px; padding: 16px; border: 1px solid #d5e0eb; border-radius: 12px; }
-.makeup-review-row > div, .makeup-review-row form { display: grid; gap: 5px; }
+.makeup-review-row > div, .makeup-review-row form { display: grid; align-content: start; gap: 5px; }
 .makeup-review-row span, .makeup-review-row small { color: var(--ink-muted); font-size: .67rem; }
 .review-detail-link { display: grid; gap: 5px; padding: 7px; border-radius: 10px; color: var(--navy); text-decoration: none; transition: 150ms ease; }
 .review-detail-link:hover { background: var(--paper); box-shadow: 0 5px 15px rgba(17,45,78,.07); }
