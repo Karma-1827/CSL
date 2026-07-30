@@ -2,9 +2,9 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-07-26(V3/V3.1 完成,進入 V4)
+> 最後盤點日期:2026-07-28(V3/V3.1 完成,進入 V4)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
-> 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private)。目前僅有一個 initial commit,尚無多次 commit history 可供推導開發脈絡;下列進度仍是由現有程式、migration 與測試整理。
+> 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private)。截至 2026-07-28 重新核對時共有 7 個 commit;commit history 仍偏淺,理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
 > 本檔案只放**核心業務邏輯與慣例**(變動頻率低)。開發進度、已知缺口與部署細節(變動頻率高或非日常開發所需)已拆到:
 > - `docs/PROGRESS.md` — 目前開發進度、已知缺口、尚未定案決策
@@ -378,32 +378,36 @@ python manage.py makemigrations --check --dry-run
 python manage.py seed_matching_demo --password '<local-only-password>'
 python manage.py seed_v2_demo
 python manage.py seed_v2_time_demo
+python manage.py seed_admin_demo --password '<local-only-password>'
 python manage.py process_matching_state
 ```
+
+`seed_admin_demo` 是給 Admin dashboard 全頁籤各放幾筆資料用的:多建幾個 DEMO-TUTOR2/3、DEMO-TUTEE2/3 帳號並跑滿資格審核(PENDING)、配對管理(待回覆邀請)、解除審核(PENDING)、課堂通報(ACTIVE)、異常回報(PENDING+已紀錄各一)、補登審核(PENDING)、時數調整、私訊等每一種待處理狀態,可安全重複執行(每次都以「今天」為基準重新計算日期並重建,不會疊加)。
 
 - Lint(`ruff`,設定在 `pyproject.toml`):只開 `F`(pyflakes,抓未使用的 import/變數、未定義名稱等真的會出錯的問題)與 `E9`(語法錯誤),刻意不開 `E`(pycodestyle 風格規則,含行長)或 import 排序規則,因為既有程式碼從未套用過任何格式化工具,貿然開啟會逼出一次跟本次修改無關的全庫重排版大 diff。`.github/workflows/ci.yml` 的 CI 會跑 `ruff check .`;開發者本機可執行 `pip install -r requirements-dev.txt` 後跑同一指令。若之後真的要導入 `ruff format`(或其他 formatter)做全庫重排版,應該是一次獨立、刻意的決定與 PR,不要在功能改動裡順便夾帶。
 - CI(GitHub Actions,`.github/workflows/ci.yml`):對 `main` 的 push 與所有 PR 觸發,跑一個用 Postgres service container 的 job,依序執行 `ruff check .`、`makemigrations --check --dry-run`、`python manage.py test`、`DJANGO_DEBUG=0 python manage.py check --deploy`。目前只做這幾項,沒有另外接部署或通知。
 
 ## 8. 文件維護與同步機制
 
-這份文件(以及 `docs/PROGRESS.md`、`docs/DEPLOY.md`)只有在被持續更新的情況下才有價值。以下是具體的同步規則,不是選項:
+這份文件(以及 `docs/PROGRESS.md`、`docs/DEPLOY.md`、`docs/SECURITY_CHECKLIST.md`)只有在被持續更新的情況下才有價值。以下是具體的同步規則,不是選項:
 
 1. **何時必須更新本文件**
    - 新增/修改角色權限、配對規則、額度計算、簽到與互認流程、時數/證明規則 → 更新對應的第 2–4 節。
    - 新增/修改 model、目錄結構、URL 路由 → 更新第 5 節。
    - 任何 migration 或新增測試 → 更新 `docs/PROGRESS.md` 的數字快照。
    - 部署流程、環境變數、正式 server 設定變更 → 更新 `docs/DEPLOY.md`。
+   - 資安控制狀態、第三方元件版本或安全等級變更 → 更新 `docs/SECURITY_CHECKLIST.md` 的逐項狀態、統計與 SBOM。
 
 2. **每次開發 session 開始前(尤其是換 agent 或隔了一段時間再開發時)**
    - 先實際跑 `python manage.py test --verbosity 1` 與確認 migration 檔案數,和 `docs/PROGRESS.md` 記錄的快照核對;不一致就先更新快照,不要假設文件是對的。
    - 若使用者的新指示和本文件衝突,以使用者最新明確指示為準,並**在同一個 session 內**同步修改本文件與測試,不要留到之後才補。
 
-3. **commit / PR 層級的提醒(待 Git 初始化後啟用)**
+3. **commit / PR 層級的提醒**
    - 建議在 PR 說明或 commit message 固定加一行檢查:「是否涉及業務規則變更?是否已同步更新 CLAUDE.md / docs/PROGRESS.md?」
-   - 之後若補上 CI,可以考慮加一個簡單檢查:當 `tutoring/services.py`、`accounts/models.py` 等核心檔案有 diff,而 `CLAUDE.md` 沒有對應 diff 時,在 CI 顯示提醒(非強制擋 merge,先從提醒開始)。
+   - 現有 CI 尚未檢查文件同步;之後可考慮加入非阻斷提醒:當 `tutoring/services.py`、`accounts/models.py` 等核心檔案有 diff,而 `CLAUDE.md`/`docs/PROGRESS.md` 沒有對應 diff 時顯示提醒。
 
 4. **版本節點稽核**
-   - 每次要開新的大版本(例如未來 V4)之前,重新完整盤點一次本文件全部三個檔案的準確性,而不是只增量修改,避免小修小補堆疊出不一致。
+   - 每次要開新的大版本(例如未來 V5)之前,重新完整盤點 `CLAUDE.md`、`docs/PROGRESS.md`、`docs/DEPLOY.md`、`docs/SECURITY_CHECKLIST.md` 的準確性,而不是只增量修改,避免小修小補堆疊出不一致。
 
 ## 9. Agent 接手原則
 

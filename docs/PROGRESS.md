@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-07-26 —— V3/V3.1 核心項目完成,正式進入 V4(見「版本規劃」)。這是一次完整重新盤點(比照 `CLAUDE.md` 第 8 節「版本節點稽核」),不是單純增量修改。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(121 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`(均無異常)。
+> 最後盤點日期:2026-07-28 —— V3/V3.1 核心項目完成,正式進入 V4(見「版本規劃」)。這是一次完整重新盤點(比照 `CLAUDE.md` 第 8 節「版本節點稽核」),不是單純增量修改。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(134 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -31,8 +31,8 @@
     ④ 兩種匯入路徑的重複學號處理都改為:學號已存在就靜默略過、保留系統內既有資料,只匯入真正新的學號(不再是「有重複就整批擋下」)。
     新增 `accounts/tests.py::QuickRosterImportTests`(8 個測試,含模擬使用者實際檔案結構的雜訊 xlsx 測試)並更新 5 個既有測試以符合新的必填欄位與略過邏輯。
   - UI 微調:名冊匯入卡片的中英標題一律換行(`.quick-import-card h2 small { display: block; }`,與既有 `.guide-card` 的雙語標題換行慣例一致);`OTHER` 其他合作計畫因尚未有實際對接對象,先用 migration `accounts/0008` 把 `is_active` 設為 `False`,從快速匯入卡片清單隱藏(資料保留,之後要用可在 Django Admin 改回啟用)。
-- **V3.1(驗收與必要補強,3/4 項完成 —— 見下方「V4」的第一項):**
-  - Tutor 端候選學生複合篩選:比照舊版(`CSL-system`)概念補回性別、華語程度、母語、加強項目、星期、時段篩選,重新用 Django service layer 實作(`anonymous_tutee_candidates()` 新增 `filters` 參數,不觸碰資料庫欄位,不改變配對前匿名欄位範圍)。UI 是 `find-tutee` 分頁一個 GET 表單(送回 `accounts:dashboard#find-tutee`,沿用既有 `class-overview-filter` 的「GET+hash」模式維持分頁狀態),星期/加強項目/時段用既有 checkbox chip 視覺語言(比照 `target-skills-card` 的核選樣式,並統一 `.chip-check` 固定寬度與文字置中,避免不同標籤長度導致排版參差)。母語欄位後來從自由關鍵字改成下拉選單,共用註冊表單同一份 `static/js/profile-options.js` 語言清單,篩選邏輯也從模糊比對改成精準比對。篩選卡片預設收合,原本常駐的面板標題徽章「配對前不顯示姓名與學號」改成一個「搜尋條件 / Search filters」`<details>/<summary>` 收合開關(`.candidate-filter-disclosure`,無 JS),點擊才展開;隱私提示本身仍保留在側邊欄 `sidebar-note`,沒有因此消失。**目前只做 Tutor 瀏覽 Tutee 這一側,Tutee(Maryland)瀏覽 Tutor 尚未加篩選,仍是已知缺口。** 新增 `OVERALL_LEVEL_CHOICES` 共用常數(`accounts/forms.py`)消除原本兩處重複的 TOCFL 等級 choices 字面量。
+- **V3.1(驗收與必要補強,核心項目已完成):**
+  - Tutor 端候選學生複合篩選:比照舊版(`CSL-system`)概念補回性別、華語程度、母語、加強項目、星期、時段篩選,重新用 Django service layer 實作(`anonymous_tutee_candidates()` 新增 `filters` 參數,不觸碰資料庫欄位,不改變配對前匿名欄位範圍)。UI 是 `find-tutee` 分頁一個 GET 表單(送回 `accounts:dashboard#find-tutee`,沿用既有 `class-overview-filter` 的「GET+hash」模式維持分頁狀態),星期/加強項目/時段用既有 checkbox chip 視覺語言(比照 `target-skills-card` 的核選樣式,並統一 `.chip-check` 固定寬度與文字置中,避免不同標籤長度導致排版參差)。母語欄位後來從自由關鍵字改成下拉選單,共用註冊表單同一份 `static/js/profile-options.js` 語言清單,篩選邏輯也從模糊比對改成精準比對。篩選卡片預設收合,原本常駐的面板標題徽章「配對前不顯示姓名與學號」改成一個「搜尋條件 / Search filters」`<details>/<summary>` 收合開關(`.candidate-filter-disclosure`,無 JS),點擊才展開;隱私提示本身仍保留在側邊欄 `sidebar-note`,沒有因此消失。Maryland Tutee 瀏覽 Tutor 的另一側篩選也已於同一版本補齊(見下方項目)。新增 `OVERALL_LEVEL_CHOICES` 共用常數(`accounts/forms.py`)消除原本兩處重複的 TOCFL 等級 choices 字面量。
   - 私訊未讀摘要:比照舊版(`CSL-system`)概念補回「未讀數、最後一則訊息、最後訊息時間、依最近活動排序」,後端基礎(`PairingMessage.read_at`)本來就有,新增的是 `tutoring/services.py::annotate_conversation_summaries()`——對每個 pairing 撈最後一則訊息與未讀數(未讀判定沿用既有的 `read_at__isnull=True` 且非本人發送),再依「最後訊息時間、若無訊息則用 `Pairing.started_at`」排序。因為每人最多就 2 個進行中配對加上少數過往配對,直接用 Python 迴圈算,沒有寫複雜的 annotate/subquery。UI 更新 `participant_v2_panels.html` 的對話清單卡片(新增未讀 badge、訊息摘要、時間)與側邊欄「私訊」連結的總未讀數 badge(比照既有「課堂通報」badge 樣式)。
   - 課堂紀錄分類(輔導類型):比照舊版(`CSL-system`)概念補回,`ClassRecord` 新增 `skills_practiced` JSONField(選填,`migration tutoring/0013`),沿用 `accounts/forms.py::SKILL_CHOICES`(聽力/口說/閱讀/寫作)同一套分類,不另外定義新 enum。`ClassRecordForm` 加對應 CheckboxSelectMultiple 欄位,`class_detail.html`/`admin_record_card.html` 以標籤呈現(顯示用的中英標籤透過 view 附加 `record.skill_labels`,沿用 `tutoring/services.py::SKILL_LABELS`,避免 model 反向 import services 造成循環引用)。Admin 統計走最小版本:`tutoring/admin.py` 幫 `ClassRecordAdmin` 加 `SkillsPracticedFilter`(`SimpleListFilter`,用 JSONField `contains` 查詢),讓 Admin 在內建清單頁依單一類型篩選/看筆數,沒有另外做自訂統計面板,之後真的常用再考慮。過程中確認 `ClassRecord.reflection` 欄位其實已經是死欄位——`ClassRecordForm.Meta.fields` 從未包含它,提交流程不會用到,順手在 `CLAUDE.md` 標註避免之後被誤認是現行欄位。
   - **完整更新角色使用手冊**(補齊 V3.1 第 4 項欠款):`templates/accounts/handbook.html` 三種角色的卡片內容全面重寫,涵蓋 V2 排課/簽到/課堂紀錄/雙方確認/補登/時數證明,以及 V3/V3.1 的候選篩選、私訊未讀摘要、課堂紀錄分類與附件、課堂通報/異常回報;版本標示改為 V3.1。Admin 角色原本只有 1 張籠統的「系統管理」卡片,拆成名冊匯入、資格審核、學期設定、配對與解除審核、課程總覽與行政檔案、課堂通報與異常回報、補簽到/補紀錄審核、時數修正與匯出共 8 張,對應各自的既有功能頁面。
@@ -63,7 +63,7 @@
 
 V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在校方 VM 上對外服務」,以及收尾少數還沒做完的功能缺口:
 
-1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的幾項:登入失敗鎖定(比照忘記密碼流程,同 IP+學號 15 分鐘最多 5 次,`accounts/forms.py::BilingualAuthenticationForm`)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)、換掉有授權疑慮的證明 PDF 字型(見下方「已完成」)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。目前 62 項控制措施中 18 項符合、11 項部分符合、29 項未實施、4 項不適用,詳見該文件。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
+1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的幾項:登入失敗鎖定(比照忘記密碼流程,同 IP+學號 15 分鐘最多 5 次,`accounts/forms.py::BilingualAuthenticationForm`)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)、換掉有授權疑慮的證明 PDF 字型(見下方「已完成」)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。截至 2026-07-28 逐列核對,62 項控制措施中 23 項符合、12 項部分符合、23 項未實施、4 項不適用,詳見該文件。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
 2. **密碼效期與密碼歷程(檢核表第 33、34 項)**:實作方式已想清楚(見下方說明),但**開發前務必先跟系辦確認全校是否已有密碼政策**,避免系統自己訂一套跟校方规定衝突或重複的規則。若確認要做:
    - 效期:`User` 新增 `password_changed_at` 欄位,註冊/改密碼時更新;比照 `django.contrib.auth.middleware` 的模式寫一個輕量 middleware,登入後若 `now - password_changed_at` 超過政策天數(例如 90 天),強制導向改密碼頁面才能繼續使用系統。
    - 歷程:新增 `PasswordHistory` model(user、password_hash、created_at),改密碼時把新密碼分別跟最近 3 筆歷史雜湊比對(用 `django.contrib.auth.hashers.check_password`,不能明文比對),相同就擋下;成功變更後把最舊的一筆歷史紀錄清掉,只保留最近 3 筆。
@@ -73,14 +73,14 @@ V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在�
 ### 舊版功能取捨
 
 - **新版已取代且不重做:**Dashboard 側欄、Profile、匿名邀請、解除配對、排課、簽到、課堂紀錄、補登、通報、學期、時數、PDF、資料匯出及配對私訊。
-- **已沿用概念並以 Django 重寫、且已完成:**候選篩選(Tutor 側)、私訊摘要、輔導類型標籤、課堂紀錄附件、Admin 使用者總覽、安全的時數調整帳(含 Excel 批次匯入)。
+- **已沿用概念並以 Django 重寫、且已完成:**候選篩選(Tutor 瀏覽 Tutee 與 Maryland Tutee 瀏覽 Tutor 兩側)、私訊摘要、輔導類型標籤、課堂紀錄附件、Admin 使用者總覽、安全的時數調整帳(含 Excel 批次匯入)。
 - **不沿用:**Email 驗證、100 小時門檻、證明申請/再次核發、09:00–19:00 限制、舊版硬編碼檔案管理、未完成的 WebSocket 線上狀態、建立假課程補時數。
 
 ## 已知缺口 / TODO
 
-- 已完成 Git 初始化並 push 至私有 remote(`https://github.com/Karma-1827/CSL.git`),目前 3 個 commit(initial + 兩次大批次的 V3.1/V4 收尾),commit history 仍很淺,尚未建立分支/PR 流程慣例。
+- 已完成 Git 初始化並 push 至私有 remote(`https://github.com/Karma-1827/CSL.git`);截至 2026-07-28 共有 7 個 commit,commit history 仍偏淺,尚未建立分支/PR 流程慣例。
 - 正式 VM 部署、服務管理、HTTPS proxy、備份、監控、RPO/RTO 尚未落地(V4 核心項目,細節見 `docs/DEPLOY.md`)。
-- **資安檢核表(`docs/SECURITY_CHECKLIST.md`)裡還有 25 項「未實施」**,其中密碼效期與歷程限制需要先跟系辦確認全校政策才能決定要不要做。詳見該文件「總結與行動優先序」一節。
+- **資安檢核表(`docs/SECURITY_CHECKLIST.md`)裡還有 23 項「未實施」**,其中密碼效期與歷程限制需要先跟系辦確認全校政策才能決定要不要做。詳見該文件「總結與行動優先序」一節。
 - **V3/V3.1/V4 目前為止的功能絕大多數只做過 Django test client 驗證,沒有真人瀏覽器操作過**(學期編輯/刪除功能例外,已用 Playwright 驗證)。這不是單一功能的缺口,而是整個開發階段持續受限於 Chrome 擴充功能未連線;下次有瀏覽器可用時應排一次完整 golden path 人工驗收(名冊匯入卡片、註冊兩階段、候選篩選、邀請/配對、排課、簽到、課堂紀錄與附件、互認、補登、通報、私訊、時數下載、Admin 個人總覽、時數調整與匯入)。
 - Profile 編輯沒有配對當下的快照機制;配對成立後若一方修改聽說讀寫程度或可上課時段,對方看到的資料會即時變動,是否需要快照或提示尚未定案。
 - 資格文件只是一個通用 upload＋Admin 結果;大學/碩士/博士各自可接受的證明種類尚未建成資料欄位或規則。
