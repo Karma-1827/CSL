@@ -62,6 +62,11 @@ class Command(BaseCommand):
             admin.save(update_fields=["password"])
 
         semester = self._ensure_semester(today)
+        # Certificates only open 3 days after a semester ends (see CLAUDE.md 4.9), so the
+        # always-current active semester above can never be downloaded during a demo. A
+        # second, already-ended semester gives the hours/PDF download step something real
+        # to show without waiting months for the active semester to close.
+        past_semester = self._ensure_past_semester(today)
         ntnu = PartnerProgram.objects.get(code="NTNU")
         maryland = PartnerProgram.objects.get(code="MARYLAND")
 
@@ -73,6 +78,11 @@ class Command(BaseCommand):
         tutee2 = self._ensure_tutee("DEMO-TUTEE2", "金智友", "Jiyou Kim", ntnu)
         tutee3 = self._ensure_tutee("DEMO-TUTEE3", "田中愛", "Tanaka Ai", ntnu)
         maryland_tutee = self._ensure_tutee("DEMO-MARYLAND", "測試交換生", "Taylor Demo", maryland)
+        # Deliberately left unpaired and uninvited: every other demo tutee above is already
+        # matched or already has a pending invitation, so a live "browse -> invite -> accept"
+        # walkthrough has nothing free to target. DEMO-TUTOR2 has one open slot (see pairings
+        # below) and can invite this account live.
+        self._ensure_tutee("DEMO-TUTEE4", "山田花子", "Hanako Yamada", ntnu)
 
         # Two never-registered roster rows so the admin roster/registration stats show a gap.
         RosterEntry.objects.update_or_create(
@@ -104,10 +114,17 @@ class Command(BaseCommand):
         self._seed_messages(pairing_maryland, tutor2, maryland_tutee)
         self._seed_hour_adjustments(semester, tutor1, ntnu, tutor2, maryland)
 
+        past_pairing_main = self._ensure_ended_pairing(past_semester, tutor1, tutee1)
+        past_pairing_maryland = self._ensure_ended_pairing(past_semester, tutor2, maryland_tutee)
+        self._reset_class_sessions(past_pairing_main, past_pairing_maryland)
+        self._seed_valid_class(past_pairing_main, tutor1, tutee1, today - timedelta(days=100))
+        self._seed_valid_class(past_pairing_main, tutor1, tutee1, today - timedelta(days=95))
+        self._seed_valid_class(past_pairing_maryland, tutor2, maryland_tutee, today - timedelta(days=98))
+
         self.stdout.write(self.style.SUCCESS("Admin demo data is ready."))
         self.stdout.write(
             "Accounts (all share the password you passed in): DEMO-ADMIN, DEMO-TUTOR, DEMO-TUTOR2, "
-            "DEMO-TUTOR3, DEMO-TUTEE, DEMO-TUTEE2, DEMO-TUTEE3, DEMO-MARYLAND"
+            "DEMO-TUTOR3, DEMO-TUTEE, DEMO-TUTEE2, DEMO-TUTEE3, DEMO-TUTEE4, DEMO-MARYLAND"
         )
 
     # -- setup helpers -----------------------------------------------------
@@ -214,6 +231,27 @@ class Command(BaseCommand):
             tutor=tutor,
             tutee=tutee,
             defaults={"status": PairingStatus.ACTIVE, "ended_at": None, "end_reason": ""},
+        )
+        return pairing
+
+    def _ensure_past_semester(self, today):
+        semester, _ = Semester.objects.update_or_create(
+            name_zh="114學年度第2學期",
+            defaults={
+                "name_en": "114-2 Semester",
+                "starts_on": today - timedelta(days=165),
+                "ends_on": today - timedelta(days=30),
+                "is_active": False,
+            },
+        )
+        return semester
+
+    def _ensure_ended_pairing(self, semester, tutor, tutee):
+        pairing, _ = Pairing.objects.update_or_create(
+            semester=semester,
+            tutor=tutor,
+            tutee=tutee,
+            defaults={"status": PairingStatus.ENDED, "ended_at": timezone.now(), "end_reason": "學期結束"},
         )
         return pairing
 
