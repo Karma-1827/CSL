@@ -9,7 +9,7 @@
 > - `UP03_VM_rule.pdf`(師大資訊中心虛擬主機服務管理暨收費辦法)
 > - `rent_VM_notice.pdf`(虛擬伺服器申請注意事項)
 >
-> 盤點日期:2026-07-28。**下列「等級」是我方初估,不是系辦核定結果**,正式等級仍須依附件一送系辦/資訊中心確認。
+> 盤點日期:2026-07-31。**下列「等級」是我方初估,不是系辦核定結果**,正式等級仍須依附件一送系辦/資訊中心確認。
 
 ## 安全等級初估
 
@@ -81,11 +81,11 @@
 | 29 | 普 | 識別鑑別使用者,禁止共用帳號 | ✅ | 學號即帳號,`RosterEntry.student_id`/`User.username` 皆為唯一約束,不存在共用帳號設計。 |
 | 30 | 普 | 預設密碼首次登入應強制變更 | ⬜ | 註冊時使用者自訂密碼,系統從不指派預設密碼,此情境不存在。 |
 | 31 | 普 | 身分驗證資訊不以明文傳輸 | 🟡 | 待 HTTPS 上線(見第 11 項),目前本機開發是 HTTP。 |
-| 32 | 普 | 帳戶鎖定機制(5 次失敗鎖 15 分鐘) | ✅ | `BilingualAuthenticationForm.clean()`(`accounts/forms.py`)比照忘記密碼流程的節流邏輯,同 IP+學號 5 次失敗後鎖 15 分鐘,登入成功會清除計數。 |
+| 32 | 普 | 帳戶鎖定機制(5 次失敗鎖 15 分鐘) | 🟡 | `BilingualAuthenticationForm.clean()`(`accounts/forms.py`)與忘記密碼流程已有「同 IP+學號 5 次失敗後鎖 15 分鐘」初版邏輯,但目前使用 Django 預設 `LocMemCache`,多個 Gunicorn worker 不共享計數、服務重啟會歸零;正式環境改成 PostgreSQL/Redis 等共享儲存前只能算部分符合。 |
 | 33 | 普 | 密碼複雜度 + 密碼效期 | 🟡 | 已有長度 ≥10、常見密碼、相似性、純數字四項驗證器,複雜度尚可;但沒有強制最短/最長效期,密碼可以永久不改。 |
 | 34 | 普 | 密碼變更不可與前 3 次相同 | ❌ | 未實作密碼歷程紀錄。 |
 | 35 | 普 | 外部使用者身分驗證規範可自訂 | ⬜ | 系統沒有匿名/外部使用者,全部是名冊制的校內師生帳號。 |
-| 36 | 中 | 防範自動化程式登入嘗試 | ✅ | 忘記密碼流程與一般登入頁現在都有「同 IP+學號 15 分鐘最多 5 次」節流(`recover_account`/`BilingualAuthenticationForm.clean()`);沒有做圖形驗證碼(CAPTCHA),但帳戶鎖定本身也是控制措施條文列舉的防範手法之一。 |
+| 36 | 中 | 防範自動化程式登入嘗試 | 🟡 | 忘記密碼與一般登入已有「同 IP+學號 15 分鐘最多 5 次」初版節流(`recover_account`/`BilingualAuthenticationForm.clean()`),但目前直接採用外部傳入的 `X-Forwarded-For` 第一個值,可偽造 IP 切換節流 key,且 `LocMemCache` 不適合多 worker。完成可信 proxy IP 與共享節流儲存前只能算部分符合。 |
 | 37 | 中 | 密碼重設用一次性、時效性 token | 🟡 | 系統刻意不做 Email/簡訊驗證(見 `CLAUDE.md` 系統邊界),改用「學號＋三題安全問題」,驗證成功後 10 分鐘內須完成新密碼設定——效果類似時效性 token,但不是控制措施原文設想的 email/簡訊管道,**需要跟系辦確認這個替代設計是否可以被認可為符合**。 |
 | 38 | 普 | 遮蔽鑑別過程資訊 | ✅ | 標準 `<input type="password">`,瀏覽器預設遮蔽。 |
 | 39 | 中 | 密碼應雜湊儲存 | ✅ | Django 預設 PBKDF2-SHA256 加鹽雜湊,已符合。 |
@@ -115,7 +115,7 @@
 
 | # | 等級 | 控制措施 | 狀態 | CSL 現況與待辦 |
 | - | - | - | - | - |
-| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到 `Pillow 12.3.0`、`pypdf 6.14.2`(當時的最新版),`pip-audit` 重跑確認 0 已知漏洞。升級前查過 Pillow 12.0 的破壞性變更(`ImageCms`/`fromarray()`/`ImageMorph`,專案完全沒用到這些 API,風險低;而且專案其實沒有任何程式碼直接 `import PIL`,`Pillow` 只是宣告的依賴,未被直接呼叫);pypdf 只用到穩定的 `PdfReader`/`PdfWriter`/`merge_page`/`add_page` 基本 API。升級後重新產生 NTNU 摘要版與詳細版(含跨頁)PDF,用 Poppler 轉圖比對確認排版與升級前完全一致,134 項測試全數通過。CI 的 `pip-audit` step 已從 `continue-on-error: true` 改回會擋 build。 |
+| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到 `Pillow 12.3.0`、`pypdf 6.14.2`(當時的最新版),`pip-audit` 重跑確認 0 已知漏洞。升級前查過 Pillow 12.0 的破壞性變更(`ImageCms`/`fromarray()`/`ImageMorph`,專案完全沒用到這些 API,風險低;而且專案其實沒有任何程式碼直接 `import PIL`,`Pillow` 只是宣告的依賴,未被直接呼叫);pypdf 只用到穩定的 `PdfReader`/`PdfWriter`/`merge_page`/`add_page` 基本 API。升級後重新產生 NTNU 摘要版與詳細版(含跨頁)PDF,用 Poppler 轉圖比對確認排版與升級前一致;2026-07-31 再次執行目前完整 134 項測試亦全數通過。CI 的 `pip-audit` step 已從 `continue-on-error: true` 改回會擋 build。 |
 | 57 | 中 | 定期確認漏洞修復狀態 | 🟡 | 掃描機制已建立、目前是乾淨的,且會在每次 CI 執行時重新確認;但「定期」仍需要有人固定看 CI 執行結果,目前沒有排程性的通知機制(例如新 CVE 出現但沒人 push 程式碼觸發 CI 的情況不會被主動發現)。 |
 | 58 | 普 | 發現入侵跡象應通報特定人員 | ❌ | 沒有正式的通報聯絡窗口/流程文件。 |
 | 59 | 中 | 監控偵測攻擊與未授權連線 | ❌ | VM 層級,沒有 WAF/IDS 之類的工具。 |
@@ -153,11 +153,11 @@
 
 ## 總結與行動優先序
 
-統計(共 62 項,2026-07-28 逐列重新計算):✅ 符合 23、🟡 部分符合 12、❌ 未實施 23、⬜ 不適用 4。
+統計(共 62 項,2026-07-31 逐列重新計算):✅ 符合 21、🟡 部分符合 14、❌ 未實施 23、⬜ 不適用 4。
 
 **已完成(2026-07-26 補做)**:
 - 第 5、6 項:session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)。
-- 第 32、36 項:登入頁比照忘記密碼流程加上「同 IP+學號 15 分鐘最多 5 次」鎖定(`BilingualAuthenticationForm.clean()`)。過程中順手修正一個既有 bug:`templates/accounts/login.html` 原本不管錯誤原因一律顯示「學號或密碼不正確」的寫死文字,導致鎖定訊息永遠不會顯示給使用者;已改成顯示表單實際的錯誤訊息(連帶讓「帳號已停用」的訊息也能正確顯示,不再被蓋掉)。
+- 第 32、36 項(初版完成、目前仍為部分符合):登入頁比照忘記密碼流程加上「同 IP+學號 15 分鐘最多 5 次」鎖定(`BilingualAuthenticationForm.clean()`),並修正登入頁原本會蓋掉鎖定／停用訊息的既有 bug。正式上線前仍須把 `LocMemCache` 換成共享儲存,並修正可偽造 `X-Forwarded-For` 的 IP 判定,詳見 `docs/CODE_REVIEW_IMPROVEMENTS.md` 4.3。
 - 第 17 項:逐一覆核全部 `AuditLog` 寫入點,確認沒有密碼/安全問題答案/自由文字個資,結論見上表。
 - 第 53 項:整理第三方元件清冊,見上方「第三方元件清冊(SBOM)」一節——過程中意外發現字型檔案授權風險,已於同日換成開放授權字型排除,見該節。
 - 第 19 項:`AuditLog.record()` 取代所有 `AuditLog.objects.create()`,稽核寫入失敗不再連帶弄壞呼叫端的資料庫交易或使用者操作。

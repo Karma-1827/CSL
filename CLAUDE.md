@@ -2,9 +2,9 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-07-28(V3/V3.1 完成,進入 V4)
+> 最後盤點日期:2026-07-31(V3/V3.1 完成,進入 V4)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
-> 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private)。截至 2026-07-28 重新核對時共有 7 個 commit;commit history 仍偏淺,理解專案時仍應以目前程式碼、migration、測試及本文件為準。
+> 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
 > 本檔案只放**核心業務邏輯與慣例**(變動頻率低)。開發進度、已知缺口與部署細節(變動頻率高或非日常開發所需)已拆到:
 > - `docs/PROGRESS.md` — 目前開發進度、已知缺口、尚未定案決策
@@ -304,7 +304,7 @@ static/js/              dashboard、使用者選單、國家/語言下拉資料
 media/                  使用者上傳,勿提交真實個資或資格文件
 assets/fonts/           PDF 內嵌字型
 tutoring/resources/     各合作計畫的證明 PDF 底圖,檔名由 PartnerProgram 設定引用
-output/pdf/             本機人工檢查用預覽,不是正式使用者資料來源
+output/                 本機人工檢查用預覽與會議輸出(PDF/DOCX 等),整個目錄不進版控,不是正式資料來源
 ```
 
 ### 主要 URL
@@ -385,7 +385,7 @@ python manage.py process_matching_state
 `seed_admin_demo` 是給 Admin dashboard 全頁籤各放幾筆資料用的:多建幾個 DEMO-TUTOR2/3、DEMO-TUTEE2/3 帳號並跑滿資格審核(PENDING)、配對管理(待回覆邀請)、解除審核(PENDING)、課堂通報(ACTIVE)、異常回報(PENDING+已紀錄各一)、補登審核(PENDING)、時數調整、私訊等每一種待處理狀態,可安全重複執行(每次都以「今天」為基準重新計算日期並重建,不會疊加)。
 
 - Lint(`ruff`,設定在 `pyproject.toml`):只開 `F`(pyflakes,抓未使用的 import/變數、未定義名稱等真的會出錯的問題)與 `E9`(語法錯誤),刻意不開 `E`(pycodestyle 風格規則,含行長)或 import 排序規則,因為既有程式碼從未套用過任何格式化工具,貿然開啟會逼出一次跟本次修改無關的全庫重排版大 diff。`.github/workflows/ci.yml` 的 CI 會跑 `ruff check .`;開發者本機可執行 `pip install -r requirements-dev.txt` 後跑同一指令。若之後真的要導入 `ruff format`(或其他 formatter)做全庫重排版,應該是一次獨立、刻意的決定與 PR,不要在功能改動裡順便夾帶。
-- CI(GitHub Actions,`.github/workflows/ci.yml`):對 `main` 的 push 與所有 PR 觸發,跑一個用 Postgres service container 的 job,依序執行 `ruff check .`、`makemigrations --check --dry-run`、`python manage.py test`、`DJANGO_DEBUG=0 python manage.py check --deploy`。目前只做這幾項,沒有另外接部署或通知。
+- CI(GitHub Actions,`.github/workflows/ci.yml`):對 `main` 的 push 與所有 PR 觸發,跑一個用 Postgres service container 的 job,依序執行 `ruff check .`、`pip-audit`、`makemigrations --check --dry-run`、`python manage.py test`、`DJANGO_DEBUG=0 python manage.py check --deploy`。`pip-audit` 發現已知漏洞時會擋下 build;目前沒有自動部署、排程掃描或額外通知。
 
 ## 8. 文件維護與同步機制
 

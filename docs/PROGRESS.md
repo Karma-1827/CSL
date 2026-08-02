@@ -2,7 +2,7 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-07-28 —— V3/V3.1 核心項目完成,正式進入 V4(見「版本規劃」)。這是一次完整重新盤點(比照 `CLAUDE.md` 第 8 節「版本節點稽核」),不是單純增量修改。
+> 最後盤點日期:2026-07-31 —— V3/V3.1 核心項目完成,正式進入 V4(見「版本規劃」)。本次重新核對 Git／文件、134 項測試、deployment check、migration、Ruff 與依賴相容性,並修正資安檢核表對登入節流成熟度的高估。
 > 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(134 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
@@ -52,10 +52,10 @@
   - 閒置帳號標記(`docs/SECURITY_CHECKLIST.md` 第 3 項):Django Admin 的 `User` 清單新增「閒置帳號 / Idle account」篩選器(`accounts/admin.py::IdleAccountFilter`),可篩出 180 天以上未登入、或從未登入過的帳號。這項使用者明確選擇「只標記,不自動停用」(2026-07-26 AskUserQuestion 確認),原因是華語班有寒暑假,學生/老師超過門檻天數沒登入很正常,自動停用有誤鎖到還在配對期使用者的風險;要不要停用由 Admin 自行判斷,系統只負責讓 Admin 容易找到候選名單。
   - Django Admin 後台操作整合進 `AuditLog`(`docs/SECURITY_CHECKLIST.md` 第 15 項):新增 `accounts/signals.py::mirror_admin_log_entry_to_audit_log()`,監聽 Django 內建 `admin.LogEntry` 的 `post_save` 訊號,把後台每一筆新增/修改/刪除都鏡射寫進 `AuditLog`。選用訊號而非逐一改每個 `ModelAdmin`,是因為這樣自動涵蓋所有目前與未來註冊的 model,不用擔心漏改。修改對象若本身是 `User`,`target_user` 會指向該使用者。已知的小取捨:`HourAdjustment` 這種原本就有專屬 `AuditLog` 事件的動作,現在會多一筆通用的鏡射紀錄(兩種 `event_type` 不同,不會互相干擾既有的 `.get()` 查詢),刻意不做去重,因為對唯讀稽核表而言,多一筆冗餘遠比漏記划算。
 - migrations:`accounts` 8 個、`tutoring` 15 個。
-- tests:`accounts` 49 個、`tutoring` 85 個,共 134 個,**全數通過**(2026-07-26 盤點時實際執行確認)。
+- tests:`accounts` 49 個、`tutoring` 85 個,共 134 個,**全數通過**(2026-07-31 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
-- **多數項目仍只用 Django test client 驗證過,尚未在真正的瀏覽器裡人工操作過**(Chrome 擴充功能仍未連線)。這次盤點額外用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做了端到端驗證(下載下來的檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確),但候選篩選(Tutee 瀏覽 Tutor)等其餘項目仍只靠 test client。下次有辦法接瀏覽器時,應該排一次完整 golden path 人工驗收,而不是繼續靠 test client/curl 累積信心。
+- **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。
 
 ## 版本規劃
 
@@ -63,7 +63,7 @@
 
 V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在校方 VM 上對外服務」,以及收尾少數還沒做完的功能缺口:
 
-1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的幾項:登入失敗鎖定(比照忘記密碼流程,同 IP+學號 15 分鐘最多 5 次,`accounts/forms.py::BilingualAuthenticationForm`)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)、換掉有授權疑慮的證明 PDF 字型(見下方「已完成」)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。截至 2026-07-28 逐列核對,62 項控制措施中 23 項符合、12 項部分符合、23 項未實施、4 項不適用,詳見該文件。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
+1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的幾項:登入失敗鎖定(目前是初版,正式環境共享儲存與可信 proxy IP 尚未完成)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)、換掉有授權疑慮的證明 PDF 字型(見下方「已完成」)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。截至 2026-07-31 逐列核對,62 項控制措施中 21 項符合、14 項部分符合、23 項未實施、4 項不適用,詳見該文件。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
 2. **密碼效期與密碼歷程(檢核表第 33、34 項)**:實作方式已想清楚(見下方說明),但**開發前務必先跟系辦確認全校是否已有密碼政策**,避免系統自己訂一套跟校方规定衝突或重複的規則。若確認要做:
    - 效期:`User` 新增 `password_changed_at` 欄位,註冊/改密碼時更新;比照 `django.contrib.auth.middleware` 的模式寫一個輕量 middleware,登入後若 `now - password_changed_at` 超過政策天數(例如 90 天),強制導向改密碼頁面才能繼續使用系統。
    - 歷程:新增 `PasswordHistory` model(user、password_hash、created_at),改密碼時把新密碼分別跟最近 3 筆歷史雜湊比對(用 `django.contrib.auth.hashers.check_password`,不能明文比對),相同就擋下;成功變更後把最舊的一筆歷史紀錄清掉,只保留最近 3 筆。
@@ -78,10 +78,10 @@ V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在�
 
 ## 已知缺口 / TODO
 
-- 已完成 Git 初始化並 push 至私有 remote(`https://github.com/Karma-1827/CSL.git`);截至 2026-07-28 共有 7 個 commit,commit history 仍偏淺,尚未建立分支/PR 流程慣例。
+- 已完成 Git 初始化並 push 至私有 remote(`https://github.com/Karma-1827/CSL.git`),且已有多次 commit 可追溯;精確數量請以 Git 指令為準,不在文件內維護容易過期的固定數字。尚未建立正式的分支/PR 流程慣例。
 - 正式 VM 部署、服務管理、HTTPS proxy、備份、監控、RPO/RTO 尚未落地(V4 核心項目,細節見 `docs/DEPLOY.md`)。
 - **資安檢核表(`docs/SECURITY_CHECKLIST.md`)裡還有 23 項「未實施」**,其中密碼效期與歷程限制需要先跟系辦確認全校政策才能決定要不要做。詳見該文件「總結與行動優先序」一節。
-- **V3/V3.1/V4 目前為止的功能絕大多數只做過 Django test client 驗證,沒有真人瀏覽器操作過**(學期編輯/刪除功能例外,已用 Playwright 驗證)。這不是單一功能的缺口,而是整個開發階段持續受限於 Chrome 擴充功能未連線;下次有瀏覽器可用時應排一次完整 golden path 人工驗收(名冊匯入卡片、註冊兩階段、候選篩選、邀請/配對、排課、簽到、課堂紀錄與附件、互認、補登、通報、私訊、時數下載、Admin 個人總覽、時數調整與匯入)。
+- **V3/V3.1/V4 尚未完成完整真人瀏覽器 golden path 驗收。**目前只有學期編輯/刪除與登入/註冊響應式排版抽查已經過瀏覽器驗證;仍應依序驗收名冊匯入卡片、兩階段註冊、候選篩選、邀請/配對、排課、簽到、課堂紀錄與附件、互認、補登、通報、私訊、時數下載、Admin 個人總覽、時數調整與匯入。
 - Profile 編輯沒有配對當下的快照機制;配對成立後若一方修改聽說讀寫程度或可上課時段,對方看到的資料會即時變動,是否需要快照或提示尚未定案。
 - 資格文件只是一個通用 upload＋Admin 結果;大學/碩士/博士各自可接受的證明種類尚未建成資料欄位或規則。
 - Maryland PDF 底圖的英文標題原檔含重複字樣 `Certificate of Certificate of Language Exchange Hours`;這是底圖內容,程式目前未修正。
@@ -89,6 +89,7 @@ V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在�
 
 ## 尚未定案的產品/維運決策
 
+- **名冊更新後的帳號狀態:**目前名冊匯入只會新增學號或略過重複學號，不會比對「上次名冊有、這次消失」的學號，也不會自動停用已註冊帳號；因此被移出新名冊的既有使用者仍可登入。待系辦確認應採「自動停用」、「保留」或「人工判斷」後，再回寫決策並實作對應流程。
 - 真實資料量、保存期限與刪除政策(含資格文件、課堂紀錄附件、稽核 log 與對話紀錄)。
 - 正式 RPO、RTO、備份頻率與維運窗口交接。
 - 各學制 Tutor 的正式資格證明清單及是否必須在註冊時上傳。
