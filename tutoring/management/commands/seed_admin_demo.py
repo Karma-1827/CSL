@@ -83,6 +83,12 @@ class Command(BaseCommand):
         # walkthrough has nothing free to target. DEMO-TUTOR2 has one open slot (see pairings
         # below) and can invite this account live.
         self._ensure_tutee("DEMO-TUTEE4", "山田花子", "Hanako Yamada", ntnu)
+        # A second, unpaired Maryland tutee: DEMO-MARYLAND is already paired, and the
+        # "find a tutor" browse screen only shows candidates while unpaired (see
+        # accounts/views.py dashboard()), so there was previously no way to demo that
+        # Maryland tutees can browse/invite tutors at all.
+        self._ensure_tutee("DEMO-MARYLAND2", "白瑞德", "Rhett Baker", maryland)
+        self._seed_filter_demo_tutees(ntnu)
 
         # Two never-registered roster rows so the admin roster/registration stats show a gap.
         RosterEntry.objects.update_or_create(
@@ -124,7 +130,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Admin demo data is ready."))
         self.stdout.write(
             "Accounts (all share the password you passed in): DEMO-ADMIN, DEMO-TUTOR, DEMO-TUTOR2, "
-            "DEMO-TUTOR3, DEMO-TUTEE, DEMO-TUTEE2, DEMO-TUTEE3, DEMO-TUTEE4, DEMO-MARYLAND"
+            "DEMO-TUTOR3, DEMO-TUTEE, DEMO-TUTEE2, DEMO-TUTEE3, DEMO-TUTEE4, DEMO-MARYLAND, "
+            "DEMO-MARYLAND2, DEMO-CAND01..DEMO-CAND10"
         )
 
     # -- setup helpers -----------------------------------------------------
@@ -188,7 +195,7 @@ class Command(BaseCommand):
         )
         return user
 
-    def _ensure_tutee(self, student_id, name_zh, name_en, program):
+    def _ensure_tutee(self, student_id, name_zh, name_en, program, profile_overrides=None):
         roster, _ = RosterEntry.objects.update_or_create(
             student_id=student_id,
             defaults={
@@ -208,22 +215,53 @@ class Command(BaseCommand):
         )
         user.set_password(self.password)
         user.save(update_fields=["password"])
-        TuteeProfile.objects.update_or_create(
-            tutee=user,
-            defaults={
-                "gender": "FEMALE",
-                "native_language": "English",
-                "nationality": "United States",
-                "department": "Languages",
-                "overall_level": "B1",
-                "learning_duration": "1_TO_2_YEARS",
-                "target_skills": ["LISTENING", "SPEAKING"],
-                "skills_to_improve": "希望加強日常會話與課堂討論。",
-                "preferred_days": ["TUE", "THU"],
-                "preferred_time_slots": ["15:00-17:00"],
-            },
-        )
+        profile_defaults = {
+            "gender": "FEMALE",
+            "native_language": "英文 (English)",
+            "nationality": "United States",
+            "department": "Languages",
+            "overall_level": "B1",
+            "learning_duration": "1_TO_2_YEARS",
+            "target_skills": ["LISTENING", "SPEAKING"],
+            "skills_to_improve": "希望加強日常會話與課堂討論。",
+            "preferred_days": ["TUE", "THU"],
+            "preferred_time_slots": ["15:00-17:00"],
+        }
+        profile_defaults.update(profile_overrides or {})
+        TuteeProfile.objects.update_or_create(tutee=user, defaults=profile_defaults)
         return user
+
+    # DEMO-CAND01..10: unpaired/uninvited NTNU tutees spread across every filterable field
+    # (gender, TOCFL level, native language, target skills, days, time slots) so the tutor
+    # candidate-filter UI has enough variety to demo narrowing down the list.
+    FILTER_DEMO_TUTEES = [
+        ("DEMO-CAND01", "佐藤美咲", "Misaki Sato", "FEMALE", "日文 (Japanese)", "Japan", "B1", ["SPEAKING", "LISTENING"], ["MON", "WED"], ["13:00-15:00"]),
+        ("DEMO-CAND02", "約翰史密斯", "John Smith", "MALE", "英文 (English)", "United States", "A2", ["READING", "WRITING"], ["TUE", "THU"], ["09:00-11:00"]),
+        ("DEMO-CAND03", "朴敏英", "Minyoung Park", "FEMALE", "韓文 (Korean)", "South Korea", "B2", ["SPEAKING"], ["FRI"], ["15:00-17:00"]),
+        ("DEMO-CAND04", "阮文雄", "Van Hung Nguyen", "MALE", "越南文 (Vietnamese)", "Vietnam", "A1", ["LISTENING", "SPEAKING", "READING"], ["MON", "TUE"], ["17:00-19:00"]),
+        ("DEMO-CAND05", "西蒂努哈麗莎", "Siti Nur Halisa", "FEMALE", "印尼文 (Indonesian)", "Indonesia", "C1", ["WRITING"], ["WED", "THU"], ["11:00-13:00"]),
+        ("DEMO-CAND06", "頌猜", "Songchai", "NON_BINARY", "泰文 (Thai)", "Thailand", "N", ["LISTENING"], ["MON", "FRI"], ["09:00-11:00", "13:00-15:00"]),
+        ("DEMO-CAND07", "皮耶杜邦", "Pierre Dupont", "MALE", "法文 (French)", "France", "B1", ["SPEAKING", "READING"], ["TUE"], ["15:00-17:00"]),
+        ("DEMO-CAND08", "瑪麗亞加西亞", "Maria Garcia", "FEMALE", "西班牙文 (Spanish)", "Spain", "A2", ["LISTENING", "WRITING"], ["WED"], ["17:00-19:00"]),
+        ("DEMO-CAND09", "馬克斯米勒", "Max Mueller", "MALE", "德文 (German)", "Germany", "C2", ["SPEAKING"], ["THU", "FRI"], ["OTHER"]),
+        ("DEMO-CAND10", "安娜伊凡諾娃", "Anna Ivanova", "FEMALE", "俄文 (Russian)", "Russia", "UNKNOWN", ["READING"], ["MON", "WED", "FRI"], ["13:00-15:00"]),
+    ]
+
+    def _seed_filter_demo_tutees(self, ntnu):
+        for student_id, name_zh, name_en, gender, language, nationality, level, skills, days, slots in self.FILTER_DEMO_TUTEES:
+            self._ensure_tutee(
+                student_id, name_zh, name_en, ntnu,
+                profile_overrides={
+                    "gender": gender,
+                    "native_language": language,
+                    "nationality": nationality,
+                    "overall_level": level,
+                    "target_skills": skills,
+                    "skills_to_improve": "示範用篩選條件資料。",
+                    "preferred_days": days,
+                    "preferred_time_slots": slots,
+                },
+            )
 
     def _ensure_pairing(self, semester, tutor, tutee):
         pairing, _ = Pairing.objects.update_or_create(
