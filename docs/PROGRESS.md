@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-07-31 —— V3/V3.1 核心項目完成,正式進入 V4(見「版本規劃」)。本次重新核對 Git／文件、134 項測試、deployment check、migration、Ruff 與依賴相容性,並修正資安檢核表對登入節流成熟度的高估。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(134 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-05 —— V3/V3.1 核心項目完成,V4 進行中。本次更新完成系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)的第一批(低風險/獨立項目,共 10 項),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(136 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -51,8 +51,20 @@
   - 升級 `Pillow`(11.3.0→12.3.0)與 `pypdf`(6.10.0→6.14.2)修復已知 CVE:`pip-audit` 掃出的漏洞升完版重跑掃描確認 0 已知漏洞,`.github/workflows/ci.yml` 的 `pip-audit` step 從非阻斷改回會擋 build。升級前確認過 Pillow 12.0 的破壞性變更(`ImageCms`/`fromarray()`/`ImageMorph`)專案完全沒用到,而且專案其實沒有任何程式碼直接 `import PIL`——`Pillow` 只是宣告的依賴,沒被直接呼叫,風險本來就低;pypdf 只用到穩定多年的 `PdfReader`/`PdfWriter`/`merge_page`/`add_page` 基本 API。升級後仍照 PDF 改動慣例重新產生 NTNU 摘要版/詳細版(含跨頁)PDF,用 Poppler 轉圖人工比對確認排版與升級前完全一致。
   - 閒置帳號標記(`docs/SECURITY_CHECKLIST.md` 第 3 項):Django Admin 的 `User` 清單新增「閒置帳號 / Idle account」篩選器(`accounts/admin.py::IdleAccountFilter`),可篩出 180 天以上未登入、或從未登入過的帳號。這項使用者明確選擇「只標記,不自動停用」(2026-07-26 AskUserQuestion 確認),原因是華語班有寒暑假,學生/老師超過門檻天數沒登入很正常,自動停用有誤鎖到還在配對期使用者的風險;要不要停用由 Admin 自行判斷,系統只負責讓 Admin 容易找到候選名單。
   - Django Admin 後台操作整合進 `AuditLog`(`docs/SECURITY_CHECKLIST.md` 第 15 項):新增 `accounts/signals.py::mirror_admin_log_entry_to_audit_log()`,監聽 Django 內建 `admin.LogEntry` 的 `post_save` 訊號,把後台每一筆新增/修改/刪除都鏡射寫進 `AuditLog`。選用訊號而非逐一改每個 `ModelAdmin`,是因為這樣自動涵蓋所有目前與未來註冊的 model,不用擔心漏改。修改對象若本身是 `User`,`target_user` 會指向該使用者。已知的小取捨:`HourAdjustment` 這種原本就有專屬 `AuditLog` 事件的動作,現在會多一筆通用的鏡射紀錄(兩種 `event_type` 不同,不會互相干擾既有的 `.get()` 查詢),刻意不做去重,因為對唯讀稽核表而言,多一筆冗餘遠比漏記划算。
-- migrations:`accounts` 8 個、`tutoring` 15 個。
-- tests:`accounts` 49 個、`tutoring` 85 個,共 134 個,**全數通過**(2026-07-31 重新實際執行確認)。
+- **2026-08 系辦會議後 20 項需求 — 第一批(低風險/獨立項目,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)：**
+  - 第 1 項:系統更名為「華語實習暨輔導系統 / Mandarin Practicum and Tutoring System」(MPTS),更新所有使用者可見畫面(登入品牌區、Dashboard 頁首/頁尾、HTML title、Django Admin 標題、證明/匯出檔名、README);系所本身的 `CSL`(Chinese as a Second Language)縮寫與內部 Python 識別字(`CSLLoginView`、`CSLUserAdmin`)不變。
+  - 第 2 項:安全問題題庫拆成 `QUESTION_CHOICES`(全部,回復密碼用)與 `ACTIVE_QUESTION_CHOICES`(排除 3 題已停用題目,新註冊用),停用/改字/新增各如上述,已用回歸測試鎖住「新註冊不能選停用題目」與「舊帳號仍可用停用題目復原密碼」兩種情境。
+  - 第 6 項:「資格證明/資格審核」全面改稱「口語能力證明/口語能力審核」,僅改使用者可見文案與 Admin 欄位名稱,`QualificationDocument`/`QualificationStatus` 等 Python 識別字不變。
+  - 第 8 項:註冊與 `/profile/` 新增暱稱(選填)、Email(必填,僅格式驗證,不寄信)欄位;中英文姓名欄位下方加註「將顯示於時數證明,請填寫正式姓名」提示。
+  - 第 9 項:Tutor/Tutee 註冊與編輯個人資料頁的時段選項下方,加註「其他時間請配對後與對方討論」的雙語提示。
+  - 第 10 項:解除配對自動處理期限由「3 天未處理」改為「連續 48 小時未處理」(`PAIRING_AUTO_RELEASE_HOURS`),所有畫面/訊息/手冊/測試同步移除「三天」字樣,新增 47:59/48:00 邊界測試。
+  - 第 17 項:Admin 資料匯出新增 `.pdf` 格式(`build_export_pdf()`,ReportLab `platypus.SimpleDocTemplate` 自動分頁的橫向報表,已人工檢視多頁輸出),移除舊版 Excel 2003 XML `.xls` 格式與 `build_excel_xml()`。
+  - 第 18 項:`ClassRecord.content`/`.remarks` 新增 2000 字元上限(model `max_length` + 表單 `maxlength`,前後端一致),`topic` 既有上限與已棄用的 `reflection` 欄位不受影響。
+  - 第 19 項:移除 `HourAdjustment` 的批次 Excel 匯入入口(URL、view、表單、範本下載、清單頁按鈕與對應測試皆刪除);model、既有資料與單筆新增/編輯功能不受影響,AuditLog 描述文字改為「行政更正」用語,不再暗示用來匯入舊紙本時數。
+  - 第 20 項:`docs/PROGRESS.md`「尚未定案的產品/維運決策」與 `docs/DEPLOY.md`「上線前仍待確認」都已明確列出個資/口語能力證明/課堂紀錄/私訊/證明 PDF/AuditLog 的保存政策與 RPO/RTO 待系辦/資訊中心確認,程式未新增任何依假設年限刪除資料的邏輯。
+  - 尚未排入本批的項目(3、4、5、7、11–16;涉及 PDF 權限、計畫別配對隔離、上課文件、學號二次確認、Admin 手動配對、證明語言/文案、佐證連結、多期間學期模型)留待後續批次,其中第 15 項(計畫別、可重疊期間)是後續多項的資料模型地基,建議優先處理。
+- migrations:`accounts` 10 個、`tutoring` 17 個。
+- tests:`accounts` 53 個、`tutoring` 83 個,共 136 個,**全數通過**(2026-08-05 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。
@@ -90,8 +102,11 @@ V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在�
 ## 尚未定案的產品/維運決策
 
 - **名冊更新後的帳號狀態:**目前名冊匯入只會新增學號或略過重複學號，不會比對「上次名冊有、這次消失」的學號，也不會自動停用已註冊帳號；因此被移出新名冊的既有使用者仍可登入。待系辦確認應採「自動停用」、「保留」或「人工判斷」後，再回寫決策並實作對應流程。
-- 真實資料量、保存期限與刪除政策(含資格文件、課堂紀錄附件、稽核 log 與對話紀錄)。
-- 正式 RPO、RTO、備份頻率與維運窗口交接。
+- **資料保存政策(待系辦/資訊中心確認,`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 20 項)：**尚未取得以下正式答案,系統目前不會、也不應在答案確定前自行寫死刪除年限或新增自動刪除排程:
+  - 個資、口語能力證明文件、課堂紀錄(含未來的 Tutor 外部佐證連結)、私訊、正式證明 PDF 與 AuditLog 各自應保存多久。
+  - 佐證連結的「階段結束後至少保留 10 天」只是使用者提示層級的最低要求(見第 4.6 節相關功能上線後的說明),不等於整體資料庫保存政策。
+  - 未來若真的要做資料清理,必須同時滿足稽核需要、法律/校務規定與備份資料的一致性,不能只看單一資料表。
+- 正式 RPO、RTO、備份頻率與維運窗口交接(同上,待系辦/資訊中心確認;見 `docs/DEPLOY.md`、`docs/SECURITY_CHECKLIST.md` 第 24/27/28 項)。
 - 各學制 Tutor 的正式資格證明清單及是否必須在註冊時上傳。
 - 新合作學校/計畫的治理機制(`PartnerProgram`)已就緒,但實際要接哪個新計畫、時數上限是否要有 per-program 例外、Tutor 版證明模板由誰提供,仍待系辦逐案決定。
 - 最終正式 PDF 文字、簽章、日期與模板是否需校方再核准。
