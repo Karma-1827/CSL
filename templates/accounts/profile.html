@@ -45,8 +45,10 @@
           <div class="profile-data-grid">
             <div class="profile-data-item"><span>中文姓名 / Chinese name</span><strong>{{ request.user.name_zh|default:"未提供 / Not provided" }}</strong></div>
             <div class="profile-data-item"><span>英文姓名 / English name</span><strong>{{ request.user.name_en|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>暱稱 / Nickname</span><strong>{{ request.user.nickname|default:"未提供 / Not provided" }}</strong></div>
             <div class="profile-data-item"><span>學號 / Student ID</span><strong>{{ request.user.username }}</strong></div>
             <div class="profile-data-item"><span>電話 / Phone</span><strong>{{ request.user.phone|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>Email</span><strong>{{ request.user.email|default:"未提供 / Not provided" }}</strong></div>
             {% if role_profile %}
               <div class="profile-data-item"><span>性別 / Gender</span><strong>{{ role_profile.get_gender_display }}</strong></div>
               <div class="profile-data-item"><span>母語 / Native language</span><strong>{{ role_profile.native_language }}</strong></div>
@@ -113,6 +115,8 @@
               {% csrf_token %}
               <div class="two-column-fields">
                 {% include "components/form_field.html" with field=edit_form.phone %}
+                {% include "components/form_field.html" with field=edit_form.nickname %}
+                {% include "components/form_field.html" with field=edit_form.email %}
                 {% include "components/form_field.html" with field=edit_form.gender %}
                 {% include "components/form_field.html" with field=edit_form.native_language %}
                 {% include "components/form_field.html" with field=edit_form.nationality %}

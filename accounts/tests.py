@@ -42,6 +42,7 @@ class RegistrationTests(TestCase):
             "identity_category": "LOCAL",
             "education_level": "MASTER",
             "phone": "0912345678",
+            "email": "test.student@example.com",
             "gender": "MALE",
             "native_language": "Mandarin Chinese",
             "nationality": "Taiwan",
@@ -89,11 +90,25 @@ class RegistrationTests(TestCase):
         self.roster.refresh_from_db()
         self.assertEqual(user.role, Role.TUTOR)
         self.assertTrue(user.check_password(self.registration_data["password1"]))
+        self.assertEqual(user.email, "test.student@example.com")
+        self.assertEqual(user.nickname, "")
         self.assertIsNotNone(self.roster.claimed_at)
         self.assertFalse(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
         self.assertTrue(TutorProfile.objects.filter(tutor=user).exists())
         self.assertNotIn("Alpha answer", user.security_questions.answer_1_hash)
         self.assertTrue(user.security_questions.check_answers(["alpha ANSWER", "Beta answer", "Gamma answer"]))
+
+    def test_registration_saves_optional_nickname(self):
+        data = self.registration_data | {"nickname": "小華"}
+        response = self.register_tutor(data)
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertEqual(User.objects.get(username="TEST1001").nickname, "小華")
+
+    def test_registration_rejects_invalid_email(self):
+        data = self.registration_data | {"email": "not-an-email"}
+        response = self.register_tutor(data)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="TEST1001").exists())
 
     def test_retired_security_question_rejected_at_registration(self):
         data = self.registration_data | {"question_1": "Q4"}
@@ -155,6 +170,7 @@ class RegistrationTests(TestCase):
             "name_en": "Tutee Student",
             "identity_category": "INTERNATIONAL",
             "phone": "0900000000",
+            "email": "tutee.student@example.com",
             "gender": "FEMALE",
             "native_language": "English",
             "nationality": "United States",
@@ -767,6 +783,8 @@ class ProfileEditTests(TestCase):
             reverse("accounts:update_profile"),
             {
                 "phone": "0911222333",
+                "email": "tutor.edit@example.com",
+                "nickname": "小王",
                 "gender": "MALE",
                 "native_language": "Mandarin Chinese",
                 "nationality": "Taiwan",
@@ -784,6 +802,8 @@ class ProfileEditTests(TestCase):
         self.tutor.refresh_from_db()
         self.tutor_profile.refresh_from_db()
         self.assertEqual(self.tutor.phone, "0911222333")
+        self.assertEqual(self.tutor.email, "tutor.edit@example.com")
+        self.assertEqual(self.tutor.nickname, "小王")
         self.assertEqual(self.tutor_profile.department, "應用華語文學系")
         self.assertEqual(self.tutor_profile.level_listening, 5)
         self.assertEqual(self.tutor_profile.teaching_notes, "更新後的教學簡介")
@@ -797,6 +817,7 @@ class ProfileEditTests(TestCase):
             reverse("accounts:update_profile"),
             {
                 "phone": "",
+                "email": "tutee.edit@example.com",
                 "gender": "FEMALE",
                 "native_language": "English",
                 "nationality": "United States",
@@ -827,6 +848,7 @@ class ProfileEditTests(TestCase):
                 "name_zh": "偽造姓名",
                 "username": "FAKE-ID",
                 "phone": "0900000000",
+                "email": "forged.name@example.com",
                 "gender": "MALE",
                 "native_language": "Mandarin Chinese",
                 "nationality": "Taiwan",
@@ -850,6 +872,7 @@ class ProfileEditTests(TestCase):
             reverse("accounts:update_profile"),
             {
                 "phone": "0900000000",
+                "email": "missing.field@example.com",
                 "native_language": "Mandarin Chinese",
                 "nationality": "Taiwan",
                 "department": "華語文教學系",

@@ -278,8 +278,10 @@ class RegistrationLookupForm(forms.Form):
 class BaseRoleRegistrationForm(forms.Form):
     name_zh = forms.CharField(label="中文姓名 / Chinese name", max_length=100)
     name_en = forms.CharField(label="英文姓名（選填） / English name (optional)", max_length=150, required=False)
+    nickname = forms.CharField(label="暱稱（選填） / Nickname (optional)", max_length=50, required=False)
     identity_category = forms.ChoiceField(label="身份別 / Identity category", choices=IdentityCategory.choices)
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
+    email = forms.EmailField(label="Email", max_length=254)
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
         label="母語 / Native language",
@@ -359,7 +361,9 @@ class BaseRoleRegistrationForm(forms.Form):
             roster_entry=roster,
             name_zh=roster.name_zh,
             name_en=roster.name_en,
+            nickname=self.cleaned_data.get("nickname", ""),
             phone=self.cleaned_data["phone"],
+            email=self.cleaned_data["email"],
         )
         user.save()
         questions = SecurityQuestionAnswer(
@@ -535,6 +539,8 @@ class QualificationUploadForm(forms.ModelForm):
 
 class TutorProfileEditForm(forms.Form):
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
+    nickname = forms.CharField(label="暱稱（選填） / Nickname (optional)", max_length=50, required=False)
+    email = forms.EmailField(label="Email", max_length=254)
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
         label="母語 / Native language",
@@ -580,6 +586,8 @@ class TutorProfileEditForm(forms.Form):
             "initial",
             {
                 "phone": user.phone,
+                "nickname": user.nickname,
+                "email": user.email,
                 **{name: getattr(profile, name) for name in self.profile_fields},
             },
         )
@@ -592,10 +600,14 @@ class TutorProfileEditForm(forms.Form):
 
     def save(self):
         changed = []
-        if self.user.phone != self.cleaned_data["phone"]:
-            changed.append("phone")
-            self.user.phone = self.cleaned_data["phone"]
-            self.user.save(update_fields=["phone"])
+        user_fields = []
+        for field_name in ("phone", "nickname", "email"):
+            if getattr(self.user, field_name) != self.cleaned_data[field_name]:
+                changed.append(field_name)
+                user_fields.append(field_name)
+                setattr(self.user, field_name, self.cleaned_data[field_name])
+        if user_fields:
+            self.user.save(update_fields=user_fields)
         for field_name in self.profile_fields:
             if getattr(self.profile_instance, field_name) != self.cleaned_data[field_name]:
                 changed.append(field_name)
@@ -608,6 +620,8 @@ class TutorProfileEditForm(forms.Form):
 
 class TuteeProfileEditForm(forms.Form):
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
+    nickname = forms.CharField(label="暱稱（選填） / Nickname (optional)", max_length=50, required=False)
+    email = forms.EmailField(label="Email", max_length=254)
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
         label="母語 / Native language",
@@ -672,6 +686,8 @@ class TuteeProfileEditForm(forms.Form):
             "initial",
             {
                 "phone": user.phone,
+                "nickname": user.nickname,
+                "email": user.email,
                 **{name: getattr(profile, name) for name in self.profile_fields},
             },
         )
@@ -684,10 +700,14 @@ class TuteeProfileEditForm(forms.Form):
 
     def save(self):
         changed = []
-        if self.user.phone != self.cleaned_data["phone"]:
-            changed.append("phone")
-            self.user.phone = self.cleaned_data["phone"]
-            self.user.save(update_fields=["phone"])
+        user_fields = []
+        for field_name in ("phone", "nickname", "email"):
+            if getattr(self.user, field_name) != self.cleaned_data[field_name]:
+                changed.append(field_name)
+                user_fields.append(field_name)
+                setattr(self.user, field_name, self.cleaned_data[field_name])
+        if user_fields:
+            self.user.save(update_fields=user_fields)
         for field_name in self.profile_fields:
             if getattr(self.profile_instance, field_name) != self.cleaned_data[field_name]:
                 changed.append(field_name)

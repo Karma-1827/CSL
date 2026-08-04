@@ -182,6 +182,7 @@ class User(AbstractUser):
     )
     name_zh = models.CharField("中文姓名 / Chinese name", max_length=100, blank=True)
     name_en = models.CharField("英文姓名 / English name", max_length=150, blank=True)
+    nickname = models.CharField("暱稱 / Nickname", max_length=50, blank=True)
     phone = models.CharField("電話 / Phone", max_length=30, blank=True)
 
     class Meta:

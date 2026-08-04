@@ -25,10 +25,12 @@
       <div class="profile-data-grid">
         <div class="profile-data-item"><span>中文姓名 / Chinese name</span><strong>{{ subject.name_zh|default:"未提供 / Not provided" }}</strong></div>
         <div class="profile-data-item"><span>英文姓名 / English name</span><strong>{{ subject.name_en|default:"未提供 / Not provided" }}</strong></div>
+        <div class="profile-data-item"><span>暱稱 / Nickname</span><strong>{{ subject.nickname|default:"未提供 / Not provided" }}</strong></div>
         <div class="profile-data-item"><span>學號 / Student ID</span><strong>{{ subject.username }}</strong></div>
         <div class="profile-data-item"><span>身分 / Role</span><strong>{{ subject.get_role_display }}</strong></div>
         <div class="profile-data-item"><span>帳號狀態 / Account status</span><strong>{{ subject.get_account_status_display }}</strong></div>
         <div class="profile-data-item"><span>電話 / Phone</span><strong>{{ subject.phone|default:"未提供 / Not provided" }}</strong></div>
+        <div class="profile-data-item"><span>Email</span><strong>{{ subject.email|default:"未提供 / Not provided" }}</strong></div>
         <div class="profile-data-item"><span>學制 / Degree level</span><strong>{{ roster.get_education_level_display }}</strong></div>
         <div class="profile-data-item"><span>學生類別 / Category</span><strong>{{ roster.get_identity_category_display|default:"未提供 / Not provided" }}</strong></div>
         {% if roster.program %}<div class="profile-data-item"><span>所屬計畫 / Program</span><strong>{{ roster.program.name_zh }} / {{ roster.program.name_en }}</strong></div>{% endif %}

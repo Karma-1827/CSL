@@ -13,8 +13,11 @@
   <div class="two-column-fields">
     {% include "components/form_field.html" with field=form.name_zh %}
     {% include "components/form_field.html" with field=form.name_en %}
+    <p class="form-note bilingual-note">請填寫正式的中文及英文姓名，資料將顯示於時數證明。<br>Please enter your official Chinese and English names as they will appear on certificates.</p>
+    {% include "components/form_field.html" with field=form.nickname %}
     {% include "components/form_field.html" with field=form.identity_category %}
     {% include "components/form_field.html" with field=form.phone %}
+    {% include "components/form_field.html" with field=form.email %}
     {% include "components/form_field.html" with field=form.gender %}
     {% include "components/form_field.html" with field=form.native_language %}
     {% include "components/form_field.html" with field=form.nationality %}

@@ -449,6 +449,9 @@ a {
   color: var(--ink-muted);
   font-size: 0.78rem;
 }
+.two-column-fields > .form-note {
+  grid-column: 1 / -1;
+}
 .bilingual-note {
   line-height: 1.7;
 }
