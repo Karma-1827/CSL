@@ -17,7 +17,7 @@
         <nav class="sidebar-nav">
           {% if request.user.role == 'ADMIN' %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>系統總覽<small>Overview</small></b></a>
-            <a class="sidebar-link" href="#qualifications" data-dashboard-target="qualifications"><span aria-hidden="true">✓</span><b>資格審核<small>Qualifications</small></b>{% if pending_qualifications %}<em>{{ pending_qualifications|length }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#qualifications" data-dashboard-target="qualifications"><span aria-hidden="true">✓</span><b>口語能力審核<small>Oral proficiency</small></b>{% if pending_qualifications %}<em>{{ pending_qualifications|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#matching" data-dashboard-target="matching"><span aria-hidden="true">↔</span><b>配對管理<small>Matching</small></b></a>
             <a class="sidebar-link" href="#pairing-releases" data-dashboard-target="pairing-releases"><span aria-hidden="true">⌁</span><b>解除審核<small>Pairing releases</small></b>{% if pending_pairing_releases %}<em>{{ pending_pairing_releases|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-alerts" data-dashboard-target="class-alerts"><span aria-hidden="true">!</span><b>課堂通報<small>Class alerts</small></b>{% if active_class_alerts %}<em>{{ active_class_alerts|length }}</em>{% endif %}</a>
@@ -36,7 +36,7 @@
             <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#find-tutee" data-dashboard-target="find-tutee"><span aria-hidden="true">⌕</span><b>尋找學生<small>Find students</small></b></a>
             <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>輔導資格<small>Qualification</small></b></a>
+            <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力<small>Oral proficiency</small></b></a>
           {% else %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             <a class="sidebar-link" href="#schedule" data-dashboard-target="schedule"><span aria-hidden="true">▦</span><b>我的課表<small>Schedule</small></b></a>
@@ -74,10 +74,10 @@
       </section>
       </section>
       <div class="dashboard-view" data-dashboard-panel="qualifications">
-      <div class="view-heading"><span>REVIEW</span><h2>資格審核 <small>Qualification review</small></h2><p>集中處理老師送出的資格文件。 / Review teacher qualification documents.</p></div>
+      <div class="view-heading"><span>REVIEW</span><h2>口語能力審核 <small>Oral proficiency review</small></h2><p>集中處理老師送出的口語能力證明。 / Review teacher oral proficiency documents.</p></div>
         <section class="panel panel-wide">
           <div class="panel-heading">
-            <div><span class="eyebrow">REVIEW</span><h2>資格證明待審核 <small>Pending qualifications</small></h2></div>
+            <div><span class="eyebrow">REVIEW</span><h2>口語能力證明待審核 <small>Pending reviews</small></h2></div>
             <a class="button button-secondary" href="{% url 'admin:accounts_rosterentry_changelist' %}">管理名冊 / Manage roster</a>
           </div>
           {% if pending_qualifications %}
@@ -241,17 +241,17 @@
       {% include "dashboard/schedule_panel.html" %}
       {% include "dashboard/participant_v2_panels.html" %}
       <section class="dashboard-view" data-dashboard-panel="qualification">
-        <div class="view-heading"><span>QUALIFICATION</span><h2>輔導資格 <small>Teacher qualification</small></h2></div>
+        <div class="view-heading"><span>QUALIFICATION</span><h2>口語能力 <small>Oral proficiency</small></h2></div>
         <section class="panel status-panel focused-panel">
           <span class="eyebrow">QUALIFICATION</span>
-          <h2>輔導資格 <small>Teacher qualification</small></h2>
+          <h2>口語能力 <small>Oral proficiency</small></h2>
           {% if qualification %}
             <div class="status-badge status-{{ qualification.status|lower }}">{{ qualification.get_status_display }}</div>
             <p>檔案 / File: <strong>{{ qualification.original_filename }}</strong></p>
             {% if qualification.review_note %}<p class="review-note">{{ qualification.review_note }}</p>{% endif %}
           {% else %}
             <div class="status-badge status-not_submitted">未提交 / Not submitted</div>
-            <p>通過資格審核後才可開始尋找學生。<br>You may browse students after your qualification is approved.</p>
+            <p>通過口語能力審核後才可開始尋找學生。<br>You may browse students after your oral proficiency is approved.</p>
           {% endif %}
           <form action="{% url 'accounts:upload_qualification' %}" method="post" enctype="multipart/form-data" class="upload-form">
             {% csrf_token %}
@@ -343,7 +343,7 @@
         </details>
         <div class="candidate-grid">{% for candidate in tutee_candidates %}{% include "dashboard/anonymous_tutee_card.html" with candidate=candidate action="send" %}{% empty %}<div class="empty-state">目前沒有符合篩選條件的學生。 / No students match the current filters.</div>{% endfor %}</div>
         {% elif not matching_open %}<div class="empty-state">目前未開放配對。 / Matching is currently closed.</div>
-        {% elif qualification.status != 'APPROVED' %}<div class="empty-state">資格審查通過後即可瀏覽學生資料。 / Student profiles become available after approval.</div>
+        {% elif qualification.status != 'APPROVED' %}<div class="empty-state">口語能力審查通過後即可瀏覽學生資料。 / Student profiles become available after approval.</div>
         {% else %}<div class="empty-state">您目前已有兩位學生。 / Your two matching spaces are currently filled.</div>{% endif %}
       </section>
       </section>

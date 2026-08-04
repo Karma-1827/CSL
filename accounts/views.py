@@ -906,8 +906,8 @@ def upload_qualification(request):
         document.reviewed_by = None
         document.reviewed_at = None
         document.save()
-        log_event(request, "QUALIFICATION_UPLOADED", "提交資格證明 / Qualification submitted", request.user)
-        messages.success(request, "資格證明已送出審核。 / Your qualification document was submitted for review.")
+        log_event(request, "QUALIFICATION_UPLOADED", "提交口語能力證明 / Oral proficiency document submitted", request.user)
+        messages.success(request, "口語能力證明已送出審核。 / Your oral proficiency document was submitted for review.")
     else:
         for errors in form.errors.values():
             for error in errors:
@@ -931,7 +931,7 @@ def review_qualification(request, pk):
     log_event(
         request,
         "QUALIFICATION_REVIEWED",
-        "資格證明完成審核 / Qualification reviewed",
+        "口語能力證明完成審核 / Oral proficiency document reviewed",
         document.tutor,
         {"result": document.status},
     )

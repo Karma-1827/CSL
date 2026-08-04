@@ -36,7 +36,7 @@ class QualificationStatus(models.TextChoices):
 class QualificationDocument(models.Model):
     tutor = models.OneToOneField(User, on_delete=models.CASCADE, related_name="qualification")
     file = models.FileField(
-        "資格證明 / Qualification document",
+        "口語能力證明 / Oral proficiency document",
         upload_to="qualifications/%Y/%m/",
         validators=[validate_qualification_file],
     )
@@ -52,12 +52,12 @@ class QualificationDocument(models.Model):
 
     class Meta:
         ordering = ["-updated_at"]
-        verbose_name = "資格證明 / Qualification document"
-        verbose_name_plural = "資格證明 / Qualification documents"
+        verbose_name = "口語能力證明 / Oral proficiency document"
+        verbose_name_plural = "口語能力證明 / Oral proficiency documents"
 
     def clean(self):
         if self.tutor_id and self.tutor.role != Role.TUTOR:
-            raise ValidationError("只有 Tutor 可以提交資格證明。 / Only tutors may submit qualification documents.")
+            raise ValidationError("只有 Tutor 可以提交口語能力證明。 / Only tutors may submit oral proficiency documents.")
 
 
 class Semester(models.Model):
@@ -438,10 +438,10 @@ class ClassRecord(models.Model):
     author = models.ForeignKey(User, on_delete=models.PROTECT, related_name="class_records")
     location = models.CharField("上課地點 / Location", max_length=150)
     topic = models.CharField("課堂主題 / Topic", max_length=200)
-    content = models.TextField("課堂內容 / Class content")
+    content = models.TextField("課堂內容 / Class content", max_length=2000)
     reflection = models.TextField("學習成果與回饋 / Outcome and reflection")
     skills_practiced = models.JSONField("授課類型 / Skills practiced", default=list, blank=True)
-    remarks = models.TextField("備註 / Remarks", blank=True)
+    remarks = models.TextField("備註 / Remarks", max_length=2000, blank=True)
     attachment = models.FileField(
         "附件 / Attachment",
         upload_to="class_record_attachments/%Y/%m/",

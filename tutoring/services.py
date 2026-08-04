@@ -52,7 +52,7 @@ MAX_WEEKLY_PAIRING_HOURS = Decimal("2.0")
 MAX_SEMESTER_PAIRING_HOURS = Decimal("32.0")
 MAX_SEMESTER_TUTOR_HOURS = Decimal("64.0")
 MAX_MAKEUP_PER_TYPE = 5
-PAIRING_AUTO_RELEASE_DAYS = 3
+PAIRING_AUTO_RELEASE_HOURS = 48
 
 LEVEL_LABELS = {
     "UNKNOWN": "不知道 / Unknown",
@@ -198,7 +198,7 @@ def submit_pairing_release_request(*, pairing_id, requester, reason, note="", no
     ).exists():
         raise ValidationError("此配對已有等待處理的解除申請。 / A release request is already pending.")
     auto_resolve_at = (
-        now + timedelta(days=PAIRING_AUTO_RELEASE_DAYS)
+        now + timedelta(hours=PAIRING_AUTO_RELEASE_HOURS)
         if reason in {
             PairingReleaseReason.NO_SHOW,
             PairingReleaseReason.UNREACHABLE,
@@ -276,7 +276,7 @@ def process_pending_pairing_releases(*, now=None):
         _end_pairing_for_release(release_request=release_request, actor=release_request.requested_by, now=now)
         release_request.status = PairingReleaseStatus.AUTO_APPROVED
         release_request.reviewed_at = now
-        release_request.review_note = "管理員三日內未處理，系統依原因自動解除。 / Automatically released after three days."
+        release_request.review_note = "管理員 48 小時內未處理，系統依原因自動解除。 / Automatically released after 48 hours."
         release_request.save(update_fields=["status", "reviewed_at", "review_note", "updated_at"])
         AuditLog.record(
             actor=None,
@@ -336,7 +336,7 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
     if initiator.pk == tutee.pk and not _tutee_can_initiate_invitation(tutee):
         raise ValidationError("此 Tutee 類別不能主動邀請 Tutor。 / This tutee type cannot initiate invitations.")
     if not tutor_has_approved_qualification(tutor):
-        raise ValidationError("Tutor 尚未通過資格審查。 / The tutor qualification is not approved.")
+        raise ValidationError("Tutor 尚未通過口語能力審查。 / The tutor's oral proficiency has not been approved.")
     if not tutor_has_capacity(tutor, semester):
         raise ValidationError("Tutor 本學期已有兩位 Tutee。 / The tutor already has two active tutees.")
     if Pairing.objects.filter(semester=semester, tutee=tutee, status=PairingStatus.ACTIVE).exists():
@@ -380,7 +380,7 @@ def respond_to_invitation(*, invitation_id, responder, accept):
     _validate_matching_window(invitation.semester)
     list(User.objects.select_for_update().filter(pk__in=[invitation.tutor_id, invitation.tutee_id]))
     if not tutor_has_approved_qualification(invitation.tutor):
-        raise ValidationError("Tutor 尚未通過資格審查。 / The tutor qualification is not approved.")
+        raise ValidationError("Tutor 尚未通過口語能力審查。 / The tutor's oral proficiency has not been approved.")
     if not tutor_has_capacity(invitation.tutor, invitation.semester):
         raise ValidationError("Tutor 的配對名額已滿。 / The tutor no longer has matching capacity.")
     if Pairing.objects.filter(

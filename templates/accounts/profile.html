@@ -31,7 +31,7 @@
         {% if profile_kind == 'tutor' %}
           <a href="#role-information">教學資料<small>Teaching profile</small></a>
           <a href="#availability">上課時間<small>Availability</small></a>
-          <a href="#qualification">資格審核<small>Qualification</small></a>
+          <a href="#qualification">口語能力審核<small>Oral proficiency</small></a>
         {% elif profile_kind == 'tutee' %}
           <a href="#role-information">學習資料<small>Learning profile</small></a>
           <a href="#availability">上課時間<small>Availability</small></a>
@@ -97,9 +97,9 @@
 
         {% if profile_kind == 'tutor' %}
           <section class="profile-card" id="qualification">
-            <div class="profile-card-heading"><div><span>04</span><h2>資格審核 <small>Qualification</small></h2></div></div>
+            <div class="profile-card-heading"><div><span>04</span><h2>口語能力審核 <small>Oral proficiency</small></h2></div></div>
             {% if qualification %}
-              <div class="qualification-summary"><div><span>審核狀態 / Review status</span><strong class="status-{{ qualification.status|lower }}">{{ qualification.get_status_display }}</strong></div><div><span>資格文件 / Document</span><strong>{{ qualification.original_filename }}</strong></div>{% if qualification.review_note %}<div><span>審核備註 / Review note</span><strong>{{ qualification.review_note }}</strong></div>{% endif %}</div>
+              <div class="qualification-summary"><div><span>審核狀態 / Review status</span><strong class="status-{{ qualification.status|lower }}">{{ qualification.get_status_display }}</strong></div><div><span>口語能力證明 / Document</span><strong>{{ qualification.original_filename }}</strong></div>{% if qualification.review_note %}<div><span>審核備註 / Review note</span><strong>{{ qualification.review_note }}</strong></div>{% endif %}</div>
             {% else %}
               <div class="qualification-summary"><div><span>審核狀態 / Review status</span><strong>未提交 / Not submitted</strong></div></div>
             {% endif %}
@@ -142,10 +142,10 @@
               <div class="schedule-card">
                 {% if profile_kind == 'tutor' %}
                   <div class="choice-field{% if edit_form.available_days.errors %} has-error{% endif %}"><label>1. {{ edit_form.available_days.label }}<span class="required-mark"> *</span></label>{{ edit_form.available_days }}{% for error in edit_form.available_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
-                  <div class="choice-field{% if edit_form.available_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.available_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.available_time_slots }}{% for error in edit_form.available_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+                  <div class="choice-field{% if edit_form.available_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.available_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.available_time_slots }}{% for error in edit_form.available_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<p class="form-note bilingual-note">其他時間：配對後請與學生討論實際上課時間。<br>Other times: discuss the actual class time with your student after matching.</p></div>
                 {% else %}
                   <div class="choice-field{% if edit_form.preferred_days.errors %} has-error{% endif %}"><label>1. {{ edit_form.preferred_days.label }}<span class="required-mark"> *</span></label>{{ edit_form.preferred_days }}{% for error in edit_form.preferred_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
-                  <div class="choice-field{% if edit_form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.preferred_time_slots }}{% for error in edit_form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
+                  <div class="choice-field{% if edit_form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.preferred_time_slots }}{% for error in edit_form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<p class="form-note bilingual-note">其他時間：配對後請與老師討論實際上課時間。<br>Other times: discuss the actual class time with your teacher after matching.</p></div>
                 {% endif %}
               </div>
               <button class="button button-primary" type="submit">儲存變更 <small>Save changes</small></button>

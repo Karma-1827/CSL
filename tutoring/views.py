@@ -342,8 +342,8 @@ def request_pairing_release(request, pk):
         if release_request.auto_resolve_at:
             messages.success(
                 request,
-                "解除申請已送出；若管理員三日內未處理，系統將自動解除。\n"
-                "Your request was submitted and will be released automatically after three days if not reviewed.",
+                "解除申請已送出；若管理員 48 小時內未處理，系統將自動解除。\n"
+                "Your request was submitted and will be released automatically after 48 hours if not reviewed.",
             )
         else:
             messages.success(

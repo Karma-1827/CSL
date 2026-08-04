@@ -99,8 +99,8 @@ class ClassRecordForm(forms.ModelForm):
         model = ClassRecord
         fields = ("location", "topic", "content", "skills_practiced", "remarks", "attachment")
         widgets = {
-            "content": forms.Textarea(attrs={"rows": 5}),
-            "remarks": forms.Textarea(attrs={"rows": 5}),
+            "content": forms.Textarea(attrs={"rows": 5, "maxlength": 2000}),
+            "remarks": forms.Textarea(attrs={"rows": 5, "maxlength": 2000}),
             "attachment": forms.FileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         }
 

@@ -44,7 +44,7 @@
 
     {% if subject.role == 'TUTOR' %}
       <section class="panel">
-        <div class="panel-heading"><div><span class="eyebrow">QUALIFICATION</span><h2>輔導資格 <small>Qualification</small></h2></div></div>
+        <div class="panel-heading"><div><span class="eyebrow">QUALIFICATION</span><h2>口語能力 <small>Oral proficiency</small></h2></div></div>
         {% if qualification %}
           <div class="profile-data-grid profile-data-grid-compact">
             <div class="profile-data-item"><span>狀態 / Status</span><strong>{{ qualification.get_status_display }}</strong></div>
@@ -53,7 +53,7 @@
             {% if qualification.reviewed_by %}<div class="profile-data-item"><span>審核者 / Reviewed by</span><strong>{{ qualification.reviewed_by.bilingual_name }}</strong></div>{% endif %}
           </div>
           {% if qualification.review_note %}<div class="profile-note-box"><span>審核備註 / Review note</span><p>{{ qualification.review_note|linebreaksbr }}</p></div>{% endif %}
-        {% else %}<div class="empty-state compact">尚未提交資格證明。 / No qualification document submitted.</div>{% endif %}
+        {% else %}<div class="empty-state compact">尚未提交口語能力證明。 / No oral proficiency document submitted.</div>{% endif %}
       </section>
     {% endif %}
 

@@ -100,11 +100,11 @@ class RegistrationForm(forms.Form):
         strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
     )
-    question_1 = forms.ChoiceField(label="安全問題一 / Security question 1", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
+    question_1 = forms.ChoiceField(label="安全問題一 / Security question 1", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
     answer_1 = forms.CharField(label="答案一 / Answer 1", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_2 = forms.ChoiceField(label="安全問題二 / Security question 2", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
+    question_2 = forms.ChoiceField(label="安全問題二 / Security question 2", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
     answer_2 = forms.CharField(label="答案二 / Answer 2", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_3 = forms.ChoiceField(label="安全問題三 / Security question 3", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
+    question_3 = forms.ChoiceField(label="安全問題三 / Security question 3", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
     answer_3 = forms.CharField(label="答案三 / Answer 3", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
     agree = forms.BooleanField(
         label="我確認資料正確，並同意依系統目的使用。 / I confirm the information and consent to its use for this system.",
@@ -298,11 +298,11 @@ class BaseRoleRegistrationForm(forms.Form):
         ),
     )
     department = forms.CharField(label="系所 / Department", max_length=150)
-    question_1 = forms.ChoiceField(label="安全問題一 / Security question 1", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
+    question_1 = forms.ChoiceField(label="安全問題一 / Security question 1", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
     answer_1 = forms.CharField(label="答案一 / Answer 1", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_2 = forms.ChoiceField(label="安全問題二 / Security question 2", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
+    question_2 = forms.ChoiceField(label="安全問題二 / Security question 2", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
     answer_2 = forms.CharField(label="答案二 / Answer 2", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_3 = forms.ChoiceField(label="安全問題三 / Security question 3", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
+    question_3 = forms.ChoiceField(label="安全問題三 / Security question 3", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
     answer_3 = forms.CharField(label="答案三 / Answer 3", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
     agree = forms.BooleanField(
         label="我確認資料正確，並同意依系統目的使用。 / I confirm the information and consent to its use for this system."
@@ -395,7 +395,7 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
         label="可配合時段 / Available time slots", choices=TIME_SLOTS, widget=forms.CheckboxSelectMultiple
     )
     qualification_file = forms.FileField(
-        label="資格證明 / Qualification document",
+        label="口語能力證明 / Oral proficiency document",
         required=False,
         validators=[validate_qualification_file],
         widget=forms.ClearableFileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),

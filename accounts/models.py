@@ -202,19 +202,31 @@ class User(AbstractUser):
 
 
 class SecurityQuestionAnswer(models.Model):
+    # Full list, including retired questions (Q4/Q6/Q7). New registrations may only pick from
+    # ACTIVE_QUESTION_CHOICES below, but existing users who already answered a retired question
+    # must still be able to see and answer it during account recovery, so the model field choices
+    # (and get_question_N_display()) must keep resolving every key that was ever issued.
     QUESTION_CHOICES = [
         ("Q1", "我第一所就讀的小學名稱？ / What was the name of my first elementary school?"),
-        ("Q2", "我童年最喜歡的食物？ / What was my favorite childhood food?"),
+        ("Q2", "我最喜歡的食物？ / What is my favorite food?"),
         ("Q3", "我最喜歡的一本書？ / What is my favorite book?"),
         ("Q4", "我第一位導師的姓氏？ / What was my first homeroom teacher's surname?"),
         ("Q5", "我最想造訪的城市？ / Which city would I most like to visit?"),
         ("Q6", "我自訂的一句秘密短語？ / What is my personal secret phrase?"),
         ("Q7", "我童年最喜歡的遊戲？ / What was my favorite childhood game?"),
         ("Q8", "我的第一隻寵物叫什麼名字？ / What was the name of my first pet?"),
-        ("Q9", "我童年時的綽號？ / What was my childhood nickname?"),
+        ("Q9", "我的綽號？ / What is my nickname?"),
         ("Q10", "我印象最深刻的旅行地點？ / What is my most memorable travel destination?"),
         ("Q11", "我最喜歡的一部電影？ / What is my favorite movie?"),
+        ("Q12", "我最喜歡的一首歌？ / What is my favorite song?"),
     ]
+    # Retired: no longer offered to new registrations (Q4 "first homeroom teacher's surname",
+    # Q6 "personal secret phrase", Q7 "favorite childhood game"). Existing answers still work.
+    RETIRED_QUESTION_KEYS = {"Q4", "Q6", "Q7"}
+    # NOTE: computed just below the class body, not here — a class-body comprehension can't see
+    # other class attributes in its condition (only the outermost iterable), so referencing
+    # RETIRED_QUESTION_KEYS here would raise NameError.
+    ACTIVE_QUESTION_CHOICES = []
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="security_questions")
     question_1 = models.CharField(max_length=3, choices=QUESTION_CHOICES)
@@ -247,6 +259,12 @@ class SecurityQuestionAnswer(models.Model):
                 [self.answer_1_hash, self.answer_2_hash, self.answer_3_hash],
             )
         )
+
+
+SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES = [
+    choice for choice in SecurityQuestionAnswer.QUESTION_CHOICES
+    if choice[0] not in SecurityQuestionAnswer.RETIRED_QUESTION_KEYS
+]
 
 
 class AuditLog(models.Model):

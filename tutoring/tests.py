@@ -484,7 +484,7 @@ class MatchingTests(TestCase):
         self.assertGreater(remaining, timedelta(days=4, hours=23))
         self.assertLessEqual(remaining, timedelta(days=5))
 
-    def test_auto_eligible_release_ends_pairing_after_three_days_and_cancels_future_class(self):
+    def test_auto_eligible_release_ends_pairing_after_48_hours_and_cancels_future_class(self):
         pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
         class_session = ClassSession.objects.create(
             pairing=pairing,
@@ -502,10 +502,15 @@ class MatchingTests(TestCase):
         )
         self.assertAlmostEqual(
             release_request.auto_resolve_at,
-            requested_at + timedelta(days=3),
+            requested_at + timedelta(hours=48),
             delta=timedelta(seconds=1),
         )
-        self.assertEqual(process_pending_pairing_releases(now=requested_at + timedelta(days=3, seconds=1)), 1)
+        self.assertEqual(
+            process_pending_pairing_releases(now=requested_at + timedelta(hours=47, minutes=59)), 0
+        )
+        release_request.refresh_from_db()
+        self.assertEqual(release_request.status, PairingReleaseStatus.PENDING)
+        self.assertEqual(process_pending_pairing_releases(now=requested_at + timedelta(hours=48, seconds=1)), 1)
         pairing.refresh_from_db()
         release_request.refresh_from_db()
         class_session.refresh_from_db()
@@ -584,7 +589,7 @@ class MatchingTests(TestCase):
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "申請解除配對")
-        self.assertNotContains(response, "管理員三日內未處理時自動解除")
+        self.assertNotContains(response, "管理員 48 小時內未處理，系統將自動解除")
         response = self.client.post(
             reverse("tutoring:request_pairing_release", args=[pairing.pk]),
             {"reason": PairingReleaseReason.NO_SHOW, "note": "已多次未到"},
@@ -829,6 +834,30 @@ class ClassWorkflowTests(TestCase):
         )
         self.assertFalse(oversized_form.is_valid())
         self.assertIn("500 KB", str(oversized_form.errors["attachment"]))
+
+    def test_class_record_content_and_remarks_enforce_2000_char_limit(self):
+        at_limit_data = {
+            "location": "綜合大樓 / General Building", "topic": "課堂主題",
+            "content": "內" * 2000, "remarks": "備" * 2000,
+        }
+        at_limit_form = ClassRecordForm(data=at_limit_data)
+        self.assertTrue(at_limit_form.is_valid(), at_limit_form.errors)
+
+        over_limit_data = {
+            "location": "綜合大樓 / General Building", "topic": "課堂主題",
+            "content": "內" * 2001, "remarks": "",
+        }
+        over_limit_form = ClassRecordForm(data=over_limit_data)
+        self.assertFalse(over_limit_form.is_valid())
+        self.assertIn("content", over_limit_form.errors)
+
+        over_limit_remarks_data = {
+            "location": "綜合大樓 / General Building", "topic": "課堂主題",
+            "content": "課堂內容", "remarks": "備" * 2001,
+        }
+        over_limit_remarks_form = ClassRecordForm(data=over_limit_remarks_data)
+        self.assertFalse(over_limit_remarks_form.is_valid())
+        self.assertIn("remarks", over_limit_remarks_form.errors)
 
     def test_class_record_attachment_saved_and_downloadable_by_counterpart_and_admin(self):
         class_date = timezone.localdate()

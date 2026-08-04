@@ -95,6 +95,16 @@ class RegistrationTests(TestCase):
         self.assertNotIn("Alpha answer", user.security_questions.answer_1_hash)
         self.assertTrue(user.security_questions.check_answers(["alpha ANSWER", "Beta answer", "Gamma answer"]))
 
+    def test_retired_security_question_rejected_at_registration(self):
+        data = self.registration_data | {"question_1": "Q4"}
+        self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "TEST1001", "password1": data["password1"], "password2": data["password2"]},
+        )
+        response = self.client.post(reverse("accounts:register_tutor"), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
     def test_security_questions_must_be_distinct(self):
         data = self.registration_data | {"question_3": "Q1"}
         self.client.post(
@@ -209,6 +219,24 @@ class AccountRecoveryTests(TestCase):
         self.assertRedirects(response, reverse("accounts:login"))
         user = User.objects.get(username="TEST1001")
         self.assertTrue(user.check_password("A-brand-new-password-2026"))
+
+    def test_existing_retired_question_still_works_for_recovery(self):
+        user = User.objects.get(username="TEST1001")
+        questions = user.security_questions
+        questions.question_1 = "Q4"
+        questions.set_answers(["Homeroom teacher answer", "Beta answer", "Gamma answer"])
+        questions.save()
+        verify_data = {
+            "student_id": "TEST1001",
+            "question_1": "Q4",
+            "answer_1": "Homeroom teacher answer",
+            "question_2": "Q2",
+            "answer_2": "Beta answer",
+            "question_3": "Q3",
+            "answer_3": "Gamma answer",
+        }
+        response = self.client.post(reverse("accounts:recover"), verify_data)
+        self.assertRedirects(response, reverse("accounts:set_recovered_password"))
 
     def test_wrong_answers_do_not_reveal_account(self):
         response = self.client.post(
