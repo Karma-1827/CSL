@@ -193,7 +193,7 @@ def download_hours(request):
     is_preview = request.POST.get("intent") == "preview"
     disposition = "inline" if is_preview else "attachment"
     response = HttpResponse(content, content_type="application/pdf")
-    response["Content-Disposition"] = f'{disposition}; filename="CSL-certificate-{request.user.username}-{data["ends_on"]}.pdf"'
+    response["Content-Disposition"] = f'{disposition}; filename="MPTS-certificate-{request.user.username}-{data["ends_on"]}.pdf"'
     AuditLog.record(
         actor=request.user, target_user=request.user,
         event_type="HOURS_PDF_PREVIEWED" if is_preview else "HOURS_PDF_DOWNLOADED",
@@ -254,7 +254,7 @@ def export_excel(request):
         content = build_excel_xml(users, starts_on=starts_on, ends_on=ends_on)
         content_type = "application/vnd.ms-excel"
     response = HttpResponse(content, content_type=content_type)
-    response["Content-Disposition"] = f'attachment; filename="CSL-export-{timezone.localdate()}.{file_format}"'
+    response["Content-Disposition"] = f'attachment; filename="MPTS-export-{timezone.localdate()}.{file_format}"'
     AuditLog.record(
         actor=request.user, event_type="ADMIN_EXCEL_EXPORTED",
         description="匯出輔導資料 / Tutoring data exported", metadata={

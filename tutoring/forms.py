@@ -3,7 +3,7 @@ from datetime import time
 from django import forms
 
 from accounts.forms import SKILL_CHOICES
-from accounts.models import PartnerProgram, Role
+from accounts.models import Role
 
 from .models import (
     ClassAlert,
@@ -250,18 +250,3 @@ class HoursDownloadForm(forms.Form):
         if cleaned.get("version") == "detailed" and not cleaned.get("detail_fields"):
             self.add_error("detail_fields", "詳細版請至少選擇一個欄位。 / Select at least one detailed field.")
         return cleaned
-
-
-class HourImportForm(forms.Form):
-    semester = forms.ModelChoiceField(label="學期 / Semester", queryset=Semester.objects.order_by("-starts_on"))
-    program = forms.ModelChoiceField(label="合作計畫 / Partner program", queryset=PartnerProgram.objects.order_by("name_zh"))
-    reason = forms.CharField(
-        label="調整原因 / Reason",
-        widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="套用到這次匯入的每一筆時數調整。 / Applied to every row in this import batch.",
-    )
-    file = forms.FileField(
-        label="時數檔案 / Hours file",
-        widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx"}),
-        help_text="兩欄：學號、時數；容忍標題列。只能是正數，只會新增不會覆蓋。\nTwo columns: student ID, hours; a header row is tolerated. Hours must be positive; this only adds records, never overwrites.",
-    )

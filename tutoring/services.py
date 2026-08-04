@@ -1,11 +1,7 @@
-import csv
-from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
-import io
+from decimal import Decimal
 import uuid
 
-import openpyxl
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q, Sum
@@ -35,7 +31,6 @@ from .models import (
     ClassSession,
     ClassSessionStatus,
     ConfirmationStatus,
-    HourAdjustment,
     IncidentReport,
     IncidentReportCategory,
     IncidentReportStatus,
@@ -892,104 +887,3 @@ def resolve_incident_report(*, report_id, admin, note=""):
     return report
 
 
-class HourImportFileError(Exception):
-    """檔案本身無法解析（格式錯誤、空檔案、副檔名不支援）。"""
-
-
-@dataclass
-class HourImportResult:
-    created_count: int = 0
-    total_hours: Decimal = Decimal("0")
-    student_ids: list = dataclass_field(default_factory=list)
-    errors: list = dataclass_field(default_factory=list)
-
-
-_HOUR_IMPORT_HEADER_VALUES = {"學號", "STUDENT_ID", "STUDENT ID", "STUDENTID"}
-
-
-def _read_hour_import_rows(uploaded_file):
-    """Read (row_num, student_id, hours) triples from the first two columns of a
-    CSV/.xlsx file. Tolerant of a header row, matching the roster quick-import reader."""
-    name = uploaded_file.name.lower()
-    rows = []
-    if name.endswith(".csv"):
-        raw = uploaded_file.read().decode("utf-8-sig")
-        reader = csv.reader(io.StringIO(raw))
-        for row_num, row in enumerate(reader, start=1):
-            if row and any(cell and str(cell).strip() for cell in row):
-                rows.append((row_num, row[0] if len(row) > 0 else None, row[1] if len(row) > 1 else None))
-    elif name.endswith(".xlsx"):
-        workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
-        sheet = workbook.worksheets[0]
-        for row_num, row in enumerate(sheet.iter_rows(values_only=True), start=1):
-            if row and any(cell is not None and str(cell).strip() for cell in row):
-                rows.append((row_num, row[0] if len(row) > 0 else None, row[1] if len(row) > 1 else None))
-    else:
-        raise HourImportFileError("僅支援 .csv 或 .xlsx 檔案。 / Only .csv or .xlsx files are supported.")
-    return rows
-
-
-def hour_import_template_xlsx_bytes():
-    workbook = openpyxl.Workbook()
-    sheet = workbook.active
-    sheet.append(["學號 / Student ID", "時數 / Hours"])
-    sheet.append(["S10112345", "2.5"])
-    sheet.append(["S20223456", "4"])
-    buffer = io.BytesIO()
-    workbook.save(buffer)
-    return buffer.getvalue()
-
-
-@transaction.atomic
-def import_hour_adjustments(uploaded_file, *, semester, program, reason, created_by):
-    """Bulk-create HourAdjustment rows from a two-column (學號, 時數) CSV/.xlsx file.
-
-    All-or-nothing: any invalid row rejects the whole batch, matching the advanced
-    roster import's validation style rather than the quick-import's skip-and-warn
-    style, since hour totals feed official certificates.
-    """
-    raw_rows = _read_hour_import_rows(uploaded_file)
-    if not raw_rows:
-        return HourImportResult(errors=["檔案沒有任何資料列。 / The file has no data rows."])
-
-    errors = []
-    adjustments = []
-    for row_num, raw_student_id, raw_hours in raw_rows:
-        student_id = str(raw_student_id).strip().upper() if raw_student_id is not None else ""
-        if not student_id or student_id in _HOUR_IMPORT_HEADER_VALUES:
-            continue
-        user = User.objects.filter(username=student_id).first()
-        if user is None:
-            errors.append(f"第 {row_num} 列：找不到學號「{student_id}」對應的使用者。 / Row {row_num}: no user found for student ID {student_id}.")
-            continue
-        if user.role not in {Role.TUTOR, Role.TUTEE}:
-            errors.append(f"第 {row_num} 列：「{student_id}」不是老師或學生帳號。 / Row {row_num}: {student_id} is not a Tutor or Tutee account.")
-            continue
-        try:
-            hours = Decimal(str(raw_hours).strip())
-        except (InvalidOperation, AttributeError):
-            errors.append(f"第 {row_num} 列：時數「{raw_hours}」不是有效數字。 / Row {row_num}: the hours value is invalid.")
-            continue
-        adjustment = HourAdjustment(
-            user=user, semester=semester, program=program, hours=hours, reason=reason, created_by=created_by,
-        )
-        try:
-            adjustment.full_clean()
-        except ValidationError as exc:
-            for messages_list in exc.message_dict.values():
-                for message in messages_list:
-                    errors.append(f"第 {row_num} 列：{message}")
-            continue
-        adjustments.append(adjustment)
-
-    if errors:
-        return HourImportResult(errors=errors)
-
-    for adjustment in adjustments:
-        adjustment.save()
-
-    return HourImportResult(
-        created_count=len(adjustments),
-        total_hours=sum((row.hours for row in adjustments), start=Decimal("0")),
-        student_ids=[row.user.username for row in adjustments],
-    )

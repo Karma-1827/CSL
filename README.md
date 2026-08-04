@@ -1,4 +1,4 @@
-# 華語輔導系統 / Chinese Language Tutoring System
+# 華語實習暨輔導系統 MPTS / Mandarin Practicum and Tutoring System
 
 國立臺灣師範大學華語文教學系的師生配對與輔導管理系統。
 

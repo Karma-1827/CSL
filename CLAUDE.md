@@ -13,7 +13,7 @@
 
 ## 1. 專案目的與背景
 
-這是國立臺灣師範大學華語文教學系的「華語輔導系統 / Chinese Language Tutoring System」。主要服務情境是:
+這是國立臺灣師範大學華語文教學系的「華語實習暨輔導系統 / Mandarin Practicum and Tutoring System」,簡稱 `MPTS`(2026-08 更名,舊名「華語輔導系統 / Chinese Language Tutoring System」)。主要服務情境是:
 
 - 華語系研究所學生的畢業條件包含實習時數;未參與其他實習者可透過輔導外籍生累積時數。
 - 大學部學生可因修課使用系統,博士生可累積輔導經驗;實際資格文件種類仍待系辦最後確認。

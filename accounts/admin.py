@@ -39,10 +39,10 @@ class IdleAccountFilter(admin.SimpleListFilter):
 @admin.register(User)
 class CSLUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
-        ("華語輔導系統 / CSL Tutoring", {"fields": ("role", "account_status", "roster_entry", "name_zh", "name_en", "phone")}),
+        ("華語實習暨輔導系統 / MPTS", {"fields": ("role", "account_status", "roster_entry", "name_zh", "name_en", "phone")}),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
-        ("華語輔導系統 / CSL Tutoring", {"fields": ("role", "name_zh", "name_en")}),
+        ("華語實習暨輔導系統 / MPTS", {"fields": ("role", "name_zh", "name_en")}),
     )
     list_display = ("username", "name_zh", "name_en", "role", "account_status", "is_staff", "last_login")
     list_filter = ("role", "account_status", "is_staff", "is_active", IdleAccountFilter)

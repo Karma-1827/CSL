@@ -32,6 +32,6 @@
       <div class="admin-class-list">{% for session in past_sessions %}<a href="{% url 'tutoring:class_detail' session.pk %}"><time>{{ session.class_date|date:"Y-m-d" }}<small>{{ session.start_time|time:"H:i" }}</small></time><span><strong>{{ session.pairing.tutee.bilingual_name }}</strong><small>{{ session.duration }} 小時 · {% if session.is_official %}有效成立 / Verified{% else %}{{ session.get_status_display }}{% endif %}</small>{% for reason in session.anomaly_reasons %}<em>{{ reason }}</em>{% endfor %}</span><b>查看 / View →</b></a>{% empty %}<div class="empty-state">沒有過去課程。 / No past classes.</div>{% endfor %}</div>
     </details>
   </main>
-  <footer class="app-footer">© 2026 NTNU CSL · 華語輔導系統 / Chinese Language Tutoring System</footer>
+  <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
 {% endblock %}
