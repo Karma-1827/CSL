@@ -96,22 +96,24 @@ def hour_report_data(user, starts_on, ends_on, program=None):
     }
 
 
-def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
-    """Overlay a formal certificate onto the department-provided PDF template."""
-    from pypdf import PdfReader, PdfWriter
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
+_CERTIFICATE_FONT_NAME = "CertificateKai"
+_CERTIFICATE_BOLD_FONT_NAME = "CertificateKai-Bold"
+_CERTIFICATE_ENGLISH_FONT_NAME = "CertificateSerif"
+_CERTIFICATE_ENGLISH_BOLD_FONT_NAME = "CertificateSerif-Bold"
+
+
+def _register_certificate_fonts():
+    """Register the shared CJK/Latin font pair used by every PDF this module produces.
+
+    Returns (font_name, bold_font_name, english_font_name, english_bold_font_name).
+    """
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.pdfgen import canvas
-    from reportlab.platypus import Paragraph, Table, TableStyle
 
-    font_name = "CertificateKai"
-    bold_font_name = "CertificateKai-Bold"
-    english_font_name = "CertificateSerif"
-    english_bold_font_name = "CertificateSerif-Bold"
+    font_name = _CERTIFICATE_FONT_NAME
+    bold_font_name = _CERTIFICATE_BOLD_FONT_NAME
+    english_font_name = _CERTIFICATE_ENGLISH_FONT_NAME
+    english_bold_font_name = _CERTIFICATE_ENGLISH_BOLD_FONT_NAME
     if font_name not in pdfmetrics.getRegisteredFontNames():
         pdfmetrics.registerFont(TTFont(font_name, settings.BASE_DIR / "assets/fonts/TW-Kai.ttf"))
     if bold_font_name not in pdfmetrics.getRegisteredFontNames():
@@ -134,6 +136,21 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
         italic=english_font_name,
         boldItalic=english_bold_font_name,
     )
+    return font_name, bold_font_name, english_font_name, english_bold_font_name
+
+
+def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
+    """Overlay a formal certificate onto the department-provided PDF template."""
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    font_name, bold_font_name, english_font_name, english_bold_font_name = _register_certificate_fonts()
 
     user = data["user"]
     roster = user.roster_entry
@@ -442,19 +459,6 @@ def _export_rows(users, *, starts_on=None, ends_on=None):
     return rows
 
 
-def build_excel_xml(users, *, starts_on=None, ends_on=None):
-    """Create a styled Excel 2003 XML workbook without a server-side office dependency."""
-    rows = _export_rows(users, starts_on=starts_on, ends_on=ends_on)
-    headers = EXPORT_HEADERS
-    def cell(value, style="Cell"):
-        return f'<Cell ss:StyleID="{style}"><Data ss:Type="String">{escape(str(value))}</Data></Cell>'
-    body = "".join("<Row>" + "".join(cell(value) for value in row) + "</Row>" for row in rows)
-    return (f'''<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-<Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11"/></Style><Style ss:ID="Header"><Alignment ss:Vertical="Center" ss:Horizontal="Center"/><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#0F4C75" ss:Pattern="Solid"/></Style><Style ss:ID="Cell"><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style></Styles>
-<Worksheet ss:Name="輔導資料"><Table><Column ss:Width="90"/><Column ss:Width="90"/><Column ss:Width="120"/><Column ss:Width="110"/><Column ss:Width="90"/><Column ss:Width="80"/><Column ss:Width="60"/><Column ss:Width="65"/><Column ss:Width="90"/><Column ss:Width="130"/><Column ss:Width="105"/><Row>{''.join(cell(h, 'Header') for h in headers)}</Row>{body}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet></Workbook>''').encode("utf-8")
-
-
 def build_excel_xlsx(users, *, starts_on=None, ends_on=None):
     """Create a real .xlsx workbook (openpyxl) with the same columns as build_excel_xml()."""
     from openpyxl import Workbook
@@ -487,7 +491,7 @@ def build_excel_xlsx(users, *, starts_on=None, ends_on=None):
 
 
 def build_export_csv(users, *, starts_on=None, ends_on=None):
-    """Create a CSV export with the same columns as build_excel_xml()/build_excel_xlsx().
+    """Create a CSV export with the same columns as build_excel_xlsx().
 
     Written with a UTF-8 BOM so Excel on Windows opens the Chinese headers/content correctly.
     """
@@ -500,3 +504,60 @@ def build_export_csv(users, *, starts_on=None, ends_on=None):
     writer.writerow(EXPORT_HEADERS)
     writer.writerows(rows)
     return codecs.BOM_UTF8 + buffer.getvalue().encode("utf-8")
+
+
+def build_export_pdf(users, *, starts_on=None, ends_on=None):
+    """Administrative report with the same columns as build_excel_xlsx()/build_export_csv().
+
+    This is a plain data table for internal review, not a personal certificate — it reuses the
+    certificate module's registered CJK/Latin fonts but has none of the certificate's formal
+    layout. reportlab's platypus SimpleDocTemplate handles pagination automatically since the
+    row count is unbounded (unlike the fixed-length certificate detail table).
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    font_name, _bold_font_name, _english_font_name, _english_bold_font_name = _register_certificate_fonts()
+
+    rows = _export_rows(users, starts_on=starts_on, ends_on=ends_on)
+    header_style = ParagraphStyle("ExportHeader", fontName=font_name, fontSize=8.5, leading=11, textColor=colors.white)
+    cell_style = ParagraphStyle("ExportCell", fontName=font_name, fontSize=8, leading=10)
+    title_style = ParagraphStyle("ExportTitle", fontName=font_name, fontSize=14, leading=18)
+
+    header_row = [Paragraph(header, header_style) for header in EXPORT_HEADERS]
+    if rows:
+        body_rows = [[Paragraph(str(value), cell_style) for value in row] for row in rows]
+    else:
+        body_rows = [
+            [Paragraph("沒有符合條件的資料 / No matching data", cell_style)] + [""] * (len(EXPORT_HEADERS) - 1)
+        ]
+    table = Table([header_row] + body_rows, repeatRows=1)
+    table_style = [
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F4C75")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CCCCCC")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]
+    for row_index in range(1, len(body_rows) + 1):
+        if row_index % 2 == 0:
+            table_style.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#F5F5F5")))
+    table.setStyle(TableStyle(table_style))
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        topMargin=15 * mm, bottomMargin=15 * mm, leftMargin=10 * mm, rightMargin=10 * mm,
+    )
+    generated_at = timezone.localtime().strftime("%Y-%m-%d %H:%M")
+    doc.build([
+        Paragraph("華語實習暨輔導系統 資料匯出 / MPTS Data Export", title_style),
+        Paragraph(f"匯出時間 / Generated at: {generated_at}", cell_style),
+        Spacer(1, 8),
+        table,
+    ])
+    return buffer.getvalue()

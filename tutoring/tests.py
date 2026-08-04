@@ -1331,7 +1331,7 @@ class V2FeatureTests(TestCase):
         response = self.client.get(reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
         self.assertEqual(response.status_code, 404)
 
-    def test_admin_export_can_filter_by_semester_and_selected_user(self):
+    def test_admin_export_defaults_to_xlsx_and_can_filter_by_semester_and_selected_user(self):
         session = ClassSession.objects.create(
             pairing=self.pairing,
             class_date=timezone.localdate(),
@@ -1346,8 +1346,13 @@ class V2FeatureTests(TestCase):
             "semester_id": self.semester.pk,
         })
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/vnd.ms-excel")
-        self.assertIn(str(session.class_date).encode(), response.content)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        workbook = openpyxl.load_workbook(BytesIO(response.content))
+        rows = list(workbook.active.iter_rows(values_only=True))
+        self.assertIn(str(session.class_date), rows[1])
 
     def test_admin_export_can_produce_real_xlsx(self):
         session = ClassSession.objects.create(
@@ -1397,6 +1402,28 @@ class V2FeatureTests(TestCase):
         decoded = response.content.decode("utf-8-sig")
         self.assertIn("學號 Student ID", decoded)
         self.assertIn(str(session.class_date), decoded)
+
+    def test_admin_export_can_produce_pdf(self):
+        ClassSession.objects.create(
+            pairing=self.pairing,
+            class_date=timezone.localdate(),
+            start_time=time(11, 0), duration=1, created_by=self.tutor,
+        )
+        admin = User.objects.create_superuser(username="EXPORT-PDF-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "scope": "selected",
+            "user_ids": [self.tutor.pk],
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "file_format": "pdf",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response["Content-Disposition"].endswith('.pdf"'))
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        from pypdf import PdfReader
+        self.assertGreaterEqual(len(PdfReader(BytesIO(response.content)).pages), 1)
 
     def test_admin_export_rejects_reversed_date_range(self):
         admin = User.objects.create_superuser(username="EXPORT-RANGE-ADMIN", password="Admin-password-2026")

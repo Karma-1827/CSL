@@ -23,8 +23,8 @@ from .models import (
 )
 from .reporting import (
     build_excel_xlsx,
-    build_excel_xml,
     build_export_csv,
+    build_export_pdf,
     build_hours_pdf,
     hour_report_data,
     user_has_hour_records,
@@ -242,17 +242,17 @@ def export_excel(request):
     else:
         messages.error(request, "請選擇匯出期間。 / Select an export period.")
         return redirect(f"{reverse('accounts:dashboard')}#export")
-    file_format = request.POST.get("file_format", "xls")
-    if file_format == "xlsx":
-        content = build_excel_xlsx(users, starts_on=starts_on, ends_on=ends_on)
-        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif file_format == "csv":
+    file_format = request.POST.get("file_format", "xlsx")
+    if file_format == "csv":
         content = build_export_csv(users, starts_on=starts_on, ends_on=ends_on)
         content_type = "text/csv"
+    elif file_format == "pdf":
+        content = build_export_pdf(users, starts_on=starts_on, ends_on=ends_on)
+        content_type = "application/pdf"
     else:
-        file_format = "xls"
-        content = build_excel_xml(users, starts_on=starts_on, ends_on=ends_on)
-        content_type = "application/vnd.ms-excel"
+        file_format = "xlsx"
+        content = build_excel_xlsx(users, starts_on=starts_on, ends_on=ends_on)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     response = HttpResponse(content, content_type=content_type)
     response["Content-Disposition"] = f'attachment; filename="MPTS-export-{timezone.localdate()}.{file_format}"'
     AuditLog.record(
