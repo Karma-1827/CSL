@@ -2123,18 +2123,15 @@ class PartnerProgramCertificateTests(TestCase):
             self.assertNotIn("/", text)
 
     def test_missing_english_certificate_text_raises_clear_error(self):
-        self.ntnu_program.tutor_certificate_plan_name_en = ""
-        self.ntnu_program.tutor_certificate_activity_text_en = ""
+        # The NTNU tutor branch has hardcoded body text and never reads
+        # plan_name_en/activity_text_en (see test_ntnu_tutor_certificate_ignores_unused_plan_name_and_activity_fields
+        # below), so only its title can trigger this validation.
+        self.ntnu_program.tutor_certificate_title_en = ""
         self.ntnu_program.save()
         data = {
             "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
             "sections": [], "total": 2, "generated_at": timezone.now(),
         }
-        # The NTNU tutor branch has hardcoded English text and does not depend on the
-        # per-program plan_name_en/activity_text_en fields, so it stays unaffected;
-        # blank out its title instead to exercise the same validation path.
-        self.ntnu_program.tutor_certificate_title_en = ""
-        self.ntnu_program.save()
         with self.assertRaises(ValidationError) as ctx:
             build_hours_pdf(data, version="summary", program=self.ntnu_program, language="en")
         self.assertIn("請洽系辦設定", str(ctx.exception))
@@ -2157,6 +2154,52 @@ class PartnerProgramCertificateTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             build_hours_pdf(data, version="summary", program=self.maryland_program, language="en")
         self.assertIn("請洽系辦設定", str(ctx.exception))
+
+    def test_missing_chinese_plan_name_raises_clear_error_for_generic_program(self):
+        """Item 16: the Chinese path only ever validated title_zh before this fix, so a
+        program with a title but a blank plan_name/activity_text silently rendered a
+        certificate with an empty '「」' clause instead of failing clearly."""
+        self.ntnu_program.tutee_certificate_plan_name = ""
+        self.ntnu_program.save()
+        data = {
+            "user": self.tutee, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        with self.assertRaises(ValidationError) as ctx:
+            build_hours_pdf(data, version="summary", program=self.ntnu_program, language="zh")
+        self.assertIn("請洽系辦設定", str(ctx.exception))
+
+    def test_missing_chinese_activity_text_raises_clear_error_for_generic_program(self):
+        self.ntnu_program.tutee_certificate_activity_text = ""
+        self.ntnu_program.save()
+        data = {
+            "user": self.tutee, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        with self.assertRaises(ValidationError) as ctx:
+            build_hours_pdf(data, version="summary", program=self.ntnu_program, language="zh")
+        self.assertIn("請洽系辦設定", str(ctx.exception))
+
+    def test_ntnu_tutor_certificate_ignores_unused_plan_name_and_activity_fields(self):
+        """Item 16: validation must match what each branch actually renders. The NTNU
+        tutor branch has its own fixed-format sentence and never reads plan_name/
+        activity_text, so leaving those blank must NOT block the download in either
+        language (regression guard against over-strict validation)."""
+        from pypdf import PdfReader
+
+        self.ntnu_program.tutor_certificate_plan_name = ""
+        self.ntnu_program.tutor_certificate_activity_text = ""
+        self.ntnu_program.tutor_certificate_plan_name_en = ""
+        self.ntnu_program.tutor_certificate_activity_text_en = ""
+        self.ntnu_program.save()
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        for language in ("zh", "en"):
+            content = build_hours_pdf(data, version="summary", program=self.ntnu_program, language=language)
+            text = PdfReader(BytesIO(content)).pages[0].extract_text()
+            self.assertTrue(text.strip())
 
     def test_english_detailed_certificate_uses_english_table_headers_and_pagination_label(self):
         from pypdf import PdfReader

@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -274,7 +274,8 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
   - 實作這條規則時踩過一個 ReportLab 陷阱:Paragraph markup 的 `<b>` 標籤是透過該段落**預設字型**的 `registerFontFamily()` 對應表找粗體字型,不是「维持原字型只是加粗」。英文證明段落預設字型是 `CertificateSerif`(Liberation Serif,無中文字符),若中文姓名只包在 `<b>...</b>` 裡而不明確指定字型,會被解析成西文粗體字型、中文字符整個消失不畫出來。因此姓名與任何「中西文混排且需要粗體」的文字一律要用明確的 `<font name="CertificateKai-Bold">`/`<font name="CertificateSerif-Bold">` 分別包住中/英文片段,不能依賴 `<b>` 自動解析。
 - Tutor 版證明底圖與英文文案:`PartnerProgram` 除既有中文的 `tutee_certificate_plan_name`/`tutee_certificate_activity_text`(及 Tutor 版對應欄位,皆隱含中文,未改名加 `_zh` 後綴以降低遷移風險)外,另有 `tutee_certificate_plan_name_en`/`tutee_certificate_activity_text_en`/`tutor_certificate_plan_name_en`/`tutor_certificate_activity_text_en` 四個英文對應欄位,新增合作計畫時中英文案都要填,只填中文會導致該計畫無法產生英文證明。
 - PDF 底圖:`tutoring/resources/certificate_templates/`;字型:`assets/fonts/`;模板檔名、計畫名稱、活動描述文字皆從對應 `PartnerProgram` 欄位讀取,不再寫死於程式碼。
-- 若某計畫缺少對應角色(Tutor/Tutee)的證明模板檔名,下載時會擋下並顯示錯誤,而非產生壞掉的 PDF(`build_hours_pdf()` 開頭檢查)。
+- 若某計畫缺少對應角色(Tutor/Tutee)的證明模板檔名,下載時會擋下並顯示錯誤,而非產生壞掉的 PDF(`build_hours_pdf()` 開頭檢查)。同一道檢查也涵蓋標題與內文文案本身:`build_hours_pdf()` 會依「是否為 `is_ntnu_tutor` 特例分支」精準比對驗證欄位與實際渲染欄位——`is_ntnu_tutor` 分支的內文完全寫死、從不讀取 `plan_name`/`activity_text`,因此只驗證所選語言的標題;其餘一般分支(Tutee 版與非 NTNU 的 Tutor 版)實際內文會套用 `plan_name`/`activity_text`,因此標題、`plan_name`、`activity_text` 三者在所選語言下都必須非空,任一缺漏都擋下並顯示「請洽系辦設定」,不會產生內文帶著空白子句(如中文版「「」」)的證明。**兩者不可對調**:曾經的實作錯誤是不論分支一律要求英文 `plan_name_en`/`activity_text_en` 非空、卻完全不驗證中文 `plan_name`/`activity_text`——這會讓「有標題但漏填內文」在中文證明上悄悄產生空白子句,同時讓 `is_ntnu_tutor` 分支被英文欄位擋下時其實那兩個欄位根本不會被用到。
+- 電子章、主管簽名與系辦最終正式模板**尚未實作,也刻意不得自行產生或偽造**:目前所有證明都只有 ReportLab 疊字文字與部門提供的底圖浮水印,沒有任何簽名/印章圖層或機制。待系辦提供正式資產後才應評估是否新增;在那之前不應假造或用純文字模擬簽名/印章的視覺效果。
 - PDF 產製位於 `tutoring/reporting.py`,使用 ReportLab 疊字後以 pypdf 合併底圖。
 - 下載區同時提供「預覽」與「下載」兩個按鈕,共用同一份表單與驗證邏輯,靠 submit button 的 `name="intent"`(`preview`/`download`)區分:預覽回應 `Content-Disposition: inline` 並用 `formtarget="_blank"` 開新分頁,由瀏覽器內建 PDF 檢視器顯示;下載回應 `attachment`,強制下載。
 - Admin 匯出(`tutoring:export_excel`)可選三種格式(`tutoring/reporting.py`):`.xlsx`(`build_excel_xlsx()`,用專案既有依賴 `openpyxl`,UI 預設勾選)、`.csv`(`build_export_csv()`,標準庫 `csv`,寫入 UTF-8 BOM 避免 Windows Excel 開啟中文表頭亂碼)、`.pdf`(`build_export_pdf()`,用 ReportLab `platypus.SimpleDocTemplate` 自動分頁,橫向 A4、每頁重複表頭列;是行政報表不是個人證明,共用同一套已註冊字型但版面完全不同)。2026-08 移除舊版 Excel 2003 XML `.xls`(`build_excel_xml()`)格式。三種格式的欄位與資料來源共用同一個 `_export_rows()`,只有輸出容器不同;選用格式會一併寫進 `ADMIN_EXCEL_EXPORTED` 的 `AuditLog.metadata`。

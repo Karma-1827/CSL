@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(165 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(168 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -88,8 +88,14 @@
     - 除錯過程中用 curl 對真實 dev server 產生 PDF 並人工檢視,抓到一個規則的實作 bug:`mixed_font_markup()`/`display_name_markup()` 原本用 `<b>` 標籤加粗中文姓名,但 ReportLab 的 `<b>` 是透過 Paragraph 預設字型的 `registerFontFamily()` 對應表解析粗體字型;英文證明段落預設字型是 `CertificateSerif`(Liberation Serif,無中文字符),其粗體對應也是純西文字型,導致英文證明上的中文姓名被靜默吃掉(只剩「/ Jamie Chen」,中文名整個消失)。修正方式是兩個函式都改成用明確的 `<font name="...">` 指定中/英文字型,不再依賴 `<b>` 解析,不受所在段落預設字型影響。
     - 檔名與 `AuditLog`(`HOURS_PDF_PREVIEWED`/`HOURS_PDF_DOWNLOADED`)的 `metadata` 都新增記錄所選語言。
     - 新增 `tutoring.tests.PartnerProgramCertificateTests` 內 7 個新測試涵蓋:語言影響檔名與 AuditLog metadata、英文證明只出現英文文字與西元日期(不含民國/中文標題)、雙姓名在中英文證明都正確顯示(這條直接鎖住上述修正的 bug,防止回歸)、單姓名在中英文證明都不留斜線、NTNU Tutor 與一般計畫兩種分支缺少英文文案時都正確擋下並顯示「請洽系辦設定」、英文詳細版使用英文表頭與 `Page X of Y` 分頁文字。舊有 6 個測試因 `language` 改為必填欄位補上 `"language": "zh"`。已用 curl 對 dev server 下載 NTNU Tutor(特例分支)與 Maryland Tutor(通用分支)各 4 種語言/版本組合的真實 PDF,轉圖人工檢查排版、姓名顯示、表頭語言、頁碼文字皆正確(含前述 bug 修正前後的對照)。
+  - 第 16 項(計畫別、角色別證明標題與文案)**已完成**:盤點後發現「Admin 可依合作計畫 × 角色 × 語言設定標題與內文」這個資料模型與大部分渲染邏輯其實已經在 V3 的 `PartnerProgram` 重構與第 13 項一起做完了(標題、`plan_name`、`activity_text` 皆為 Admin 可編輯欄位,新增計畫不需改程式);真正缺的是**驗證邏輯沒有精準對應各分支實際會讀取哪些欄位**:
+    - 原本 `build_hours_pdf()` 的缺文案檢查只驗證中文路徑的 `title`,完全沒檢查中文的 `plan_name`/`activity_text`;若 Admin 只填了標題卻漏填內文,中文證明會悄悄產生帶空白子句的證明(如「「」」),而不是清楚的「請洽系辦設定」錯誤。
+    - 同時,英文路徑不分分支一律要求 `plan_name_en`/`activity_text_en` 非空,但 `is_ntnu_tutor` 特例分支的內文完全寫死、從不讀取這兩個欄位,導致這個分支被完全用不到的欄位誤擋下(目前 NTNU 因 migration `accounts/0012` 已回填英文文案而未觸發,是隱性風險而非目前的實際故障)。
+    - 修正:驗證邏輯改成依 `is_ntnu_tutor` 精準比對——該分支只驗證所選語言的 `title`;其餘分支(Tutee 版、非 NTNU 的 Tutor 版)驗證所選語言的 `title`+`plan_name`+`activity_text` 三者皆非空,與實際渲染時讀取的欄位完全對齊。
+    - 電子章、主管簽名、系辦最終正式模板確認**尚未實作也不應自行偽造**,已補充記錄於 `CLAUDE.md` 4.9 節,作為待系辦提供正式資產前的明確邊界。
+    - 新增 3 個測試:中文路徑缺 `plan_name`/`activity_text` 各自正確擋下並顯示「請洽系辦設定」(鎖住上述修正)、`is_ntnu_tutor` 分支即使四個 `plan_name`/`activity_text`(中英)全部留空,中英文皆仍可正常下載(回歸防呆,避免驗證邏輯之後又被改回「一律要求」)。
 - migrations:`accounts` 12 個、`tutoring` 19 個。
-- tests:`accounts` 54 個、`tutoring` 111 個,共 165 個,**全數通過**(2026-08-06 重新實際執行確認)。
+- tests:`accounts` 54 個、`tutoring` 114 個,共 168 個,**全數通過**(2026-08-06 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

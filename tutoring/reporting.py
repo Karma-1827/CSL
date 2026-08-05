@@ -187,8 +187,21 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
         raise ValidationError(
             "此合作計畫尚未設定證明模板，請聯絡系辦。 / This partner program has no certificate template configured."
         )
+    is_ntnu_tutor = program.code == "NTNU" and user.role == Role.TUTOR
     title = title_zh if is_zh else title_en
-    if not title or (not is_zh and (not plan_name_en or not activity_en)):
+    # The NTNU-tutor branch below has its own hardcoded body text (a specific fixed-format
+    # sentence required by the department) and never reads plan_name/activity, so only its
+    # title needs to exist; every other program×role combination renders plan_name/activity
+    # into the body and must have both set for whichever language was requested (item 16:
+    # any missing title/plan_name/activity, in either language, must fail clearly here
+    # rather than render a certificate with a blank clause).
+    if is_ntnu_tutor:
+        missing_content = False
+    else:
+        plan_name_value = plan_name if is_zh else plan_name_en
+        activity_value = activity if is_zh else activity_en
+        missing_content = not plan_name_value or not activity_value
+    if not title or missing_content:
         raise ValidationError(
             "此合作計畫尚未設定所選語言的證明文案，請洽系辦設定。 / "
             "This partner program has no certificate text configured for the selected language yet."
@@ -288,7 +301,6 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
         return mixed_font_markup(user.bilingual_name, bold=True)
 
     certificate_lead = None
-    is_ntnu_tutor = program.code == "NTNU" and user.role == Role.TUTOR
     if is_ntnu_tutor:
         education_level_labels_zh = {
             EducationLevel.BACHELOR: "大學部",
