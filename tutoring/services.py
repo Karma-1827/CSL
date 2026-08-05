@@ -478,6 +478,71 @@ def cancel_invitation(*, invitation_id, actor):
     invitation.save(update_fields=["status", "responded_at", "updated_at"])
 
 
+# One extra active tutee, admin-assigned pairings only, and never for NTNU (item 12): the normal
+# self-service invite/accept flow (tutor_has_capacity) is untouched and still caps every tutor at
+# MAX_ACTIVE_TUTEES_PER_TUTOR regardless of program.
+ADMIN_PAIRING_EXTRA_CAPACITY = 1
+
+
+def tutor_has_admin_pairing_capacity(tutor, semester, program):
+    """Whether Admin may create one more active pairing for this tutor in this semester.
+
+    NTNU keeps the standard cap even through this path — the extra slot only exists for
+    non-NTNU partner programs, since NTNU should never be over-matched by this feature
+    (MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 12).
+    """
+    count = Pairing.objects.filter(semester=semester, tutor=tutor, status=PairingStatus.ACTIVE).count()
+    limit = MAX_ACTIVE_TUTEES_PER_TUTOR
+    if program is not None and program.code != "NTNU":
+        limit += ADMIN_PAIRING_EXTRA_CAPACITY
+    return count < limit
+
+
+@transaction.atomic
+def create_admin_pairing(*, admin, tutor_id, tutee_id, semester_id):
+    """Admin builds a pairing directly, skipping the invitation handshake entirely (item 12).
+
+    First-stage scope: no extra reason field, no new per-program hour caps (those still fall
+    back to the existing weekly/semester/tutor limits — see MAX_WEEKLY_PAIRING_HOURS etc.).
+    The only capacity change is the one extra non-NTNU slot from
+    tutor_has_admin_pairing_capacity(); every other eligibility rule (role, active status,
+    program roster, existing active tutor, no repeat pairing) is identical to the normal flow so
+    this can't be used to sneak in a pairing that browsing/inviting would have refused anyway.
+    """
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以使用此功能。 / Only administrators may use this feature.")
+    synchronize_matching_state()
+    tutor = User.objects.select_for_update().get(pk=tutor_id, role=Role.TUTOR, is_active=True)
+    tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
+    semester = Semester.objects.select_for_update().get(pk=semester_id)
+    tutee_program = user_program(tutee)
+    if not semester_applies_to_user(semester, tutor) or not semester_applies_to_user(semester, tutee):
+        raise ValidationError("此期間不適用於其中一方帳號。 / This period does not apply to one of these accounts.")
+    if not tutor_can_serve_program(tutor, tutee_program):
+        raise ValidationError(
+            "此 Tutor 不在該計畫的修課名單中，無法配對。 / This tutor is not on that program's course roster and cannot be matched."
+        )
+    if not tutor_has_approved_qualification(tutor):
+        raise ValidationError("Tutor 尚未通過口語能力審查。 / The tutor's oral proficiency has not been approved.")
+    if not tutor_has_admin_pairing_capacity(tutor, semester, tutee_program):
+        raise ValidationError("此 Tutor 本學期配對名額已滿。 / The tutor has no remaining matching capacity this semester.")
+    if Pairing.objects.filter(semester=semester, tutee=tutee, status=PairingStatus.ACTIVE).exists():
+        raise ValidationError("Tutee 本學期已有 Tutor。 / The tutee already has an active tutor.")
+    if Pairing.objects.filter(semester=semester, tutor=tutor, tutee=tutee).exists():
+        raise ValidationError("本學期雙方已曾配對，無法再次配對。 / This pair cannot rematch in the same semester.")
+    pairing = Pairing(semester=semester, tutor=tutor, tutee=tutee, created_by=admin)
+    pairing.full_clean()
+    pairing.save()
+    AuditLog.record(
+        actor=admin,
+        target_user=tutee,
+        event_type="ADMIN_PAIRING_CREATED",
+        description="Admin 手動建立配對 / Pairing created directly by admin",
+        metadata={"pairing_id": pairing.pk, "tutor": tutor.username, "tutee": tutee.username, "semester_id": semester.pk},
+    )
+    return pairing
+
+
 def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     if not semester:
         return []

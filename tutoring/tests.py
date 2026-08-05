@@ -51,6 +51,7 @@ from .services import (
     cancel_class_alert,
     class_is_valid,
     confirm_counterpart,
+    create_admin_pairing,
     respond_to_invitation,
     resolve_class_alert,
     resolve_incident_report,
@@ -861,6 +862,91 @@ class MarylandTutorRosterTests(MatchingFixtureTestCase):
     def test_ordinary_tutor_can_still_pair_with_ntnu_tutee(self):
         invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
         self.assertEqual(invitation.status, InvitationStatus.PENDING)
+
+
+class AdminPairingTests(MatchingFixtureTestCase):
+    """MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 12: Admin can build a pairing directly,
+    including one extra active tutee for non-NTNU programs — but never for NTNU."""
+
+    def test_non_admin_cannot_create_admin_pairing(self):
+        with self.assertRaises(ValidationError):
+            create_admin_pairing(
+                admin=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk, semester_id=self.semester.pk,
+            )
+
+    def test_admin_can_create_pairing_without_invitation(self):
+        admin = User.objects.create_superuser(username="PAIR-ADMIN1", password="Admin-password-2026")
+        pairing = create_admin_pairing(
+            admin=admin, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk, semester_id=self.semester.pk,
+        )
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+        self.assertEqual(pairing.created_by, admin)
+        self.assertIsNone(pairing.invitation)
+        log = AuditLog.objects.get(event_type="ADMIN_PAIRING_CREATED")
+        self.assertEqual(log.metadata["tutor"], self.tutor.username)
+        self.assertEqual(log.metadata["tutee"], self.tutee.username)
+
+    def test_admin_can_grant_third_tutee_for_non_ntnu_program(self):
+        admin = User.objects.create_superuser(username="PAIR-ADMIN2", password="Admin-password-2026")
+        second_maryland_tutee = self.make_tutee("MARY200", "馬里蘭學生二", "Maryland Student 2", self.maryland_program)
+        third_maryland_tutee = self.make_tutee("MARY300", "馬里蘭學生三", "Maryland Student 3", self.maryland_program)
+        invitation_a = send_invitation(
+            initiator=self.maryland_tutor, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk,
+        )
+        invitation_b = send_invitation(
+            initiator=self.maryland_tutor, tutor_id=self.maryland_tutor.pk, tutee_id=second_maryland_tutee.pk,
+        )
+        respond_to_invitation(invitation_id=invitation_a.pk, responder=self.maryland, accept=True)
+        respond_to_invitation(invitation_id=invitation_b.pk, responder=second_maryland_tutee, accept=True)
+        with self.assertRaises(ValidationError):
+            send_invitation(
+                initiator=self.maryland_tutor, tutor_id=self.maryland_tutor.pk, tutee_id=third_maryland_tutee.pk,
+            )
+        pairing = create_admin_pairing(
+            admin=admin, tutor_id=self.maryland_tutor.pk, tutee_id=third_maryland_tutee.pk,
+            semester_id=self.semester.pk,
+        )
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+        self.assertEqual(
+            Pairing.objects.filter(tutor=self.maryland_tutor, status=PairingStatus.ACTIVE).count(), 3
+        )
+
+    def test_admin_cannot_grant_third_tutee_for_ntnu(self):
+        admin = User.objects.create_superuser(username="PAIR-ADMIN3", password="Admin-password-2026")
+        tutee_b = self.make_tutee("TUTEE300", "乙學生", "Tutee B", self.ntnu_program)
+        tutee_c = self.make_tutee("TUTEE310", "丙學生", "Tutee C", self.ntnu_program)
+        invitation_a = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        invitation_b = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=tutee_b.pk)
+        respond_to_invitation(invitation_id=invitation_a.pk, responder=self.tutee, accept=True)
+        respond_to_invitation(invitation_id=invitation_b.pk, responder=tutee_b, accept=True)
+        with self.assertRaises(ValidationError):
+            create_admin_pairing(
+                admin=admin, tutor_id=self.tutor.pk, tutee_id=tutee_c.pk, semester_id=self.semester.pk,
+            )
+        self.assertEqual(Pairing.objects.filter(tutor=self.tutor, status=PairingStatus.ACTIVE).count(), 2)
+
+    def test_admin_pairing_still_enforces_program_roster_and_existing_tutor_checks(self):
+        admin = User.objects.create_superuser(username="PAIR-ADMIN4", password="Admin-password-2026")
+        with self.assertRaises(ValidationError):
+            create_admin_pairing(
+                admin=admin, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk, semester_id=self.semester.pk,
+            )
+        create_admin_pairing(
+            admin=admin, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk, semester_id=self.semester.pk,
+        )
+        other_tutor = self.make_tutor("TUTOR320", "另一位老師", "Other Tutor")
+        with self.assertRaises(ValidationError):
+            create_admin_pairing(
+                admin=admin, tutor_id=other_tutor.pk, tutee_id=self.tutee.pk, semester_id=self.semester.pk,
+            )
+
+    def test_non_admin_cannot_reach_create_pairing_view(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("tutoring:create_pairing"), {
+            "tutor": self.tutor.pk, "tutee": self.tutee.pk, "semester": self.semester.pk,
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Pairing.objects.filter(tutor=self.tutor, tutee=self.tutee).exists())
 
 
 class ClassWorkflowTests(TestCase):

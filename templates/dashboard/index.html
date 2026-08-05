@@ -126,6 +126,17 @@
             <tbody>{% for pairing in recent_pairings %}<tr><td>{{ pairing.semester }}</td><td>{{ pairing.tutor.bilingual_name }}<small>{{ pairing.tutor.username }}</small></td><td>{{ pairing.tutee.bilingual_name }}<small>{{ pairing.tutee.username }}</small></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
           </table></div>
         {% else %}<div class="empty-state">尚無配對資料 / No matches yet</div>{% endif %}
+        <details class="semester-add-disclosure">
+          <summary>
+            <span class="semester-add-icon" aria-hidden="true">＋</span>
+            <span><strong>Admin 手動配對</strong><small>Admin manual pairing</small></span>
+          </summary>
+          <form class="schedule-form semester-form" action="{% url 'tutoring:create_pairing' %}" method="post">
+            {% csrf_token %}{{ admin_pairing_form.as_div }}
+            <p class="semester-edit-warning">不需雙方邀請，送出後立即建立配對；一般 NTNU 計畫仍維持 Tutor 同時最多 2 位 Tutee，非 NTNU 計畫才能額外安排第 3 位。<br>No invitation needed — the pairing is created immediately. NTNU still caps a tutor at 2 active tutees; only non-NTNU programs allow a 3rd.</p>
+            <button class="button button-primary button-small" type="submit">建立配對 / Create pairing</button>
+          </form>
+        </details>
       </section>
       <section class="panel">
         <div class="panel-heading"><div><span class="eyebrow">PENDING</span><h2>待回覆邀請 <small>Pending invitations</small></h2></div><a class="button button-secondary button-small" href="{% url 'admin:tutoring_matchinginvitation_changelist' %}?status__exact=PENDING">管理全部 / Manage all</a></div>

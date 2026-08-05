@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.models import AuditLog, Role, User
 
 from .forms import (
-    ClassAlertForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm, PairingMessageForm,
+    AdminPairingForm, ClassAlertForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm, PairingMessageForm,
     RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
 )
 from .models import (
@@ -37,6 +37,7 @@ from .services import (
     check_in,
     class_is_valid,
     confirm_counterpart,
+    create_admin_pairing,
     respond_to_invitation,
     reschedule_class,
     report_class_alert,
@@ -323,6 +324,31 @@ def cancel_pending_invitation(request, pk):
     else:
         messages.success(request, "邀請已取消。 / Invitation cancelled.")
     return redirect("accounts:dashboard")
+
+
+@login_required
+@require_POST
+def create_pairing(request):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    form = AdminPairingForm(request.POST)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(f"{reverse('accounts:dashboard')}#matching")
+    try:
+        create_admin_pairing(
+            admin=request.user,
+            tutor_id=form.cleaned_data["tutor"].pk,
+            tutee_id=form.cleaned_data["tutee"].pk,
+            semester_id=form.cleaned_data["semester"].pk,
+        )
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        messages.success(request, "已建立配對。 / Pairing created.")
+    return redirect(f"{reverse('accounts:dashboard')}#matching")
 
 
 @login_required

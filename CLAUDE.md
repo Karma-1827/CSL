@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-05(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -177,6 +177,8 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 - Tutor 因此次接受而配對名額滿(達 2 位 active Tutee)時,該 Tutor 其餘 pending invitations 也會一併自動取消。
 - `Pairing` 對 `(semester, tutor, tutee)` 有永久唯一約束:同學期曾配對過,即使解除後也不能再配同一人。
 - 解除後雙方只要各自仍有名額,可和不同對象重新配對。
+
+**Admin 手動配對**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 12 項,2026-08 新增):Admin 可在 Dashboard「配對管理」頁籤的「Admin 手動配對」表單直接選 Tutor、Tutee、期間建立配對,跳過雙方邀請/接受的流程(`tutoring/services.py::create_admin_pairing()`,`tutoring:create_pairing` URL,一般使用者呼叫會被擋下)。除了「不需要邀請」以外,其餘資格檢查(角色、帳號啟用、`tutor_can_serve_program()` 計畫名單、Tutee 是否已有 active Tutor、是否重複配對)與一般邀請流程完全相同,不會因為走這條路就繞過第 4 項的計畫限制。**唯一的例外是名額**:一般自行配對(邀請流程)每位 Tutor 同學期上限固定 2 位 active Tutee;透過這個功能,Admin 可以讓非 NTNU 合作計畫的 Tutor 額外多帶 1 位(同學期總量上限 3 位,`ADMIN_PAIRING_EXTRA_CAPACITY`/`tutor_has_admin_pairing_capacity()`),但 NTNU 一律維持 2 位上限,Admin 無法用這個功能讓 NTNU 配對超額。建立的 `Pairing.created_by` 會記錄是哪位 Admin 建立的(一般邀請流程建立的維持 `None`),並寫入 `ADMIN_PAIRING_CREATED` 的 `AuditLog`。時數規則(每組每週 2 小時、每組 32 小時、Tutor 每學期 64 小時)目前**沒有**因為這個功能另外放寬,仍套用既有上限,作為尚未定案計畫別時數規則前的 fallback。
 
 ### 4.4 解除配對
 

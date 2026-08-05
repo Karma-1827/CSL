@@ -38,7 +38,7 @@ from tutoring.models import (
     MakeupReview,
     MakeupReviewStatus,
 )
-from tutoring.forms import HoursDownloadForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm
+from tutoring.forms import AdminPairingForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm
 from tutoring.reporting import user_has_hour_records
 from tutoring.services import (
     DAY_LABELS,
@@ -330,6 +330,7 @@ def dashboard(request):
                     "semester", "tutor", "tutee", "initiated_by"
                 )[:20],
                 "recent_pairings": Pairing.objects.select_related("semester", "tutor", "tutee")[:8],
+                "admin_pairing_form": AdminPairingForm(),
                 "pending_pairing_releases": PairingReleaseRequest.objects.filter(
                     status=PairingReleaseStatus.PENDING
                 ).select_related("pairing__semester", "pairing__tutor", "pairing__tutee", "requested_by")[:30],

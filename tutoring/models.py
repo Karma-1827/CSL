@@ -275,6 +275,14 @@ class Pairing(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     end_reason = models.CharField("結束原因 / End reason", max_length=80, blank=True)
+    # Set only for pairings created directly by Admin (see tutoring/services.py::
+    # create_admin_pairing(), MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 12). NULL for the
+    # ordinary invite/accept flow — this field's only purpose is to mark "Admin built this
+    # pairing without going through mutual invitation", per the requirement doc.
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="admin_created_pairings",
+        verbose_name="Admin 建立者 / Created by (admin)",
+    )
 
     class Meta:
         ordering = ["-started_at"]

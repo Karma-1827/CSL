@@ -301,3 +301,20 @@ class HoursDownloadForm(forms.Form):
         if cleaned.get("version") == "detailed" and not cleaned.get("detail_fields"):
             self.add_error("detail_fields", "詳細版請至少選擇一個欄位。 / Select at least one detailed field.")
         return cleaned
+
+
+class AdminPairingForm(forms.Form):
+    """Admin manual pairing (item 12): picks tutor, tutee, and period directly, no invitation."""
+
+    tutor = forms.ModelChoiceField(
+        label="Tutor",
+        queryset=User.objects.filter(role=Role.TUTOR, is_active=True).order_by("username"),
+    )
+    tutee = forms.ModelChoiceField(
+        label="Tutee",
+        queryset=User.objects.filter(role=Role.TUTEE, is_active=True).order_by("username"),
+    )
+    semester = forms.ModelChoiceField(
+        label="學期 / 期間 (Semester / period)",
+        queryset=Semester.objects.filter(is_active=True).order_by("-starts_on"),
+    )
