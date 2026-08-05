@@ -238,6 +238,13 @@ class HoursDownloadForm(forms.Form):
     ends_on = forms.DateField(
         label="截至日期 / End date", required=False, widget=forms.DateInput(attrs={"type": "date"})
     )
+    LANGUAGE_CHOICES = (("zh", "中文版 / Chinese"), ("en", "英文版 / English"))
+    language = forms.ChoiceField(
+        label="證明語言 / Certificate language",
+        choices=LANGUAGE_CHOICES,
+        initial="zh",
+        widget=forms.RadioSelect,
+    )
     version = forms.ChoiceField(
         label="證明版本 / Certificate version",
         choices=VERSION_CHOICES,

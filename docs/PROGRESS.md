@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(158 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(165 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -81,8 +81,15 @@
     - 除了「不需要邀請」,其餘檢查(角色、帳號啟用、`tutor_can_serve_program()` 計畫名單、期間 `applicable_users`、Tutee 是否已有 active Tutor、是否重複配對)與一般邀請流程共用同一套規則——**明確和使用者確認過**:Admin 不能藉此繞過第 4 項的計畫限制。
     - 名額規則採使用者確認的「同學期總量上限 3 位」版本(而非「每計畫各自 +1」):`tutor_has_admin_pairing_capacity()` 對 NTNU 維持原本 2 位上限,非 NTNU 合作計畫可以讓 Admin 多建立第 3 位;一般邀請流程的 `tutor_has_capacity()` 完全沒有變動,只有走這個新功能才可能到 3 位。時數上限(每組每週 2 小時/每組 32 小時/Tutor 每學期 64 小時)刻意不變,先當 fallback,不猜測計畫別新數字。
     - 新增 `tutoring.tests.AdminPairingTests`(6 個測試):一般使用者呼叫會被擋下(service 層與 view 層各一個)、Admin 可直接建立配對且正確標記 `created_by`、非 NTNU 計畫可以拿到第 3 位、NTNU 無法拿到第 3 位、計畫名單與重複配對檢查依然生效。另外用真實登入+表單送出驗證過「NTNU 滿額被擋下」與「非 NTNU 正常建立」兩種情境。
-- migrations:`accounts` 10 個、`tutoring` 19 個。
-- tests:`accounts` 54 個、`tutoring` 104 個,共 158 個,**全數通過**(2026-08-06 重新實際執行確認)。
+  - 第 13 項(時數證明語言選擇)**已完成**:
+    - 下載區「選擇資料範圍」卡片新增證明語言單選(`HoursDownloadForm.language`,`zh`/`en`,預設中文),UI 沿用既有 `.candidate-filter-chips`/`.chip-check` 樣式,沒有新增 CSS class。`build_hours_pdf()` 新增必填的 `language` 參數,依語言只呈現該語言的標題/內文/表格表頭/日期格式(中文用民國紀年、英文用西元),不再像舊版同時把中英標題疊在同一張證明上;標題改成單行置中(y=623),取代原本中文 y=635/英文 y=612 的雙行堆疊排版。
+    - `PartnerProgram` 新增 `tutee_certificate_plan_name_en`/`tutee_certificate_activity_text_en`/`tutor_certificate_plan_name_en`/`tutor_certificate_activity_text_en` 四個欄位(`migration accounts/0011`,既有 `plan_name`/`activity_text` 欄位維持不變、視為隱含中文,不做 `_zh` 改名以降低遷移風險),`migration accounts/0012` 資料遷移為既有 NTNU/MARYLAND/OTHER 三筆計畫回填英文文案草稿。缺少所選語言文案時擋下並顯示「請洽系辦設定」錯誤,不會產生中英夾雜的證明。
+    - 姓名顯示規則維持雙語例外(不受證明語言影響):兩個姓名都有就顯示「中文姓名 / English Name」,只有一個就只顯示該一個、不留斜線,新增 `display_name_markup()` 統一實作此規則,NTNU Tutor 特例分支也一併套用(先前只顯示中文姓名,已修正)。
+    - 除錯過程中用 curl 對真實 dev server 產生 PDF 並人工檢視,抓到一個規則的實作 bug:`mixed_font_markup()`/`display_name_markup()` 原本用 `<b>` 標籤加粗中文姓名,但 ReportLab 的 `<b>` 是透過 Paragraph 預設字型的 `registerFontFamily()` 對應表解析粗體字型;英文證明段落預設字型是 `CertificateSerif`(Liberation Serif,無中文字符),其粗體對應也是純西文字型,導致英文證明上的中文姓名被靜默吃掉(只剩「/ Jamie Chen」,中文名整個消失)。修正方式是兩個函式都改成用明確的 `<font name="...">` 指定中/英文字型,不再依賴 `<b>` 解析,不受所在段落預設字型影響。
+    - 檔名與 `AuditLog`(`HOURS_PDF_PREVIEWED`/`HOURS_PDF_DOWNLOADED`)的 `metadata` 都新增記錄所選語言。
+    - 新增 `tutoring.tests.PartnerProgramCertificateTests` 內 7 個新測試涵蓋:語言影響檔名與 AuditLog metadata、英文證明只出現英文文字與西元日期(不含民國/中文標題)、雙姓名在中英文證明都正確顯示(這條直接鎖住上述修正的 bug,防止回歸)、單姓名在中英文證明都不留斜線、NTNU Tutor 與一般計畫兩種分支缺少英文文案時都正確擋下並顯示「請洽系辦設定」、英文詳細版使用英文表頭與 `Page X of Y` 分頁文字。舊有 6 個測試因 `language` 改為必填欄位補上 `"language": "zh"`。已用 curl 對 dev server 下載 NTNU Tutor(特例分支)與 Maryland Tutor(通用分支)各 4 種語言/版本組合的真實 PDF,轉圖人工檢查排版、姓名顯示、表頭語言、頁碼文字皆正確(含前述 bug 修正前後的對照)。
+- migrations:`accounts` 12 個、`tutoring` 19 個。
+- tests:`accounts` 54 個、`tutoring` 111 個,共 165 個,**全數通過**(2026-08-06 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

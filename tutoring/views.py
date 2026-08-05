@@ -188,6 +188,7 @@ def download_hours(request):
             version=form.cleaned_data["version"],
             detail_fields=form.cleaned_data.get("detail_fields", []),
             program=form.cleaned_data.get("program"),
+            language=form.cleaned_data["language"],
         )
     except ValidationError as error:
         _show_validation_error(request, error)
@@ -195,7 +196,10 @@ def download_hours(request):
     is_preview = request.POST.get("intent") == "preview"
     disposition = "inline" if is_preview else "attachment"
     response = HttpResponse(content, content_type="application/pdf")
-    response["Content-Disposition"] = f'{disposition}; filename="MPTS-certificate-{request.user.username}-{data["ends_on"]}.pdf"'
+    response["Content-Disposition"] = (
+        f'{disposition}; filename="MPTS-certificate-{request.user.username}'
+        f'-{form.cleaned_data["language"]}-{data["ends_on"]}.pdf"'
+    )
     AuditLog.record(
         actor=request.user, target_user=request.user,
         event_type="HOURS_PDF_PREVIEWED" if is_preview else "HOURS_PDF_DOWNLOADED",
@@ -204,6 +208,7 @@ def download_hours(request):
             "starts_on": str(data["starts_on"]), "ends_on": str(data["ends_on"]),
             "hours": str(data["total"]), "version": form.cleaned_data["version"],
             "detail_fields": form.cleaned_data.get("detail_fields", []),
+            "language": form.cleaned_data["language"],
         },
     )
     return response

@@ -1836,7 +1836,10 @@ class PartnerProgramCertificateTests(TestCase):
         today = timezone.localdate()
         response = self.client.post(
             reverse("tutoring:download_hours"),
-            {"mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today, "version": "summary"},
+            {
+                "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
+                "version": "summary", "language": "zh",
+            },
         )
         self.assertRedirects(response, f"{reverse('accounts:dashboard')}#hours")
         messages = list(response.wsgi_request._messages)
@@ -1849,7 +1852,7 @@ class PartnerProgramCertificateTests(TestCase):
             reverse("tutoring:download_hours"),
             {
                 "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
-                "version": "summary", "program": self.ntnu_program.pk,
+                "version": "summary", "program": self.ntnu_program.pk, "language": "zh",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -1863,7 +1866,7 @@ class PartnerProgramCertificateTests(TestCase):
             reverse("tutoring:download_hours"),
             {
                 "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
-                "version": "summary", "program": self.ntnu_program.pk, "intent": "preview",
+                "version": "summary", "program": self.ntnu_program.pk, "intent": "preview", "language": "zh",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -1878,7 +1881,10 @@ class PartnerProgramCertificateTests(TestCase):
         today = timezone.localdate()
         response = self.client.post(
             reverse("tutoring:download_hours"),
-            {"mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today, "version": "summary"},
+            {
+                "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
+                "version": "summary", "language": "zh",
+            },
         )
         self.assertEqual(response.status_code, 200)
         text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
@@ -1926,7 +1932,7 @@ class PartnerProgramCertificateTests(TestCase):
             reverse("tutoring:download_hours"),
             {
                 "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
-                "version": "summary", "program": self.maryland_program.pk,
+                "version": "summary", "program": self.maryland_program.pk, "language": "zh",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -1975,7 +1981,7 @@ class PartnerProgramCertificateTests(TestCase):
             reverse("tutoring:download_hours"),
             {
                 "mode": "range", "starts_on": today - timedelta(days=20), "ends_on": today,
-                "version": "summary", "program": self.ntnu_program.pk,
+                "version": "summary", "program": self.ntnu_program.pk, "language": "zh",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -2018,7 +2024,7 @@ class PartnerProgramCertificateTests(TestCase):
             reverse("tutoring:download_hours"),
             {
                 "mode": "range", "starts_on": today - timedelta(days=20), "ends_on": today,
-                "version": "summary", "program": self.ntnu_program.pk,
+                "version": "summary", "program": self.ntnu_program.pk, "language": "zh",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -2052,4 +2058,126 @@ class PartnerProgramCertificateTests(TestCase):
         self.assertTrue(
             AuditLog.objects.filter(event_type="HOUR_ADJUSTMENT_CREATED", target_user=self.tutor).exists()
         )
+
+    def test_certificate_language_field_controls_filename_and_audit_log(self):
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=10), "ends_on": today,
+                "version": "summary", "program": self.ntnu_program.pk, "language": "en",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f"-en-{today}.pdf", response["Content-Disposition"])
+        log = AuditLog.objects.get(event_type="HOURS_PDF_DOWNLOADED", target_user=self.tutor)
+        self.assertEqual(log.metadata["language"], "en")
+
+    def test_english_certificate_uses_only_english_text_and_gregorian_date(self):
+        from pypdf import PdfReader
+
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        content = build_hours_pdf(data, version="summary", program=self.ntnu_program, language="en")
+        text = PdfReader(BytesIO(content)).pages[0].extract_text()
+        self.assertIn("Certificate of Counseling Practicum", text)
+        self.assertNotIn("實習證明", text)
+        self.assertNotIn("民國", text)
+
+    def test_certificate_shows_bilingual_name_when_both_names_present_in_both_languages(self):
+        """Regression test: <b>陳安然</b> alone (no explicit font) renders blank inside an
+        English-default Paragraph, because ReportLab resolves <b> through the paragraph's
+        registered font family, and CertificateSerif's bold face has no CJK glyphs."""
+        from pypdf import PdfReader
+
+        self.tutor.name_zh = "陳安然"
+        self.tutor.name_en = "Jamie Chen"
+        self.tutor.save()
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        for language in ("zh", "en"):
+            content = build_hours_pdf(data, version="summary", program=self.ntnu_program, language=language)
+            text = PdfReader(BytesIO(content)).pages[0].extract_text()
+            self.assertIn("陳安然", text)
+            self.assertIn("Jamie Chen", text)
+
+    def test_certificate_single_name_shows_no_dangling_slash_in_both_languages(self):
+        from pypdf import PdfReader
+
+        self.tutor.name_zh = "陳安然"
+        self.tutor.name_en = ""
+        self.tutor.save()
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        for language in ("zh", "en"):
+            content = build_hours_pdf(data, version="summary", program=self.ntnu_program, language=language)
+            text = PdfReader(BytesIO(content)).pages[0].extract_text()
+            self.assertIn("陳安然", text)
+            self.assertNotIn("/", text)
+
+    def test_missing_english_certificate_text_raises_clear_error(self):
+        self.ntnu_program.tutor_certificate_plan_name_en = ""
+        self.ntnu_program.tutor_certificate_activity_text_en = ""
+        self.ntnu_program.save()
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        # The NTNU tutor branch has hardcoded English text and does not depend on the
+        # per-program plan_name_en/activity_text_en fields, so it stays unaffected;
+        # blank out its title instead to exercise the same validation path.
+        self.ntnu_program.tutor_certificate_title_en = ""
+        self.ntnu_program.save()
+        with self.assertRaises(ValidationError) as ctx:
+            build_hours_pdf(data, version="summary", program=self.ntnu_program, language="en")
+        self.assertIn("請洽系辦設定", str(ctx.exception))
+
+    def test_missing_english_certificate_text_raises_clear_error_for_generic_program(self):
+        self.maryland_program.tutee_certificate_plan_name_en = ""
+        self.maryland_program.save()
+        maryland_tutee_roster = RosterEntry.objects.create(
+            student_id="PP-TUTEE-MD4", name_zh="方案馬里蘭學生四", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.maryland_program,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="PP-TUTEE-MD4", password="Password-2026", role=Role.TUTEE, roster_entry=maryland_tutee_roster
+        )
+        data = {
+            "user": maryland_tutee, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        with self.assertRaises(ValidationError) as ctx:
+            build_hours_pdf(data, version="summary", program=self.maryland_program, language="en")
+        self.assertIn("請洽系辦設定", str(ctx.exception))
+
+    def test_english_detailed_certificate_uses_english_table_headers_and_pagination_label(self):
+        from pypdf import PdfReader
+
+        past_date = timezone.localdate() - timedelta(days=12)
+        self._make_verified_session(self.pairing, self.tutee, past_date)
+        self.client.force_login(self.tutor)
+        today = timezone.localdate()
+        response = self.client.post(
+            reverse("tutoring:download_hours"),
+            {
+                "mode": "range", "starts_on": today - timedelta(days=20), "ends_on": today,
+                "version": "detailed", "program": self.ntnu_program.pk, "language": "en",
+                "detail_fields": ["date", "nationality", "level", "hours"],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn("Hours Detail", text)
+        self.assertIn("Page 1 of 1", text)
+        self.assertIn("Nationality", text)
+        self.assertIn("Chinese level", text)
+        self.assertNotIn("輔導時數明細", text)
 

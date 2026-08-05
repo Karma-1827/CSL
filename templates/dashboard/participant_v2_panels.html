@@ -29,6 +29,7 @@
             <label>{{ hours_download_form.semester.label }}{{ hours_download_form.semester }}</label>
             <label>{{ hours_download_form.starts_on.label }}{{ hours_download_form.starts_on }}</label>
             <label>{{ hours_download_form.ends_on.label }}{{ hours_download_form.ends_on }}</label>
+            <fieldset class="candidate-filter-chips"><legend>{{ hours_download_form.language.label }}</legend>{% for radio in hours_download_form.language %}<label class="chip-check">{{ radio.tag }}<span>{{ radio.choice_label }}</span></label>{% endfor %}</fieldset>
           </div>
         </section>
         <section class="certificate-option-card certificate-version-card">

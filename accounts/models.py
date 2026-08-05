@@ -62,10 +62,16 @@ class PartnerProgram(models.Model):
         "Tutee 證明標題(英) / Tutee certificate title (English)", max_length=100, blank=True
     )
     tutee_certificate_plan_name = models.CharField(
-        "Tutee 證明計畫名稱 / Tutee certificate plan name", max_length=100, blank=True
+        "Tutee 證明計畫名稱(中) / Tutee certificate plan name (Chinese)", max_length=100, blank=True
+    )
+    tutee_certificate_plan_name_en = models.CharField(
+        "Tutee 證明計畫名稱(英) / Tutee certificate plan name (English)", max_length=150, blank=True
     )
     tutee_certificate_activity_text = models.CharField(
-        "Tutee 證明活動描述 / Tutee certificate activity text", max_length=200, blank=True
+        "Tutee 證明活動描述(中) / Tutee certificate activity text (Chinese)", max_length=200, blank=True
+    )
+    tutee_certificate_activity_text_en = models.CharField(
+        "Tutee 證明活動描述(英) / Tutee certificate activity text (English)", max_length=300, blank=True
     )
     tutor_certificate_filename = models.CharField(
         "Tutor 證明模板檔名 / Tutor certificate template filename", max_length=150, blank=True,
@@ -78,10 +84,16 @@ class PartnerProgram(models.Model):
         "Tutor 證明標題(英) / Tutor certificate title (English)", max_length=100, blank=True
     )
     tutor_certificate_plan_name = models.CharField(
-        "Tutor 證明計畫名稱 / Tutor certificate plan name", max_length=100, blank=True
+        "Tutor 證明計畫名稱(中) / Tutor certificate plan name (Chinese)", max_length=100, blank=True
+    )
+    tutor_certificate_plan_name_en = models.CharField(
+        "Tutor 證明計畫名稱(英) / Tutor certificate plan name (English)", max_length=150, blank=True
     )
     tutor_certificate_activity_text = models.CharField(
-        "Tutor 證明活動描述 / Tutor certificate activity text", max_length=200, blank=True
+        "Tutor 證明活動描述(中) / Tutor certificate activity text (Chinese)", max_length=200, blank=True
+    )
+    tutor_certificate_activity_text_en = models.CharField(
+        "Tutor 證明活動描述(英) / Tutor certificate activity text (English)", max_length=300, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

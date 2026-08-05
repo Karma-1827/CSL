@@ -139,8 +139,13 @@ def _register_certificate_fonts():
     return font_name, bold_font_name, english_font_name, english_bold_font_name
 
 
-def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
-    """Overlay a formal certificate onto the department-provided PDF template."""
+def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, language="zh"):
+    """Overlay a formal certificate onto the department-provided PDF template.
+
+    `language` selects a monolingual certificate ("zh" or "en") — see
+    MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 13. The one exception is the user's own name,
+    which always follows display_name_markup()'s rule regardless of certificate language.
+    """
     from pypdf import PdfReader, PdfWriter
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
@@ -149,6 +154,10 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfgen import canvas
     from reportlab.platypus import Paragraph, Table, TableStyle
+
+    if language not in {"zh", "en"}:
+        raise ValidationError("證明語言不正確。 / Invalid certificate language.")
+    is_zh = language == "zh"
 
     font_name, bold_font_name, english_font_name, english_bold_font_name = _register_certificate_fonts()
 
@@ -163,16 +172,26 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
         title_zh = program.tutee_certificate_title_zh
         title_en = program.tutee_certificate_title_en
         plan_name = program.tutee_certificate_plan_name
+        plan_name_en = program.tutee_certificate_plan_name_en
         activity = program.tutee_certificate_activity_text
+        activity_en = program.tutee_certificate_activity_text_en
     else:
         template_name = program.tutor_certificate_filename
         title_zh = program.tutor_certificate_title_zh
         title_en = program.tutor_certificate_title_en
         plan_name = program.tutor_certificate_plan_name
+        plan_name_en = program.tutor_certificate_plan_name_en
         activity = program.tutor_certificate_activity_text
+        activity_en = program.tutor_certificate_activity_text_en
     if not template_name:
         raise ValidationError(
             "此合作計畫尚未設定證明模板，請聯絡系辦。 / This partner program has no certificate template configured."
+        )
+    title = title_zh if is_zh else title_en
+    if not title or (not is_zh and (not plan_name_en or not activity_en)):
+        raise ValidationError(
+            "此合作計畫尚未設定所選語言的證明文案，請洽系辦設定。 / "
+            "This partner program has no certificate text configured for the selected language yet."
         )
     template_path = settings.BASE_DIR / "tutoring/resources/certificate_templates" / template_name
 
@@ -183,6 +202,9 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
     def roc_date(value):
         return f"中華民國 {value.year - 1911} 年 {value.month} 月 {value.day} 日"
 
+    def gregorian_date(value):
+        return f"{value.strftime('%B')} {value.day}, {value.year}"
+
     def period_markup():
         start, end = data["starts_on"], data["ends_on"]
         return (
@@ -190,6 +212,13 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
             f"{start.month} 月 {start.day} 日至民國 "
             f"<font name=\"{english_bold_font_name}\">{end.year - 1911}</font> 年 "
             f"{end.month} 月 {end.day} 日"
+        )
+
+    def period_markup_en():
+        start, end = data["starts_on"], data["ends_on"]
+        return (
+            f"{start.strftime('%B')} {start.day}, {start.year} to "
+            f"{end.strftime('%B')} {end.day}, {end.year}"
         )
 
     def month_period_markup():
@@ -209,83 +238,141 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
             f"{bold_number(end_year)}年{bold_number(end.month)}月"
         )
 
+    def month_period_markup_en():
+        start, end = data["starts_on"], data["ends_on"]
+        if start.year == end.year and start.month == end.month:
+            return f"{start.strftime('%B')} {start.year}"
+        if start.year == end.year:
+            return f"{start.strftime('%B')}–{end.strftime('%B')} {start.year}"
+        return f"{start.strftime('%B')} {start.year} – {end.strftime('%B')} {end.year}"
+
     latin_run_pattern = re.compile(r"[A-Za-z0-9][A-Za-z0-9 .,/():+\-]*")
 
     def mixed_font_markup(value, *, bold=False):
-        """Use Times New Roman for Latin text while retaining Kaiti for Chinese."""
+        """Use Times New Roman for Latin text while retaining Kaiti for Chinese.
+
+        Every run (Latin and CJK alike) gets an explicit <font name="..."> tag rather
+        than relying on the surrounding Paragraph's default font or on <b> resolving
+        through registerFontFamily(): the English certificate paragraphs default to
+        CertificateSerif, whose registered "bold" face is Latin-only, so a bare <b>
+        around Chinese text there silently drops the glyphs instead of rendering them.
+        """
         value = str(value)
         result = []
         cursor = 0
         latin_font = english_bold_font_name if bold else english_font_name
+        cjk_font = bold_font_name if bold else font_name
         for match in latin_run_pattern.finditer(value):
-            result.append(escape(value[cursor:match.start()]))
+            if match.start() > cursor:
+                result.append(f'<font name="{cjk_font}">{escape(value[cursor:match.start()])}</font>')
             result.append(f'<font name="{latin_font}">{escape(match.group())}</font>')
             cursor = match.end()
-        result.append(escape(value[cursor:]))
-        markup = "".join(result)
-        return f"<b>{markup}</b>" if bold else markup
+        if cursor < len(value):
+            result.append(f'<font name="{cjk_font}">{escape(value[cursor:])}</font>')
+        return "".join(result)
+
+    def display_name_markup():
+        """Name display is the one exception to the single-language rule (item 13): both
+        names present always show "中文姓名 / English Name" regardless of certificate
+        language; only one present shows just that one, with no dangling slash.
+
+        Font names are set explicitly (not via <b>) for the same reason documented in
+        mixed_font_markup(): <b> resolution depends on the surrounding paragraph's
+        default font family, which differs between the Chinese and English certificates.
+        """
+        if user.name_zh and user.name_en:
+            return (
+                f'<font name="{bold_font_name}">{escape(user.name_zh)}</font> / '
+                f'<font name="{english_bold_font_name}">{escape(user.name_en)}</font>'
+            )
+        return mixed_font_markup(user.bilingual_name, bold=True)
 
     certificate_lead = None
     is_ntnu_tutor = program.code == "NTNU" and user.role == Role.TUTOR
     if is_ntnu_tutor:
-        education_level_labels = {
+        education_level_labels_zh = {
             EducationLevel.BACHELOR: "大學部",
             EducationLevel.MASTER: "碩士班",
             EducationLevel.DOCTORAL: "博士班",
         }
-        level_label = education_level_labels.get(roster.education_level, "") if roster else ""
-        certificate_lead = (
-            f"本系{level_label}學生 "
-            f'<font name="{bold_font_name}"><b>{escape(user.name_zh)}</b></font>，學號'
-            f'<font name="{english_bold_font_name}">{escape(user.username)}</font>，'
-        )
-        certificate_paragraph = (
-            f"於{month_period_markup()}，"
-            f"於本校擔任國際生華語輔導老師，總計授課 "
-            f'<font name="{english_bold_font_name}">{hours_text(data["total"])}</font>'
-            f"<b> 小時</b>。特此證明"
-        )
-        summary_paragraph_style = ParagraphStyle(
-            "CertificateSummaryBodyNtnuTutor", fontName=font_name, fontSize=20, leading=43,
-            alignment=TA_JUSTIFY, firstLineIndent=0,
-            textColor=colors.HexColor("#151515"), wordWrap="CJK",
-        )
-    else:
-        if user.name_zh and user.name_en:
-            display_name = (
-                f"<b>{escape(user.name_zh)}</b> / "
-                f'<font name="{english_bold_font_name}">{escape(user.name_en)}</font>'
+        education_level_labels_en = {
+            EducationLevel.BACHELOR: "undergraduate",
+            EducationLevel.MASTER: "graduate (Master's)",
+            EducationLevel.DOCTORAL: "doctoral",
+        }
+        if is_zh:
+            level_label = education_level_labels_zh.get(roster.education_level, "") if roster else ""
+            certificate_lead = f"本系{level_label}學生 {display_name_markup()}，學號" \
+                f'<font name="{english_bold_font_name}">{escape(user.username)}</font>，'
+            certificate_paragraph = (
+                f"於{month_period_markup()}，"
+                f"於本校擔任國際生華語輔導老師，總計授課 "
+                f'<font name="{english_bold_font_name}">{hours_text(data["total"])}</font>'
+                f"<b> 小時</b>。特此證明"
             )
         else:
-            display_name = mixed_font_markup(user.bilingual_name, bold=True)
-        certificate_paragraph = (
-            f"茲證明 {display_name} 同學（學號："
-            f'<font name="{english_bold_font_name}">{escape(user.username)}</font>），'
-            f"於 <b>{period_markup()}</b> 期間，參與國立臺灣師範大學華語文教學系"
-            f"「<b>{plan_name}</b>」，{activity}共計 "
-            f'<font name="{english_bold_font_name}">{hours_text(data["total"])}</font>'
-            f"<b> 小時</b>，特此證明。"
-        )
+            level_label = education_level_labels_en.get(roster.education_level, "") if roster else ""
+            certificate_lead = (
+                f'<font name="{english_font_name}">This certifies that {level_label} student</font> '
+                f"{display_name_markup()}"
+                f'<font name="{english_font_name}">, Student ID {escape(user.username)},</font>'
+            )
+            certificate_paragraph = (
+                f'<font name="{english_font_name}">served as a Chinese tutor for international '
+                f"students at National Taiwan Normal University during {month_period_markup_en()}, "
+                f'completing a total of <font name="{english_bold_font_name}">{hours_text(data["total"])}</font>'
+                f' teaching hours. This certifies the above.</font>'
+            )
         summary_paragraph_style = ParagraphStyle(
-            "CertificateSummaryBody", fontName=font_name, fontSize=15, leading=34,
-            alignment=TA_JUSTIFY, firstLineIndent=30, textColor=colors.HexColor("#151515"),
-            wordWrap="CJK",
+            "CertificateSummaryBodyNtnuTutor", fontName=font_name if is_zh else english_font_name,
+            fontSize=20 if is_zh else 15, leading=43 if is_zh else 26,
+            alignment=TA_JUSTIFY, firstLineIndent=0,
+            textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
+        )
+    else:
+        display_name = display_name_markup()
+        if is_zh:
+            certificate_paragraph = (
+                f"茲證明 {display_name} 同學（學號："
+                f'<font name="{english_bold_font_name}">{escape(user.username)}</font>），'
+                f"於 <b>{period_markup()}</b> 期間，參與國立臺灣師範大學華語文教學系"
+                f"「<b>{plan_name}</b>」，{activity}共計 "
+                f'<font name="{english_bold_font_name}">{hours_text(data["total"])}</font>'
+                f"<b> 小時</b>，特此證明。"
+            )
+        else:
+            certificate_paragraph = (
+                f'<font name="{english_font_name}">This is to certify that</font> {display_name} '
+                f'<font name="{english_font_name}">(Student ID: {escape(user.username)}) participated in the '
+                f'&#8220;<b>{escape(plan_name_en)}</b>&#8221; of the Department of Chinese as a Second '
+                f"Language, National Taiwan Normal University, during <b>{period_markup_en()}</b>, "
+                f'{escape(activity_en)}, completing a total of '
+                f'<font name="{english_bold_font_name}">{hours_text(data["total"])}</font> hours. '
+                f"This certificate is issued accordingly.</font>"
+            )
+        summary_paragraph_style = ParagraphStyle(
+            "CertificateSummaryBody", fontName=font_name if is_zh else english_font_name,
+            fontSize=15 if is_zh else 12.5, leading=34 if is_zh else 24,
+            alignment=TA_JUSTIFY, firstLineIndent=30 if is_zh else 0,
+            textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
         )
     detail_paragraph_style = ParagraphStyle(
-        "CertificateDetailBody", fontName=font_name,
-        fontSize=15.5 if is_ntnu_tutor else 14,
-        leading=34 if is_ntnu_tutor else 31,
-        alignment=TA_JUSTIFY, firstLineIndent=0 if is_ntnu_tutor else 28,
+        "CertificateDetailBody", fontName=font_name if is_zh else english_font_name,
+        fontSize=(15.5 if is_ntnu_tutor else 14) if is_zh else 12,
+        leading=(34 if is_ntnu_tutor else 31) if is_zh else 22,
+        alignment=TA_JUSTIFY, firstLineIndent=(0 if is_ntnu_tutor else 28) if is_zh else 0,
         textColor=colors.HexColor("#151515"),
-        wordWrap="CJK",
+        wordWrap="CJK" if is_zh else None,
     )
     summary_lead_style = ParagraphStyle(
-        "CertificateSummaryLead", fontName=font_name, fontSize=21, leading=28,
-        alignment=0, textColor=colors.HexColor("#151515"), wordWrap="CJK",
+        "CertificateSummaryLead", fontName=font_name if is_zh else english_font_name,
+        fontSize=21 if is_zh else 15, leading=28 if is_zh else 20,
+        alignment=0, textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
     )
     detail_lead_style = ParagraphStyle(
-        "CertificateDetailLead", fontName=font_name, fontSize=17, leading=23,
-        alignment=0, textColor=colors.HexColor("#151515"), wordWrap="CJK",
+        "CertificateDetailLead", fontName=font_name if is_zh else english_font_name,
+        fontSize=17 if is_zh else 13, leading=23 if is_zh else 18,
+        alignment=0, textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
     )
     small_style = ParagraphStyle(
         "CertificateCell", fontName=font_name, fontSize=9.5, leading=12,
@@ -293,12 +380,20 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
     )
 
     ordered_fields = [key for key in ("date", "nationality", "level", "hours") if key in detail_fields]
-    field_config = {
-        "date": (f"日期<br/><font name='{english_font_name}' size='8'>Date</font>", 1.2),
-        "nationality": (f"學生國籍<br/><font name='{english_font_name}' size='8'>Nationality</font>", 1.35),
-        "level": (f"學生程度<br/><font name='{english_font_name}' size='8'>Chinese level</font>", 1.3),
-        "hours": (f"時數<br/><font name='{english_font_name}' size='8'>Hours</font>", .75),
-    }
+    if is_zh:
+        field_config = {
+            "date": (f"日期<br/><font name='{english_font_name}' size='8'>Date</font>", 1.2),
+            "nationality": (f"學生國籍<br/><font name='{english_font_name}' size='8'>Nationality</font>", 1.35),
+            "level": (f"學生程度<br/><font name='{english_font_name}' size='8'>Chinese level</font>", 1.3),
+            "hours": (f"時數<br/><font name='{english_font_name}' size='8'>Hours</font>", .75),
+        }
+    else:
+        field_config = {
+            "date": (f"<font name='{english_font_name}'>Date</font>", 1.2),
+            "nationality": (f"<font name='{english_font_name}'>Nationality</font>", 1.35),
+            "level": (f"<font name='{english_font_name}'>Chinese level</font>", 1.3),
+            "hours": (f"<font name='{english_font_name}'>Hours</font>", .75),
+        }
     detail_rows = []
     for section in data["sections"]:
         for row in section["rows"]:
@@ -323,7 +418,7 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
     page_width, _ = A4
     total_pages = len(chunks)
     for page_index, chunk in enumerate(chunks, start=1):
-        if title_zh:
+        if is_zh:
             # DFKai-SB has no separate bold face. Fill-and-stroke preserves the
             # requested Kaiti typeface while giving the title a visible bold weight.
             pdf_canvas.saveState()
@@ -331,18 +426,20 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
             pdf_canvas.setStrokeColor(colors.HexColor("#151515"))
             pdf_canvas.setLineWidth(.22)
             title_text = pdf_canvas.beginText(
-                (page_width - pdfmetrics.stringWidth(title_zh, bold_font_name, 22)) / 2,
-                635,
+                (page_width - pdfmetrics.stringWidth(title, bold_font_name, 22)) / 2,
+                623,
             )
             title_text.setFont(bold_font_name, 22)
             title_text.setTextRenderMode(2)
-            title_text.textLine(title_zh)
+            title_text.textLine(title)
             pdf_canvas.drawText(title_text)
             pdf_canvas.restoreState()
-        if title_en:
+        else:
+            # A single English title stands alone (no Chinese title above it), so it gets a
+            # larger size than the old secondary-line English title did.
             pdf_canvas.setFillColor(colors.HexColor("#151515"))
-            pdf_canvas.setFont(english_bold_font_name, 13)
-            pdf_canvas.drawCentredString(page_width / 2, 612, title_en)
+            pdf_canvas.setFont(english_bold_font_name, 18)
+            pdf_canvas.drawCentredString(page_width / 2, 623, title)
 
         is_summary = version == "summary"
         paragraph_style = summary_paragraph_style if is_summary else detail_paragraph_style
@@ -364,19 +461,27 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
         paragraph.drawOn(pdf_canvas, paragraph_x, paragraph_y)
 
         if version == "detailed":
-            label = "輔導時數明細" if page_index == 1 else "輔導時數明細（續）"
+            if is_zh:
+                label = "輔導時數明細" if page_index == 1 else "輔導時數明細（續）"
+            else:
+                label = "Hours Detail" if page_index == 1 else "Hours Detail (continued)"
             pdf_canvas.setFillColor(colors.HexColor("#392E26"))
-            pdf_canvas.setFont(bold_font_name, 11.5)
+            pdf_canvas.setFont(bold_font_name if is_zh else english_bold_font_name, 11.5)
             pdf_canvas.drawString(72, 419, label)
             page_number_style = ParagraphStyle(
                 "CertificatePageNumber", fontName=bold_font_name, fontSize=11.5, leading=14,
                 alignment=TA_RIGHT, textColor=colors.HexColor("#392E26"),
             )
-            page_number = Paragraph(
-                f"第 {page_index} 頁，共 {total_pages} 頁 / "
-                f'<font name="{english_bold_font_name}">Page {page_index} of {total_pages}</font>',
-                page_number_style,
-            )
+            if is_zh:
+                page_number_text = (
+                    f"第 {page_index} 頁，共 {total_pages} 頁 / "
+                    f'<font name="{english_bold_font_name}">Page {page_index} of {total_pages}</font>'
+                )
+            else:
+                page_number_text = (
+                    f'<font name="{english_bold_font_name}">Page {page_index} of {total_pages}</font>'
+                )
+            page_number = Paragraph(page_number_text, page_number_style)
             page_number.wrap(280, 16)
             page_number.drawOn(pdf_canvas, page_width - 352, 416)
 
@@ -384,7 +489,8 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
             if chunk:
                 body = [[Paragraph(mixed_font_markup(value), small_style) for value in row] for row in chunk]
             else:
-                body = [[Paragraph("此期間沒有有效時數紀錄 / No verified records", small_style)] + [""] * (len(headers) - 1)]
+                empty_text = "此期間沒有有效時數紀錄 / No verified records" if is_zh else "No verified records for this period"
+                body = [[Paragraph(empty_text, small_style)] + [""] * (len(headers) - 1)]
             weights = [field_config[key][1] for key in ordered_fields]
             total_weight = sum(weights) or 1
             column_widths = [465 * weight / total_weight for weight in weights]
@@ -412,9 +518,13 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None):
         pdf_canvas.setStrokeColor(colors.HexColor("#171310"))
         pdf_canvas.setLineWidth(.3)
         issue_date = pdf_canvas.beginText(62, 65.5)
-        issue_date.setFont(font_name, 22)
-        issue_date.setTextRenderMode(2)
-        issue_date.textLine(roc_date(data["generated_at"].date()))
+        if is_zh:
+            issue_date.setFont(font_name, 22)
+            issue_date.setTextRenderMode(2)
+            issue_date.textLine(roc_date(data["generated_at"].date()))
+        else:
+            issue_date.setFont(english_bold_font_name, 18)
+            issue_date.textLine(gregorian_date(data["generated_at"].date()))
         pdf_canvas.drawText(issue_date)
         pdf_canvas.restoreState()
         pdf_canvas.showPage()

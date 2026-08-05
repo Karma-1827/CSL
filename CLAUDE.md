@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -270,6 +270,9 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 本學期證明於學期結束後第 3 天 00:00 開放;已過去學期可隨時下載。
 - 可選整學期或自訂日期;自訂範圍不可涵蓋任何尚未開放下載的學期。
 - PDF 有摘要版與詳細版;詳細版欄位可選日期、學生國籍、學生程度、時數,輸出順序固定,每頁最多 8 筆並重複證明內文。
+- 下載區「選擇資料範圍」卡片新增「證明語言」單選(`HoursDownloadForm.language`,`zh`/`en`,預設中文),`build_hours_pdf()` 依此參數只呈現**單一語言**的標題、內文、表格表頭與日期格式(中文用民國紀年、英文用西元 `February 19, 2026` 格式),不會像 2026-08 前的舊版同時把中英文疊在同一張證明上;標題單行置中(y=623)。缺少所選語言文案(見下方 `PartnerProgram` 英文欄位)時擋下並顯示「請洽系辦設定」錯誤,不產生中英夾雜或壞掉的 PDF。姓名顯示是唯一不受證明語言影響的例外:兩個姓名都有一律顯示「中文姓名 / English Name」,只有一個就只顯示該一個且不留斜線(`display_name_markup()`),NTNU Tutor 特例分支也套用同一規則。檔名與 `AuditLog` metadata 都會記錄所選語言。
+  - 實作這條規則時踩過一個 ReportLab 陷阱:Paragraph markup 的 `<b>` 標籤是透過該段落**預設字型**的 `registerFontFamily()` 對應表找粗體字型,不是「维持原字型只是加粗」。英文證明段落預設字型是 `CertificateSerif`(Liberation Serif,無中文字符),若中文姓名只包在 `<b>...</b>` 裡而不明確指定字型,會被解析成西文粗體字型、中文字符整個消失不畫出來。因此姓名與任何「中西文混排且需要粗體」的文字一律要用明確的 `<font name="CertificateKai-Bold">`/`<font name="CertificateSerif-Bold">` 分別包住中/英文片段,不能依賴 `<b>` 自動解析。
+- Tutor 版證明底圖與英文文案:`PartnerProgram` 除既有中文的 `tutee_certificate_plan_name`/`tutee_certificate_activity_text`(及 Tutor 版對應欄位,皆隱含中文,未改名加 `_zh` 後綴以降低遷移風險)外,另有 `tutee_certificate_plan_name_en`/`tutee_certificate_activity_text_en`/`tutor_certificate_plan_name_en`/`tutor_certificate_activity_text_en` 四個英文對應欄位,新增合作計畫時中英文案都要填,只填中文會導致該計畫無法產生英文證明。
 - PDF 底圖:`tutoring/resources/certificate_templates/`;字型:`assets/fonts/`;模板檔名、計畫名稱、活動描述文字皆從對應 `PartnerProgram` 欄位讀取,不再寫死於程式碼。
 - 若某計畫缺少對應角色(Tutor/Tutee)的證明模板檔名,下載時會擋下並顯示錯誤,而非產生壞掉的 PDF(`build_hours_pdf()` 開頭檢查)。
 - PDF 產製位於 `tutoring/reporting.py`,使用 ReportLab 疊字後以 pypdf 合併底圖。
