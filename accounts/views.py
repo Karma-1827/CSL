@@ -996,6 +996,9 @@ def roster_import_quick(request, category_code):
     if category_code == "TUTOR":
         role, program = Role.TUTOR, None
         category_label = "華語系學生 / CSL students"
+    elif category_code.startswith("TUTOR:"):
+        program = get_object_or_404(PartnerProgram, code=category_code[len("TUTOR:"):], is_active=True)
+        role, category_label = Role.TUTOR, f"{program.name_zh}修課 Tutor / {program.name_en} tutor roster"
     else:
         program = get_object_or_404(PartnerProgram, code=category_code, is_active=True)
         role, category_label = Role.TUTEE, program.name_zh

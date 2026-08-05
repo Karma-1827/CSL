@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-05(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批與第二批第 15 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-05(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -31,7 +31,7 @@
 - 不可由公開學生名冊註冊;用 `createsuperuser` 或 Django Admin 建立。
 - 後台入口:`/system-admin/`。
 - 管理學生名冊、帳號、帳號狀態、口語能力證明與稽核紀錄。
-- 自訂 Admin dashboard「名冊匯入」頁籤預設是**分類卡片式快速匯入**(`accounts:roster_import_quick`):固定的「華語系學生」卡片(Tutor,無計畫)+ 每個啟用中 `PartnerProgram` 各一張卡片(Tutee,對應該計畫)+ 一張連到 Django Admin 新增計畫的「新增合作計畫」卡片;每張卡片只接受**單欄學號清單**(容忍標題列、中文表頭列等雜訊,`accounts/services.py::_read_single_column_values()`/`import_roster_ids()`),角色與計畫完全由**上傳到哪張卡片**決定,不看檔案內容,對應系辦「每種身分分開一份學號檔案」的實際流程。姓名、學制、身份別等欄位不在此匯入,由使用者註冊時自行填寫(見第 4.1 節)。
+- 自訂 Admin dashboard「名冊匯入」頁籤預設是**分類卡片式快速匯入**(`accounts:roster_import_quick`):固定的「華語系學生」卡片(Tutor,無計畫)+ 每個啟用中 `PartnerProgram` 各兩張卡片(Tutee 學生名單,`category_code` 為程式碼本身;該計畫的 Tutor 修課名單,`category_code` 為 `TUTOR:<程式碼>`,2026-08 新增,見第 4.3 節馬里蘭修課 Tutor 限定配對)+ 一張連到 Django Admin 新增計畫的「新增合作計畫」卡片;每張卡片只接受**單欄學號清單**(容忍標題列、中文表頭列等雜訊,`accounts/services.py::_read_single_column_values()`/`import_roster_ids()`),角色與計畫完全由**上傳到哪張卡片**決定,不看檔案內容,對應系辦「每種身分分開一份學號檔案」的實際流程。姓名、學制、身份別等欄位不在此匯入,由使用者註冊時自行填寫(見第 4.1 節)。Tutor 修課名單卡片對大多數計畫(如 NTNU)其實用不到,因為一般 Tutor 本來就不需要被限縮計畫;只有像馬里蘭這種「需要限定特定 Tutor 名單」的計畫才會實際用它。
 - 舊版「完整欄位」CSV/Excel(.xlsx)匯入(含姓名、學制、身份別、計畫代碼等欄位)保留在同頁籤的「進階匯入」摺疊區塊(`accounts:roster_import`),仍提供範本下載。
 - 兩種匯入方式**皆改為**:只新增不覆蓋既有學號,學號已存在(或檔案內重複)則靜默略過(保留系統內既有資料),只匯入真正新的學號。快速匯入本來就只有「學號格式是否合法」一種檢查,不合法的列略過並提示警告,不擋下整批。進階完整欄位匯入仍對**逐列必填/合法性驗證**(姓名、role、學制、身份別、計畫代碼等)維持 all-or-nothing:只要有任一列驗證失敗,整批都不寫入;只有「學號重複/已存在」這件事從「整批擋下」改成「該列靜默略過」。
 - 自訂 Admin dashboard 顯示名冊/註冊/角色/配對/邀請統計。
@@ -163,10 +163,12 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 
 Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、加強項目、星期、時段做複合篩選(`tutoring/services.py::anonymous_tutee_candidates()` 的 `filters` 參數;UI 見 `templates/dashboard/index.html` 的 `find-tutee` 分頁,GET 表單提交回 `accounts:dashboard`)。篩選邏輯:性別/華語程度/母語皆為精準比對(母語欄位是下拉選單,選項與註冊表單共用同一份 `static/js/profile-options.js` 產生的語言清單,值為 `Intl.DisplayNames` 產生的雙語字串,不是自由關鍵字);加強項目為「已選項目須全部命中」(AND);星期與時段各自為「命中任一已選值即算符合」(OR),兩者之間再取交集。篩選只是在既有候選清單上做子集過濾,不會新增可見欄位,也不做排序或推薦。篩選卡片預設收合,面板標題右上角的「搜尋條件 / Search filters」是 `<details>/<summary>` 原生收合元件(`.candidate-filter-disclosure`/`.candidate-filter-toggle`,無 JS),點擊才展開,取代原本常駐的「配對前不顯示姓名與學號」提示(該提示仍保留在側邊欄 `sidebar-note`)。Tutee(Maryland)瀏覽 Tutor 一側也已比照補上同一套機制(`anonymous_tutor_candidates()` 的 `filters` 參數,UI 見 `find-tutor` 分頁);差異是 Tutor 沒有對應「華語程度」與「加強項目」的欄位,所以只提供性別、母語、星期、時段四項,其餘篩選邏輯(精準比對/OR/收合式 UI)完全相同。
 
+**2026-08 起 Tutor 與 Tutee 的可見/可配對範圍改依計畫分流**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 4 項,馬里蘭大學語言學伴計畫):Admin 可在名冊匯入頁籤為每個合作計畫多匯入一張「{計畫}修課 Tutor」卡片(`accounts:roster_import_quick` 的 `category_code` 用 `TUTOR:<程式碼>`,例如 `TUTOR:MARYLAND`),把特定 Tutor 學號的 `RosterEntry.program` 設成該計畫(沿用 Tutee 早已使用的同一個欄位,只是這次允許 Tutor 也設定;`RosterEntry.clean()` 本來就沒有禁止 Tutor 有 `program`,只是先前的名冊匯入流程沒有入口可以這樣做)。`tutoring/services.py::tutor_can_serve_program(tutor, program)` 是唯一的判斷依據:沒有被列入任何計畫名單的一般 Tutor(`roster_entry.program` 為空)只能看到/配對 NTNU 的 Tutee;被列入某計畫修課名單的 Tutor 只能看到/配對「同一個計畫」的 Tutee,且**馬里蘭計畫額外要求該 Tutor 的 `education_level` 必須是大學部**(語言學伴課程限大學部,即使名單意外收錄了非大學部學號也會被這條規則擋下,不是只靠學制單獨判斷,因為不是所有大學部生都修這門課)。這條規則同時套用在:`anonymous_tutee_candidates()`(Tutor 瀏覽學生候選人清單)、`anonymous_tutor_candidates()`(Tutee 瀏覽老師候選人清單)、`send_invitation()`(不論是誰發起邀請都會檢查,不能繞過畫面直接呼叫 API 建立不符資格的邀請)。`tutoring/services.py::user_program(user)`(item 15 引入)也已同步更新,讓有修課名單的 Tutor 能正確對應到該計畫的期間,不再永遠被當成沒有計畫的一般 Tutor。
+
 邀請規則:
 
 - 邀請有效 5 天;過期後 `EXPIRED`。
-- Tutor 必須有 APPROVED 口語能力證明且名額未滿。
+- Tutor 必須有 APPROVED 口語能力證明且名額未滿,且必須在該 Tutee 所屬計畫的修課名單範圍內(見上)。
 - Tutor 可邀請可用 Tutee;Tutee 能否主動邀請 Tutor 由其 `RosterEntry.program.allow_tutee_initiate_invitation` 決定(目前只有 `MARYLAND` 為 True,`tutoring/services.py::_tutee_can_initiate_invitation()`)。
 - 收件人接受後立即建立 Pairing,不需 Admin 核准。
 - Tutee 同學期最多 1 個 active Tutor;Tutor 同學期最多 2 個 active Tutee。

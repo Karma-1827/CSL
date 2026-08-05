@@ -109,6 +109,15 @@
           <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
         </form>
       </section>
+      <section class="panel quick-import-card">
+        <div class="panel-heading"><div><span class="eyebrow">{{ program.code }} TUTOR</span><h2>{{ program.name_zh }}修課 Tutor <small>{{ program.name_en }} tutor roster</small></h2></div></div>
+        <p class="quick-import-card-note">只有這份名單裡的 Tutor，才能在配對頁看到／配對到{{ program.name_zh }}的學生；一般華語系 Tutor 不受影響。<br>Only tutors on this list can see or match with {{ program.name_zh }} tutees; ordinary CSL tutors are unaffected.</p>
+        <form action="{% url 'accounts:roster_import_quick' 'TUTOR:'|add:program.code %}" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="file" name="file" accept=".csv,.xlsx" required>
+          <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+        </form>
+      </section>
     {% endfor %}
     <section class="panel quick-import-card quick-import-add">
       <div class="panel-heading"><div><span class="eyebrow">+</span><h2>新增合作計畫 <small>Add partner program</small></h2></div></div>

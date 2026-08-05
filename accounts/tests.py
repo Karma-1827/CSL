@@ -672,6 +672,21 @@ class QuickRosterImportTests(TestCase):
         self.assertEqual(entry.role, Role.TUTEE)
         self.assertEqual(entry.program_id, self.ntnu.pk)
 
+    def test_quick_import_tutor_program_category_creates_maryland_tutor_roster_entries(self):
+        """Item 4: a program-scoped Tutor import card (e.g. Maryland's course roster) creates
+        TUTOR roster entries with that program set, distinct from the plain TUTOR category."""
+        self.client.force_login(self.admin)
+        upload = self._csv_upload("maryland_tutors.csv", ["S30250001"])
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["TUTOR:MARYLAND"]), {"file": upload}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        entry = RosterEntry.objects.get(student_id="S30250001")
+        self.assertEqual(entry.role, Role.TUTOR)
+        self.assertEqual(entry.program_id, self.maryland.pk)
+        log = AuditLog.objects.get(event_type="ROSTER_IMPORTED")
+        self.assertEqual(log.metadata["category"], "TUTOR:MARYLAND")
+
     def test_quick_import_handles_messy_xlsx_with_title_and_header_rows(self):
         self.client.force_login(self.admin)
         upload = self._xlsx_upload(

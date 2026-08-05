@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from accounts.models import AuditLog, Role, User
+from accounts.models import AuditLog, EducationLevel, Role, User
 
 from .models import (
     InvitationStatus,
@@ -111,11 +111,33 @@ def semester_applies_to_user(semester, user):
 
 
 def user_program(user):
-    """The partner program a user is scoped to, or None if they aren't (e.g. every Tutor
-    today, and any Tutee whose roster entry has no program set)."""
-    if user.role == Role.TUTEE and user.roster_entry_id:
+    """The partner program a user is scoped to, or None for the default/legacy pool: every
+    Tutee has a program (required by RosterEntry.clean()); a Tutor only has one if they're on
+    that program's own tutor roster (see tutor_can_serve_program() and
+    MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 4) — ordinary tutors return None."""
+    if user.role in {Role.TUTEE, Role.TUTOR} and user.roster_entry_id:
         return user.roster_entry.program
     return None
+
+
+def tutor_can_serve_program(tutor, program):
+    """Whether a tutor may see or pair with tutees belonging to `program`.
+
+    Ordinary tutors (no program on their own roster entry) serve the default/legacy pool —
+    today that's exactly the NTNU tutees, since every other tutee-facing program requires its
+    own tutor roster. A tutor explicitly listed on a program's tutor roster (RosterEntry.program
+    set on a TUTOR row, e.g. Maryland's course roster) may only serve that same program; for
+    Maryland specifically they must also be a bachelor's student, since the language-exchange
+    course is bachelor-only even if the roster entry were ever miskept (item 4).
+    """
+    roster_program = tutor.roster_entry.program if tutor.roster_entry_id else None
+    if roster_program is None:
+        return program is None or program.code == "NTNU"
+    if program is None or roster_program.code != program.code:
+        return False
+    if roster_program.code == "MARYLAND" and tutor.roster_entry.education_level != EducationLevel.BACHELOR:
+        return False
+    return True
 
 
 def _six_months_before(value):
@@ -360,6 +382,10 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
         raise ValidationError("您不是這筆邀請的參與者。 / You are not a participant in this invitation.")
     if initiator.pk == tutee.pk and not _tutee_can_initiate_invitation(tutee):
         raise ValidationError("此 Tutee 類別不能主動邀請 Tutor。 / This tutee type cannot initiate invitations.")
+    if not tutor_can_serve_program(tutor, user_program(tutee)):
+        raise ValidationError(
+            "此 Tutor 不在該計畫的修課名單中，無法配對。 / This tutor is not on that program's course roster and cannot be matched."
+        )
     if not tutor_has_approved_qualification(tutor):
         raise ValidationError("Tutor 尚未通過口語能力審查。 / The tutor's oral proficiency has not been approved.")
     if not tutor_has_capacity(tutor, semester):
@@ -460,6 +486,16 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
         Q(status=PairingStatus.ACTIVE) | Q(tutor=tutor)
     ).values_list("tutee_id", flat=True)
     queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).order_by("tutee_id")
+    tutor_roster_program = tutor.roster_entry.program if tutor.roster_entry_id else None
+    if tutor_roster_program is None:
+        queryset = queryset.filter(tutee__roster_entry__program__code="NTNU")
+    elif (
+        tutor_roster_program.code == "MARYLAND"
+        and tutor.roster_entry.education_level != EducationLevel.BACHELOR
+    ):
+        queryset = queryset.none()
+    else:
+        queryset = queryset.filter(tutee__roster_entry__program=tutor_roster_program)
     gender = filters.get("gender")
     if gender:
         queryset = queryset.filter(gender=gender)
@@ -510,6 +546,18 @@ def anonymous_tutor_candidates(*, semester, tutee, filters=None):
     queryset = TutorProfile.objects.filter(tutor_id__in=approved).exclude(
         Q(tutor_id__in=previous_tutors) | Q(tutor_id__in=full_tutors)
     ).order_by("tutor_id")
+    tutee_program = tutee.roster_entry.program if tutee.roster_entry_id else None
+    if tutee_program and tutee_program.code == "MARYLAND":
+        queryset = queryset.filter(
+            tutor__roster_entry__program__code="MARYLAND",
+            tutor__roster_entry__education_level=EducationLevel.BACHELOR,
+        )
+    elif tutee_program and tutee_program.code != "NTNU":
+        queryset = queryset.filter(tutor__roster_entry__program=tutee_program)
+    else:
+        queryset = queryset.filter(
+            Q(tutor__roster_entry__program__isnull=True) | Q(tutor__roster_entry__program__code="NTNU")
+        )
     gender = filters.get("gender")
     if gender:
         queryset = queryset.filter(gender=gender)

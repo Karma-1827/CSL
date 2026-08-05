@@ -1940,6 +1940,7 @@ td small {
 }
 .quick-import-add { background: var(--paper); border-style: dashed; }
 .quick-import-add p { margin: 8px 0 0; font-size: 0.74rem; color: var(--ink-muted); }
+.quick-import-card-note { margin: 0 0 8px; font-size: 0.74rem; color: var(--ink-muted); line-height: 1.5; }
 .quick-import-card h2 small { display: block; }
 .review-note {
   padding: 12px;

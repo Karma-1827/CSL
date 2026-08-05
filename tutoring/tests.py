@@ -350,7 +350,11 @@ class ProgramScopedSemesterTests(TestCase):
         self.assertNotEqual(invitation.semester_id, legacy.pk)
 
 
-class MatchingTests(TestCase):
+class MatchingFixtureTestCase(TestCase):
+    """Shared tutor/tutee fixtures and factory helpers. No test_ methods of its own — it exists
+    so MatchingTests and MarylandTutorRosterTests can both use the same setUp() without either
+    inheriting (and re-running) the other's tests."""
+
     def setUp(self):
         today = timezone.localdate()
         self.semester = Semester.objects.create(
@@ -365,15 +369,17 @@ class MatchingTests(TestCase):
         self.tutor = self.make_tutor("TUTOR100", "知名小老師", "Known Tutor")
         self.tutee = self.make_tutee("TUTEE100", "知名外籍生", "Known Tutee", self.ntnu_program)
         self.maryland = self.make_tutee("MARY100", "馬里蘭學生", "Maryland Student", self.maryland_program)
+        self.maryland_tutor = self.make_maryland_tutor("MARYTUTOR100", "馬里蘭老師", "Maryland Tutor")
 
-    def make_tutor(self, student_id, name_zh, name_en):
+    def make_tutor(self, student_id, name_zh, name_en, program=None, education_level=EducationLevel.MASTER):
         roster = RosterEntry.objects.create(
             student_id=student_id,
             name_zh=name_zh,
             name_en=name_en,
             role=Role.TUTOR,
-            education_level=EducationLevel.MASTER,
+            education_level=education_level,
             identity_category=IdentityCategory.LOCAL,
+            program=program,
         )
         user = User.objects.create_user(
             username=student_id, password="Matching-password-2026", role=Role.TUTOR,
@@ -391,6 +397,12 @@ class MatchingTests(TestCase):
             status=QualificationStatus.APPROVED,
         )
         return user
+
+    def make_maryland_tutor(self, student_id, name_zh, name_en):
+        """A tutor on the Maryland course roster (item 4): bachelor's level, program=MARYLAND."""
+        return self.make_tutor(
+            student_id, name_zh, name_en, program=self.maryland_program, education_level=EducationLevel.BACHELOR,
+        )
 
     def make_tutee(self, student_id, name_zh, name_en, program):
         roster = RosterEntry.objects.create(
@@ -414,6 +426,8 @@ class MatchingTests(TestCase):
         )
         return user
 
+
+class MatchingTests(MatchingFixtureTestCase):
     def test_anonymous_candidate_data_excludes_identity(self):
         candidate = anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)[0]
         self.assertNotIn("name_zh", candidate)
@@ -495,7 +509,7 @@ class MatchingTests(TestCase):
         self.assertContains(response, "Mandarin Chinese")
 
     def test_tutor_candidates_can_be_filtered_by_compound_criteria(self):
-        other_tutor = self.make_tutor("TUTOR200", "另一位老師", "Other Tutor")
+        other_tutor = self.make_maryland_tutor("TUTOR200", "另一位老師", "Other Tutor")
         other_tutor.tutor_profile.gender = "FEMALE"
         other_tutor.tutor_profile.native_language = "Spanish"
         other_tutor.tutor_profile.available_days = ["WED"]
@@ -503,7 +517,7 @@ class MatchingTests(TestCase):
         other_tutor.tutor_profile.save()
 
         all_ids = {c["user_id"] for c in anonymous_tutor_candidates(semester=self.semester, tutee=self.maryland)}
-        self.assertEqual(all_ids, {self.tutor.pk, other_tutor.pk})
+        self.assertEqual(all_ids, {self.maryland_tutor.pk, other_tutor.pk})
 
         gender_filtered = anonymous_tutor_candidates(
             semester=self.semester, tutee=self.maryland, filters={"gender": "FEMALE"}
@@ -518,7 +532,7 @@ class MatchingTests(TestCase):
         days_filtered = anonymous_tutor_candidates(
             semester=self.semester, tutee=self.maryland, filters={"days": ["MON"]}
         )
-        self.assertEqual({c["user_id"] for c in days_filtered}, {self.tutor.pk})
+        self.assertEqual({c["user_id"] for c in days_filtered}, {self.maryland_tutor.pk})
 
         slots_filtered = anonymous_tutor_candidates(
             semester=self.semester, tutee=self.maryland, filters={"time_slots": ["09:00-11:00"]}
@@ -536,7 +550,7 @@ class MatchingTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"), {"tutor_gender": "FEMALE"})
         self.assertContains(response, "1 位符合")
         self.assertContains(response, reverse("tutoring:invite_tutor", args=[other_tutor.pk]))
-        self.assertNotContains(response, reverse("tutoring:invite_tutor", args=[self.tutor.pk]))
+        self.assertNotContains(response, reverse("tutoring:invite_tutor", args=[self.maryland_tutor.pk]))
 
     def test_pending_candidate_uses_short_status_label(self):
         send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
@@ -613,7 +627,7 @@ class MatchingTests(TestCase):
         with self.assertRaises(ValidationError):
             send_invitation(initiator=self.tutee, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
         invitation = send_invitation(
-            initiator=self.maryland, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk
+            initiator=self.maryland, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk
         )
         self.assertEqual(invitation.status, InvitationStatus.PENDING)
         self.assertEqual(invitation.initiated_by, self.maryland)
@@ -773,10 +787,10 @@ class MatchingTests(TestCase):
             send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=fourth.pk)
 
     def test_pending_invitation_cap_counts_both_directions_for_tutee(self):
-        tutor_b = self.make_tutor("TUTOR210", "第二位老師", "Second Tutor")
-        tutor_c = self.make_tutor("TUTOR220", "第三位老師", "Third Tutor")
-        tutor_d = self.make_tutor("TUTOR230", "第四位老師", "Fourth Tutor")
-        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk)
+        tutor_b = self.make_maryland_tutor("TUTOR210", "第二位老師", "Second Tutor")
+        tutor_c = self.make_maryland_tutor("TUTOR220", "第三位老師", "Third Tutor")
+        tutor_d = self.make_maryland_tutor("TUTOR230", "第四位老師", "Fourth Tutor")
+        send_invitation(initiator=self.maryland_tutor, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk)
         send_invitation(initiator=tutor_b, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk)
         send_invitation(initiator=self.maryland, tutor_id=tutor_c.pk, tutee_id=self.maryland.pk)
         with self.assertRaises(ValidationError):
@@ -798,16 +812,55 @@ class MatchingTests(TestCase):
         self.assertEqual(invitation_c.status, InvitationStatus.CANCELLED)
 
     def test_maryland_initiated_invitation_cancels_tutees_other_pending_on_acceptance(self):
-        tutor_b = self.make_tutor("TUTOR240", "乙老師", "Tutor B")
+        tutor_b = self.make_maryland_tutor("TUTOR240", "乙老師", "Tutor B")
         invitation_to_tutor = send_invitation(
-            initiator=self.maryland, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk
+            initiator=self.maryland, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk
         )
         invitation_to_tutor_b = send_invitation(
             initiator=self.maryland, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk
         )
-        respond_to_invitation(invitation_id=invitation_to_tutor.pk, responder=self.tutor, accept=True)
+        respond_to_invitation(invitation_id=invitation_to_tutor.pk, responder=self.maryland_tutor, accept=True)
         invitation_to_tutor_b.refresh_from_db()
         self.assertEqual(invitation_to_tutor_b.status, InvitationStatus.CANCELLED)
+
+
+class MarylandTutorRosterTests(MatchingFixtureTestCase):
+    """MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 4: Maryland tutees only match tutors on
+    the Maryland course roster, and only bachelor's-level ones at that; ordinary tutors keep
+    serving NTNU tutees as before."""
+
+    def test_ordinary_tutor_does_not_see_maryland_tutee_as_candidate(self):
+        candidates = anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)
+        self.assertNotIn(self.maryland.pk, {c["user_id"] for c in candidates})
+        self.assertIn(self.tutee.pk, {c["user_id"] for c in candidates})
+
+    def test_maryland_tutor_only_sees_maryland_tutee_not_ntnu(self):
+        candidates = anonymous_tutee_candidates(semester=self.semester, tutor=self.maryland_tutor)
+        ids = {c["user_id"] for c in candidates}
+        self.assertIn(self.maryland.pk, ids)
+        self.assertNotIn(self.tutee.pk, ids)
+
+    def test_maryland_roster_tutor_at_wrong_education_level_is_excluded(self):
+        masters_tutor = self.make_tutor(
+            "MARY-MASTERS", "碩士老師", "Masters Tutor",
+            program=self.maryland_program, education_level=EducationLevel.MASTER,
+        )
+        tutee_candidates = anonymous_tutor_candidates(semester=self.semester, tutee=self.maryland)
+        self.assertNotIn(masters_tutor.pk, {c["user_id"] for c in tutee_candidates})
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.maryland, tutor_id=masters_tutor.pk, tutee_id=self.maryland.pk)
+
+    def test_send_invitation_rejects_ordinary_tutor_for_maryland_tutee_even_off_screen(self):
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.maryland.pk)
+
+    def test_send_invitation_rejects_maryland_tutor_for_ntnu_tutee_even_off_screen(self):
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.maryland_tutor, tutor_id=self.maryland_tutor.pk, tutee_id=self.tutee.pk)
+
+    def test_ordinary_tutor_can_still_pair_with_ntnu_tutee(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        self.assertEqual(invitation.status, InvitationStatus.PENDING)
 
 
 class ClassWorkflowTests(TestCase):

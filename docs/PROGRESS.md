@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-05 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15 項(計畫別、可重疊執行期間,後續第 4/12/13/16 項的資料模型地基),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(145 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-05 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15 項(計畫別、可重疊執行期間)與第 4 項(馬里蘭學生與大學部 Tutor 專屬配對),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(152 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -70,9 +70,14 @@
     - 新增 `tutoring/services.py::active_semester(program=None)`(取代原本無參數版本,優先找計畫專屬且啟用中的期間,找不到才退回舊版共用期間)、`semester_applies_to_user()`、`user_program()` 三個小工具,`dashboard()` 的 `matching_open` 與 `send_invitation()` 都已改用,依當事人(Tutee)所屬計畫決定要看哪個期間。
     - `Semester.validate_applicable_users()` 擋下非 Tutor/Tutee、已停用帳號,以及計畫不符的 Tutee(Tutor 目前不受計畫限制,因為還沒有第 4 項的修課名單機制)。
     - 新增 `tutoring.tests.ProgramScopedSemesterTests`(9 個測試)涵蓋:可建立超過三筆期間、同計畫重疊擋下/不同計畫重疊放行、舊版共用期間彼此仍擋重疊、`active_semester()` 的計畫優先/退回邏輯、同一使用者可同時適用多計畫多期間、空白適用對象等於開放給所有人、適用對象驗證擋下計畫不符的 Tutee、`send_invitation()` 會選到計畫專屬期間而非不相關的舊版期間。另外用真實 HTTP 流程(登入、建立 NTNU 與 Maryland 重疊期間、嘗試建立同計畫重疊期間)驗證過一次,行為與測試一致。
-    - 尚未涵蓋(留給第 4、12、13、16 項一併處理):排課/時數統計/證明下載目前仍直接讀 `Pairing.semester`,不會重新判斷「此刻該用哪個期間」;候選瀏覽尚未依 `applicable_users`/計畫名單過濾看得到的對象(那是第 4 項的範圍)。
-- migrations:`accounts` 10 個、`tutoring` 18 個。
-- tests:`accounts` 53 個、`tutoring` 92 個,共 145 個,**全數通過**(2026-08-05 重新實際執行確認)。
+    - 尚未涵蓋(留給第 12、13、16 項一併處理):排課/時數統計/證明下載目前仍直接讀 `Pairing.semester`,不會重新判斷「此刻該用哪個期間」。候選瀏覽依計畫名單過濾已由第 4 項補齊,見下。
+  - 第 4 項(馬里蘭學生與大學部 Tutor 專屬配對)**已完成**:
+    - 名冊匯入頁籤每個啟用中合作計畫新增一張「{計畫}修課 Tutor」卡片(`accounts:roster_import_quick` 的 `category_code` 用 `TUTOR:<程式碼>`),把 Tutor 學號匯入時一併設定 `RosterEntry.program`——沿用 Tutee 早就在用的同一個欄位與匯入流程,`RosterEntry.clean()` 原本就沒有禁止 Tutor 設定 `program`,只是先前的匯入介面沒有入口,所以完全不需要新 model 或新 migration。
+    - 新增 `tutoring/services.py::tutor_can_serve_program(tutor, program)` 作為唯一判斷依據:沒有修課名單的一般 Tutor 只服務 NTNU;有修課名單的 Tutor 只服務名單所屬計畫,馬里蘭計畫額外要求 `education_level=BACHELOR`(不只看學制,因為不是所有大學部生都修這門課,見需求文件原文)。同一條規則同時套用在 `anonymous_tutee_candidates()`、`anonymous_tutor_candidates()`、`send_invitation()`(不論誰發起邀請,不能繞過畫面直接呼叫成功),確保「看不到」跟「配不到」永遠一致。
+    - `user_program()`(第 15 項引入)同步更新為也認得有修課名單的 Tutor,讓他們的「目前適用期間」判斷正確對應到該計畫,不會被誤判成一般 Tutor。
+    - 新增 `tutoring.tests.MatchingFixtureTestCase`(抽出共用 fixture,避免測試類別互相繼承導致重複執行)、`MarylandTutorRosterTests`(6 個測試,涵蓋一般 Tutor 看不到/配不到馬里蘭學生、馬里蘭 Tutor 看不到/配不到 NTNU 學生、名單內但學制不符會被擋下、一般配對不受影響)與 `accounts.tests` 新增 1 個測試驗證修課名單匯入正確寫入 `RosterEntry.program`。修正既有 `MatchingTests` 5 個測試(原本的假設是任何合格 Tutor 都能配對馬里蘭學生,已改用具備修課資格的 Tutor fixture)。另外用真實 HTTP 匯入一筆馬里蘭修課 Tutor 學號驗證過一次。
+- migrations:`accounts` 10 個、`tutoring` 18 個(無新增,第 4 項未改 schema)。
+- tests:`accounts` 54 個、`tutoring` 98 個,共 152 個,**全數通過**(2026-08-05 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。
