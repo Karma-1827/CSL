@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-05 —— V3/V3.1 核心項目完成,V4 進行中。本次更新完成系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)的第一批(低風險/獨立項目,共 10 項),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(136 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-05 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15 項(計畫別、可重疊執行期間,後續第 4/12/13/16 項的資料模型地基),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(145 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -62,9 +62,17 @@
   - 第 18 項:`ClassRecord.content`/`.remarks` 新增 2000 字元上限(model `max_length` + 表單 `maxlength`,前後端一致),`topic` 既有上限與已棄用的 `reflection` 欄位不受影響。
   - 第 19 項:移除 `HourAdjustment` 的批次 Excel 匯入入口(URL、view、表單、範本下載、清單頁按鈕與對應測試皆刪除);model、既有資料與單筆新增/編輯功能不受影響,AuditLog 描述文字改為「行政更正」用語,不再暗示用來匯入舊紙本時數。
   - 第 20 項:`docs/PROGRESS.md`「尚未定案的產品/維運決策」與 `docs/DEPLOY.md`「上線前仍待確認」都已明確列出個資/口語能力證明/課堂紀錄/私訊/證明 PDF/AuditLog 的保存政策與 RPO/RTO 待系辦/資訊中心確認,程式未新增任何依假設年限刪除資料的邏輯。
-  - 尚未排入本批的項目(3、4、5、7、11–16;涉及 PDF 權限、計畫別配對隔離、上課文件、學號二次確認、Admin 手動配對、證明語言/文案、佐證連結、多期間學期模型)留待後續批次,其中第 15 項(計畫別、可重疊期間)是後續多項的資料模型地基,建議優先處理。
-- migrations:`accounts` 10 個、`tutoring` 17 個。
-- tests:`accounts` 53 個、`tutoring` 83 個,共 136 個,**全數通過**(2026-08-05 重新實際執行確認)。
+  - 尚未排入這一批的項目(3、4、5、7、11–16)留待後續批次;第 15 項(資料模型地基)已於第二批完成,見下。
+- **2026-08 系辦會議後 20 項需求 — 第二批(進行中,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)：**
+  - 第 15 項(計畫別、可重疊執行期間)**已完成**,是第 4、12、13、16 項的資料模型地基:
+    - `Semester` 新增可為空的 `program` FK(`None` = 舊版共用期間,保留給既有資料與尚未指定計畫的期間相容用;新建立的期間表單一律要求選計畫,編輯既有期間仍可不選)與 `applicable_users` M2M(留空 = 該計畫所有符合資格帳號都適用,不需要為舊資料回填名單)。
+    - 重疊檢查改成「同一 `program` 值內才擋」,移除原本「目前與未來最多三個學期」的全域筆數上限(model、`SemesterCreateForm`/`SemesterSettingsForm`、`accounts:dashboard` 的 `configured_non_past_semester_count` 判斷、admin_v2_panels.html 的 3/3 提示與手冊文字都已同步移除)。
+    - 新增 `tutoring/services.py::active_semester(program=None)`(取代原本無參數版本,優先找計畫專屬且啟用中的期間,找不到才退回舊版共用期間)、`semester_applies_to_user()`、`user_program()` 三個小工具,`dashboard()` 的 `matching_open` 與 `send_invitation()` 都已改用,依當事人(Tutee)所屬計畫決定要看哪個期間。
+    - `Semester.validate_applicable_users()` 擋下非 Tutor/Tutee、已停用帳號,以及計畫不符的 Tutee(Tutor 目前不受計畫限制,因為還沒有第 4 項的修課名單機制)。
+    - 新增 `tutoring.tests.ProgramScopedSemesterTests`(9 個測試)涵蓋:可建立超過三筆期間、同計畫重疊擋下/不同計畫重疊放行、舊版共用期間彼此仍擋重疊、`active_semester()` 的計畫優先/退回邏輯、同一使用者可同時適用多計畫多期間、空白適用對象等於開放給所有人、適用對象驗證擋下計畫不符的 Tutee、`send_invitation()` 會選到計畫專屬期間而非不相關的舊版期間。另外用真實 HTTP 流程(登入、建立 NTNU 與 Maryland 重疊期間、嘗試建立同計畫重疊期間)驗證過一次,行為與測試一致。
+    - 尚未涵蓋(留給第 4、12、13、16 項一併處理):排課/時數統計/證明下載目前仍直接讀 `Pairing.semester`,不會重新判斷「此刻該用哪個期間」;候選瀏覽尚未依 `applicable_users`/計畫名單過濾看得到的對象(那是第 4 項的範圍)。
+- migrations:`accounts` 10 個、`tutoring` 18 個。
+- tests:`accounts` 53 個、`tutoring` 92 個,共 145 個,**全數通過**(2026-08-05 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

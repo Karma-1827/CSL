@@ -55,6 +55,8 @@ from tutoring.services import (
     tutor_has_approved_qualification,
     class_is_valid,
     active_semester,
+    semester_applies_to_user,
+    user_program,
 )
 
 from .decorators import role_required
@@ -226,12 +228,13 @@ def preview_tutee(request):
 @login_required
 def dashboard(request):
     synchronize_matching_state()
-    current_semester = active_semester()
+    current_semester = active_semester(program=user_program(request.user))
     today = timezone.localdate()
     matching_open = bool(
         current_semester
         and today >= current_semester.starts_on
         and today <= current_semester.ends_on
+        and semester_applies_to_user(current_semester, request.user)
     )
     context = {"current_semester": current_semester, "matching_open": matching_open}
     if request.user.role == Role.ADMIN:
@@ -341,7 +344,6 @@ def dashboard(request):
                 "semester_ids_with_pairings": set(
                     Pairing.objects.filter(semester__in=semester_rows).values_list("semester_id", flat=True)
                 ),
-                "configured_non_past_semester_count": sum(row.ends_on >= today and row.is_active for row in semester_rows),
                 "overview_semesters": overview_semesters,
                 "overview_semester": overview_semester,
                 "class_q": request.GET.get("class_q", ""),

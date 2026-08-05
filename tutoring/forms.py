@@ -1,9 +1,10 @@
 from datetime import time
 
 from django import forms
+from django.core.exceptions import ValidationError
 
 from accounts.forms import SKILL_CHOICES
-from accounts.models import Role
+from accounts.models import PartnerProgram, Role, User
 
 from .models import (
     ClassAlert,
@@ -132,27 +133,77 @@ class MakeupReasonForm(forms.Form):
 
 
 class SemesterSettingsForm(forms.ModelForm):
+    """Admin edit form. `program` stays optional here so existing legacy (program=None)
+    periods can still be renamed/rescheduled without being forced to retroactively pick a
+    program — see Semester.program's docstring-comment in models.py."""
+
+    applicable_users = forms.ModelMultipleChoiceField(
+        label="適用對象（留空＝該計畫全部帳號） / Applicable users (blank = everyone in the program)",
+        queryset=User.objects.filter(role__in=(Role.TUTOR, Role.TUTEE), is_active=True).order_by("username"),
+        required=False,
+    )
+
     class Meta:
         model = Semester
         fields = (
-            "name_zh", "name_en", "starts_on", "ends_on", "is_active",
+            "name_zh", "name_en", "starts_on", "ends_on", "is_active", "program", "applicable_users",
         )
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "ends_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["program"].required = False
+        self.fields["program"].empty_label = "（沿用舊版共用期間，不指定計畫） / (legacy shared period, no program)"
+
+    def clean(self):
+        cleaned = super().clean()
+        users = cleaned.get("applicable_users")
+        if users is not None:
+            candidate = Semester(program=cleaned.get("program"))
+            try:
+                candidate.validate_applicable_users(users)
+            except ValidationError as error:
+                self.add_error("applicable_users", error)
+        return cleaned
+
 
 class SemesterCreateForm(forms.ModelForm):
-    """Admin creation form: new semesters are enabled automatically."""
+    """Admin creation form: new semesters are enabled automatically. Unlike the edit form,
+    `program` is required — new periods should always be scoped to a partner program going
+    forward (see MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 15)."""
+
+    applicable_users = forms.ModelMultipleChoiceField(
+        label="適用對象（留空＝該計畫全部帳號） / Applicable users (blank = everyone in the program)",
+        queryset=User.objects.filter(role__in=(Role.TUTOR, Role.TUTEE), is_active=True).order_by("username"),
+        required=False,
+    )
 
     class Meta:
         model = Semester
-        fields = ("name_zh", "name_en", "starts_on", "ends_on")
+        fields = ("name_zh", "name_en", "starts_on", "ends_on", "program", "applicable_users")
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "ends_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["program"].required = True
+        self.fields["program"].queryset = PartnerProgram.objects.filter(is_active=True).order_by("name_zh")
+
+    def clean(self):
+        cleaned = super().clean()
+        users = cleaned.get("applicable_users")
+        if users is not None:
+            candidate = Semester(program=cleaned.get("program"))
+            try:
+                candidate.validate_applicable_users(users)
+            except ValidationError as error:
+                self.add_error("applicable_users", error)
+        return cleaned
 
 
 class PairingMessageForm(forms.ModelForm):

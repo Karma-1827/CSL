@@ -3287,10 +3287,12 @@ td small {
 }
 .semester-limit-note { margin: 16px 0 0; padding: 13px 16px; border-radius: 12px; background: #edf4f7; color: #526d82; }
 .semester-setting-list { display: grid; gap: 10px; margin-top: 16px; }
-.semester-setting-row { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto auto; align-items: center; gap: 18px; padding: 15px 17px; border: 1px solid #d7e2ea; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(39, 55, 77, .05); }
+.semester-setting-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, auto) auto auto auto; align-items: center; gap: 18px; padding: 15px 17px; border: 1px solid #d7e2ea; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(39, 55, 77, .05); }
 .semester-setting-name { display: grid; gap: 2px; }
 .semester-setting-name strong { color: #27374d; font-size: 1rem; }
 .semester-setting-name small { color: #526d82; }
+.semester-setting-program { display: grid; gap: 2px; color: #27374d; font-size: .85rem; font-weight: 750; }
+.semester-setting-program small { color: #526d82; font-size: .7rem; font-weight: 700; }
 .semester-setting-dates { display: flex; align-items: center; gap: 9px; color: #27374d; font-weight: 750; white-space: nowrap; }
 .semester-setting-dates i { color: #9db2bf; font-style: normal; }
 .semester-setting-status { display: grid; justify-items: center; min-width: 88px; padding: 6px 11px; border-radius: 999px; color: #0f4c75; background: #e4f3fc; font-size: .8rem; font-weight: 850; line-height: 1.15; }

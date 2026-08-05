@@ -43,6 +43,7 @@ from .models import (
     MakeupReviewStatus,
 )
 from .services import (
+    active_semester,
     anonymous_tutee_candidates,
     anonymous_tutor_candidates,
     archive_expired_semesters,
@@ -59,10 +60,12 @@ from .services import (
     review_pairing_release_request,
     reschedule_class,
     schedule_classes,
+    semester_applies_to_user,
     send_invitation,
     submit_incident_report,
     submit_pairing_release_request,
     submit_class_record,
+    user_program,
 )
 
 
@@ -77,11 +80,12 @@ class SemesterTests(TestCase):
         with self.assertRaises(ValidationError):
             semester.full_clean()
 
-    def test_create_form_only_asks_for_semester_dates(self):
+    def test_create_form_asks_for_dates_program_and_applicable_users(self):
         self.assertEqual(
             list(SemesterCreateForm().fields),
-            ["name_zh", "name_en", "starts_on", "ends_on"],
+            ["name_zh", "name_en", "starts_on", "ends_on", "program", "applicable_users"],
         )
+        self.assertTrue(SemesterCreateForm().fields["program"].required)
 
     def test_semester_is_automatically_archived_after_six_months(self):
         today = date(2026, 7, 19)
@@ -188,6 +192,162 @@ class SemesterTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, reverse("tutoring:update_semester", args=[semester.pk]))
         self.assertContains(response, reverse("tutoring:delete_semester", args=[semester.pk]))
+
+
+class ProgramScopedSemesterTests(TestCase):
+    """MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 15: program-scoped, overlapping periods."""
+
+    def setUp(self):
+        self.ntnu = PartnerProgram.objects.get(code="NTNU")
+        self.maryland = PartnerProgram.objects.get(code="MARYLAND")
+        self.today = timezone.localdate()
+
+    def test_more_than_three_active_future_semesters_can_be_created(self):
+        for index in range(5):
+            Semester.objects.create(
+                name_zh=f"期間 {index}", name_en=f"Period {index}",
+                starts_on=self.today + timedelta(days=400 * index),
+                ends_on=self.today + timedelta(days=400 * index + 60),
+                is_active=True, program=self.ntnu,
+            ).full_clean()
+        self.assertEqual(Semester.objects.filter(is_active=True).count(), 5)
+
+    def test_same_program_overlap_is_rejected(self):
+        Semester.objects.create(
+            name_zh="NTNU 一", name_en="NTNU one", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        overlapping = Semester(
+            name_zh="NTNU 二", name_en="NTNU two", program=self.ntnu, is_active=True,
+            starts_on=self.today + timedelta(days=30), ends_on=self.today + timedelta(days=120),
+        )
+        with self.assertRaises(ValidationError):
+            overlapping.full_clean()
+
+    def test_different_program_overlap_is_allowed(self):
+        Semester.objects.create(
+            name_zh="NTNU 學期", name_en="NTNU semester", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        maryland_period = Semester(
+            name_zh="馬里蘭計畫", name_en="Maryland program", program=self.maryland, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        maryland_period.full_clean()
+        maryland_period.save()
+        self.assertEqual(Semester.objects.filter(is_active=True, starts_on=self.today).count(), 2)
+
+    def test_legacy_none_program_periods_still_reject_overlap_with_each_other(self):
+        Semester.objects.create(
+            name_zh="舊版一", name_en="Legacy one", is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        overlapping = Semester(
+            name_zh="舊版二", name_en="Legacy two", is_active=True,
+            starts_on=self.today + timedelta(days=10), ends_on=self.today + timedelta(days=100),
+        )
+        with self.assertRaises(ValidationError):
+            overlapping.full_clean()
+
+    def test_active_semester_prefers_program_specific_then_falls_back_to_legacy(self):
+        legacy = Semester.objects.create(
+            name_zh="共用期間", name_en="Shared period", is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        self.assertEqual(active_semester(program=self.maryland), legacy)
+        ntnu_specific = Semester.objects.create(
+            name_zh="NTNU 專屬", name_en="NTNU specific", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        self.assertEqual(active_semester(program=self.ntnu), ntnu_specific)
+        self.assertEqual(active_semester(program=self.maryland), legacy)
+        self.assertEqual(active_semester(), legacy)
+
+    def test_user_can_be_applicable_to_multiple_programs_and_periods(self):
+        tutee_roster = RosterEntry.objects.create(
+            student_id="MULTI-TUTEE", name_zh="多計畫學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu,
+        )
+        tutee = User.objects.create_user(username="MULTI-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
+        tutor_roster = RosterEntry.objects.create(
+            student_id="MULTI-TUTOR", name_zh="多計畫老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutor = User.objects.create_user(username="MULTI-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
+
+        ntnu_period = Semester.objects.create(
+            name_zh="NTNU 專屬", name_en="NTNU specific", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        maryland_period = Semester.objects.create(
+            name_zh="馬里蘭計畫", name_en="Maryland program", program=self.maryland, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        ntnu_period.applicable_users.set([tutor, tutee])
+        maryland_period.applicable_users.set([tutor])
+        self.assertTrue(semester_applies_to_user(ntnu_period, tutor))
+        self.assertTrue(semester_applies_to_user(ntnu_period, tutee))
+        self.assertTrue(semester_applies_to_user(maryland_period, tutor))
+        self.assertEqual(user_program(tutee), self.ntnu)
+        self.assertIsNone(user_program(tutor))
+
+    def test_empty_applicable_users_means_open_to_everyone(self):
+        period = Semester.objects.create(
+            name_zh="開放期間", name_en="Open period", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        tutee_roster = RosterEntry.objects.create(
+            student_id="OPEN-TUTEE", name_zh="學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu,
+        )
+        tutee = User.objects.create_user(username="OPEN-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
+        self.assertTrue(semester_applies_to_user(period, tutee))
+
+    def test_applicable_users_rejects_tutee_from_a_different_program(self):
+        maryland_roster = RosterEntry.objects.create(
+            student_id="WRONG-PROGRAM-TUTEE", name_zh="馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.maryland,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="WRONG-PROGRAM-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=maryland_roster
+        )
+        form = SemesterCreateForm(data={
+            "name_zh": "NTNU 專屬", "name_en": "NTNU specific",
+            "starts_on": self.today.isoformat(), "ends_on": (self.today + timedelta(days=90)).isoformat(),
+            "program": self.ntnu.pk, "applicable_users": [maryland_tutee.pk],
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("applicable_users", form.errors)
+
+    def test_send_invitation_uses_tutee_program_period_over_unrelated_legacy_period(self):
+        Semester.objects.filter(is_active=True).delete()
+        legacy = Semester.objects.create(
+            name_zh="共用期間", name_en="Shared period", is_active=True,
+            starts_on=self.today - timedelta(days=400), ends_on=self.today - timedelta(days=300),
+        )
+        ntnu_period = Semester.objects.create(
+            name_zh="NTNU 專屬", name_en="NTNU specific", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        tutor_roster = RosterEntry.objects.create(
+            student_id="INV-TUTOR", name_zh="老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutor = User.objects.create_user(username="INV-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
+        TutorProfile.objects.create(tutor=tutor)
+        QualificationDocument.objects.create(tutor=tutor, file="x.pdf", original_filename="x.pdf", status=QualificationStatus.APPROVED)
+        tutee_roster = RosterEntry.objects.create(
+            student_id="INV-TUTEE", name_zh="學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu,
+        )
+        tutee = User.objects.create_user(username="INV-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
+        invitation = send_invitation(initiator=tutor, tutor_id=tutor.pk, tutee_id=tutee.pk)
+        self.assertEqual(invitation.semester_id, ntnu_period.pk)
+        self.assertNotEqual(invitation.semester_id, legacy.pk)
 
 
 class MatchingTests(TestCase):

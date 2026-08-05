@@ -1,22 +1,19 @@
 <section class="dashboard-view" data-dashboard-panel="semesters">
   <div class="view-heading"><span>SEMESTER SETTINGS</span><h2>學期時間設定 <small>Semester settings</small></h2></div>
-  {% if configured_non_past_semester_count < 3 %}
-    <details class="semester-add-disclosure"{% if not semester_rows %} open{% endif %}>
-      <summary>
-        <span class="semester-add-icon" aria-hidden="true">＋</span>
-        <span><strong>新增學期</strong><small>Add semester</small></span>
-      </summary>
-      <form class="schedule-form semester-form semester-new-form" action="{% url 'tutoring:save_semester' %}" method="post">{% csrf_token %}{{ new_semester_form.as_div }}<button class="button button-primary" type="submit">新增學期 / Add semester</button></form>
-    </details>
-  {% else %}
-    <p class="semester-limit-note">目前與未來學期已設定完成（3/3）。<br>Current and upcoming semesters are fully configured.</p>
-  {% endif %}
+  <details class="semester-add-disclosure"{% if not semester_rows %} open{% endif %}>
+    <summary>
+      <span class="semester-add-icon" aria-hidden="true">＋</span>
+      <span><strong>新增學期</strong><small>Add semester</small></span>
+    </summary>
+    <form class="schedule-form semester-form semester-new-form" action="{% url 'tutoring:save_semester' %}" method="post">{% csrf_token %}{{ new_semester_form.as_div }}<button class="button button-primary" type="submit">新增學期 / Add semester</button></form>
+  </details>
   {% if visible_semester_rows %}
     <div class="semester-setting-list">
       {% for semester in visible_semester_rows %}
         <div class="semester-card">
           <div class="semester-setting-row">
             <span class="semester-setting-name"><strong>{{ semester.name_zh }}</strong><small>{{ semester.name_en }}</small></span>
+            <span class="semester-setting-program">{% if semester.program %}{{ semester.program.name_zh }}<small>{{ semester.program.name_en }}</small>{% else %}舊版共用期間<small>Legacy shared period</small>{% endif %}</span>
             <span class="semester-setting-dates"><time>{{ semester.starts_on|date:"Y/m/d" }}</time><i aria-hidden="true">→</i><time>{{ semester.ends_on|date:"Y/m/d" }}</time></span>
             <span class="semester-setting-status status-{{ semester.lifecycle_status|lower }}">{% if semester.lifecycle_status == 'CURRENT' %}目前學期<small>Current</small>{% elif semester.lifecycle_status == 'FUTURE' %}未來學期<small>Upcoming</small>{% else %}已結束<small>Ended</small>{% endif %}</span>
             <div class="semester-setting-actions">

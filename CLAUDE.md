@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-05(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-05(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批與第二批第 15 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -141,8 +141,12 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 ### 4.2 學期
 
 - 學期只有開始/結束日;已移除另外的配對開始/截止欄位,所以配對窗口就是整個學期。
-- 啟用中學期日期不可重疊。
-- 今天尚未結束的啟用學期最多 3 個(目前＋未來兩學期)。
+- **2026-08 起學期(`Semester`)改為可依合作計畫分別設定期間**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 15 項):
+  - `Semester.program`(可為空的 FK 到 `PartnerProgram`):`None` 代表**舊版共用期間**,是這次改版前唯一存在過的形式,保留是為了讓既有 `Semester` 資料與已連結的 `Pairing`/`ClassSession` 不需要 migration 就能繼續運作。新建立的期間**表單一律要求選計畫**(`SemesterCreateForm.program.required=True`),但編輯既有期間的表單(`SemesterSettingsForm`)刻意讓 `program` 維持選填,避免逼使用者為舊期間回填計畫才能改名稱或日期。
+  - 啟用期間的重疊檢查改成**同一 `program` 值內才擋重疊**(`None` 自己也算一種值,即所有舊版共用期間彼此之間仍不可重疊);不同計畫(含一個是 `None`、一個是實際計畫)的期間可以互相重疊,不再有全域筆數上限。
+  - `Semester.applicable_users`(M2M 到 `User`,選填):**留空代表「該計畫所有符合資格的帳號都適用」**(等同目前行為,不需要為舊資料回填名單),Admin 也可以複選特定 Tutor/Tutee 限縮適用對象。驗證邏輯在 `Semester.validate_applicable_users()`:帳號必須是啟用中的 Tutor/Tutee,且若期間有指定計畫,Tutee 必須是該計畫名冊(`roster_entry.program`)底下的帳號(Tutor 目前不受計畫限制,因為 Tutor 尚未有對應第 4 項的修課名單機制)。
+  - `tutoring/services.py::active_semester(program=None)` 取代原本無參數版本:`program=None` 查「目前啟用中的舊版共用期間」;傳入實際計畫時優先找該計畫專屬且目前啟用中的期間,找不到才退回舊版共用期間,確保還沒建立專屬期間的計畫不會突然無法使用。`semester_applies_to_user(semester, user)`/`user_program(user)` 是配套的兩個小工具:前者判斷某使用者是否落在期間的 `applicable_users` 範圍內,後者取得使用者對應的計畫(目前只有 Tutee 會回傳非 None)。`send_invitation()`、`dashboard()` 的 `matching_open` 判斷都已改用這兩個工具,依當事人(Tutee)所屬計畫決定要看哪個期間,而不是永遠只取資料庫裡第一筆「目前學期」。
+  - 尚未涵蓋:排課、時數統計、證明下載目前仍主要透過 `Pairing.semester` 直接拿學期物件,不會另外重新判斷「這個配對此刻該用哪個期間」,因為配對成立當下就已經鎖定 `semester`;真正需要「使用者同時適用多個進行中期間時如何選擇」的情境(例如同一位 Tutor 未來若同時是 NTNU 與 Maryland 修課名單成員)留待第 4、12 項一併處理。
 - 學期結束超過 6 個月後,`archive_expired_semesters()` 只把 `is_active=False`;不刪學期、課程或時數。
 - 學期結束後 active pairing 自動結束,pending release 也會被標為自動處理。
 - `dashboard()` 會呼叫 `synchronize_matching_state()`;正式環境仍須排程 `python manage.py process_matching_state`,否則無流量時不會即時處理。

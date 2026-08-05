@@ -69,6 +69,7 @@ def save_semester(request, pk=None):
         if instance is None:
             semester.is_active = True
         semester.save()
+        form.save_m2m()
         AuditLog.record(
             actor=request.user,
             event_type="SEMESTER_UPDATED" if instance else "SEMESTER_CREATED",

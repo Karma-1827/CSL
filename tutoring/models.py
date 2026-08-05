@@ -66,6 +66,21 @@ class Semester(models.Model):
     starts_on = models.DateField("開始日期 / Start date")
     ends_on = models.DateField("結束日期 / End date")
     is_active = models.BooleanField("啟用 / Enabled", default=True)
+    # NULL = legacy shared period, predating per-program scoping (2026-08). Kept so existing
+    # Semester rows and every Pairing/ClassSession that already references them keep working
+    # without a data migration. New periods created going forward should always set a program;
+    # the create/edit forms enforce this even though the model field itself stays optional to
+    # preserve that legacy path (see CLAUDE.md 4.2 and MEETING_CHANGE_REQUIREMENTS item 15).
+    program = models.ForeignKey(
+        PartnerProgram, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="semesters", verbose_name="合作計畫 / Partner program",
+    )
+    # Explicit per-user opt-in. Empty (the common case, and always true for legacy rows) means
+    # "open to every eligible account for this program" — matching today's behavior exactly —
+    # rather than forcing Admin to hand-pick every user before a period can be used.
+    applicable_users = models.ManyToManyField(
+        User, blank=True, related_name="applicable_semesters", verbose_name="適用對象 / Applicable users",
+    )
 
     class Meta:
         ordering = ["-starts_on"]
@@ -78,14 +93,36 @@ class Semester(models.Model):
             raise ValidationError("學期結束日不可早於開始日。 / End date cannot be before start date.")
         if self.is_active and self.starts_on and self.ends_on:
             overlap = Semester.objects.filter(
-                is_active=True, starts_on__lte=self.ends_on, ends_on__gte=self.starts_on
+                is_active=True, program=self.program, starts_on__lte=self.ends_on, ends_on__gte=self.starts_on
             ).exclude(pk=self.pk)
             if overlap.exists():
-                raise ValidationError("啟用中的學期日期不可重疊。 / Enabled semester dates cannot overlap.")
-            today = timezone.localdate()
-            enabled_non_past = Semester.objects.filter(is_active=True, ends_on__gte=today).exclude(pk=self.pk).count()
-            if self.ends_on >= today and enabled_non_past >= 3:
-                raise ValidationError("目前與未來最多設定三個學期。 / Configure at most three current and future semesters.")
+                raise ValidationError(
+                    "同一合作計畫的啟用期間不可重疊。 / Enabled periods for the same program cannot overlap."
+                )
+
+    def validate_applicable_users(self, users):
+        """Validate a candidate set of users for the applicable_users M2M before saving.
+
+        Takes an explicit iterable rather than reading self.applicable_users.all(), since a
+        many-to-many field can't be queried until the instance has a primary key but forms need
+        to validate the submitted selection before save() ever runs.
+        """
+        invalid = [
+            user for user in users
+            if user.role not in {Role.TUTOR, Role.TUTEE}
+            or not user.is_active
+            or (
+                self.program_id
+                and user.role == Role.TUTEE
+                and (not user.roster_entry_id or user.roster_entry.program_id != self.program_id)
+            )
+        ]
+        if invalid:
+            names = "、".join(user.username for user in invalid)
+            raise ValidationError(
+                f"適用對象必須是有效帳號,且 Tutee 須符合此計畫名冊資格:{names}。 / "
+                f"Applicable users must be active accounts, and tutees must belong to this program's roster: {names}."
+            )
 
     @property
     def lifecycle_status(self):

@@ -83,11 +83,39 @@ DAY_LABELS = {
 }
 
 
-def active_semester():
+def active_semester(program=None):
+    """The currently running period (today within start/end) for a given partner program.
+
+    `program=None` looks up the legacy shared period (Semester.program IS NULL) — the only
+    kind that existed before per-program periods (2026-08), so this is still the right call
+    for any pairing/user that isn't scoped to a specific program yet. When a real `program` is
+    passed, a period scoped to that exact program takes priority; if none is currently running,
+    this falls back to an active legacy shared period so programs without their own dedicated
+    period yet keep working exactly as before.
+    """
     today = timezone.localdate()
-    return Semester.objects.filter(
-        is_active=True, starts_on__lte=today, ends_on__gte=today
-    ).order_by("starts_on").first()
+    current = Semester.objects.filter(is_active=True, starts_on__lte=today, ends_on__gte=today)
+    if program is not None:
+        specific = current.filter(program=program).order_by("starts_on").first()
+        if specific:
+            return specific
+    return current.filter(program__isnull=True).order_by("starts_on").first()
+
+
+def semester_applies_to_user(semester, user):
+    """Whether a user participates in a period: explicit applicable_users membership if the
+    period restricts membership, otherwise open to everyone (see Semester.applicable_users)."""
+    if not semester.applicable_users.exists():
+        return True
+    return semester.applicable_users.filter(pk=user.pk).exists()
+
+
+def user_program(user):
+    """The partner program a user is scoped to, or None if they aren't (e.g. every Tutor
+    today, and any Tutee whose roster entry has no program set)."""
+    if user.role == Role.TUTEE and user.roster_entry_id:
+        return user.roster_entry.program
+    return None
 
 
 def _six_months_before(value):
@@ -321,11 +349,13 @@ def _pending_invitation_count(user, semester):
 @transaction.atomic
 def send_invitation(*, initiator, tutor_id, tutee_id):
     synchronize_matching_state()
-    semester_id = active_semester().pk if active_semester() else None
-    semester = Semester.objects.select_for_update().filter(pk=semester_id).first()
-    _validate_matching_window(semester)
     tutor = User.objects.select_for_update().get(pk=tutor_id, role=Role.TUTOR, is_active=True)
     tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
+    current = active_semester(program=user_program(tutee))
+    semester = Semester.objects.select_for_update().filter(pk=current.pk).first() if current else None
+    _validate_matching_window(semester)
+    if not semester_applies_to_user(semester, tutor) or not semester_applies_to_user(semester, tutee):
+        raise ValidationError("此期間不適用於其中一方帳號。 / This period does not apply to one of these accounts.")
     if initiator.pk not in {tutor.pk, tutee.pk}:
         raise ValidationError("您不是這筆邀請的參與者。 / You are not a participant in this invitation.")
     if initiator.pk == tutee.pk and not _tutee_can_initiate_invitation(tutee):
