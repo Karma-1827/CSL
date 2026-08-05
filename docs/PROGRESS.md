@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(168 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16、5 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(177 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -94,8 +94,16 @@
     - 修正:驗證邏輯改成依 `is_ntnu_tutor` 精準比對——該分支只驗證所選語言的 `title`;其餘分支(Tutee 版、非 NTNU 的 Tutor 版)驗證所選語言的 `title`+`plan_name`+`activity_text` 三者皆非空,與實際渲染時讀取的欄位完全對齊。
     - 電子章、主管簽名、系辦最終正式模板確認**尚未實作也不應自行偽造**,已補充記錄於 `CLAUDE.md` 4.9 節,作為待系辦提供正式資產前的明確邊界。
     - 新增 3 個測試:中文路徑缺 `plan_name`/`activity_text` 各自正確擋下並顯示「請洽系辦設定」(鎖住上述修正)、`is_ntnu_tutor` 分支即使四個 `plan_name`/`activity_text`(中英)全部留空,中英文皆仍可正常下載(回歸防呆,避免驗證邏輯之後又被改回「一律要求」)。
-- migrations:`accounts` 12 個、`tutoring` 19 個。
-- tests:`accounts` 54 個、`tutoring` 114 個,共 168 個,**全數通過**(2026-08-06 重新實際執行確認)。
+  - 第 5 項(合作計畫「上課文件」)**已完成**(第一階段規格):
+    - 新增 `tutoring.models.ClassDocument`(`migration tutoring/0020`):合作計畫(必填,`PROTECT`)、適用學期(選填,`SET_NULL`,留空代表適用該計畫所有學期)、中英文標題、檔案、是否啟用、上傳者、上傳時間。檔案格式與大小另外寫一個 `validate_class_document_file()`(擴充既有 `_validate_upload()` 加上可自訂允許副檔名/錯誤文案的參數,不影響既有兩個呼叫端的預設行為),允許 PDF/Word/PowerPoint/Excel/JPG/PNG、上限 10 MB,比口語能力證明(1 MB)、課堂紀錄附件(500 KB)更寬,符合課程教材通常較大的實際狀況。
+    - `PartnerProgram` 新增 `class_documents_enabled` 布林欄位(`migration accounts/0013`,預設 `False`),決定該計畫是否開放此功能,新增計畫或之後要讓 NTNU 開放都只需要在 Django Admin 打開這個欄位,不需要改程式;`migration accounts/0014` 依會議紀錄「第一階段顯示對象:馬里蘭 Tutee、馬里蘭課程名單中的大學部 Tutor」只把 `MARYLAND` 設為 `True`。
+    - 新增 `tutoring/services.py::visible_class_document_programs(user)`:Tutee 直接看 `user_program(user)`;Tutor 對每個已開放此功能的計畫呼叫既有的 `tutor_can_serve_program()`(第 4 項同一個函式,含馬里蘭限定大學部規則),確保「看得到上課文件」與「配得到該計畫學生」的資格判斷共用同一套邏輯,不會分岔出第二套規則。`visible_class_documents(user)` 在此之上再過濾 `is_active=True`。
+    - 新增 `accounts/context_processors.py::class_documents_menu()`(已註冊進 `config/settings.py` 的 `TEMPLATES.context_processors`),讓使用者選單(`templates/components/app_header.html`)能在橫跨 `accounts`/`tutoring` 兩個 app、共 9 個不同 view 的頁面上一致顯示或隱藏「上課文件」項目,不需要逐一修改每個 view 的 context(這是本專案第一個自訂 context processor)。
+    - 新增 `accounts:class_documents`(列表頁)與 `accounts:download_class_document`(下載,`role_required(TUTOR, TUTEE)` + 資格檢查 + `AuditLog.record(event_type="CLASS_DOCUMENT_DOWNLOADED")`)兩個 view。下載刻意走獨立 view 而非直接連到 `file.url`,因為驗收條件明確要求「下載行為需保留稽核紀錄」——這是本專案第一個「下載需要稽核」的檔案類型,既有的口語能力證明、課堂紀錄附件下載都只是直接連到 media URL,沒有經過任何 view,不會產生 `AuditLog`。
+    - 上傳/管理留在 Django Admin(`tutoring/admin.py::ClassDocumentAdmin`),沒有另開自訂前台上傳頁面,符合低頻率使用的定位;Admin 後台操作已由既有的 `mirror_admin_log_entry_to_audit_log()` 訊號自動鏡射進 `AuditLog`。
+    - 新增 `tutoring.tests.ClassDocumentTests`(9 個測試,繼承 `MatchingFixtureTestCase` 共用 fixture):馬里蘭 Tutee/大學部 Tutor 可見馬里蘭計畫、NTNU Tutee 與一般 Tutor(隱含服務 NTNU)皆看不到任何計畫(因為 NTNU 這一階段未開放)、馬里蘭名單但非大學部的 Tutor 看不到(鎖住與第 4 項相同的限制規則)、`visible_class_documents()` 正確排除停用文件與不合資格計畫、文件列表頁只列出合資格且啟用中的文件、選單顯示與資格判斷一致、合資格使用者下載成功並正確寫入 `AuditLog`、不合資格使用者下載回 404、停用文件即使對合資格使用者也回 404。另外用 curl 對 dev server 做過一次真實端到端驗證:馬里蘭 Tutee 登入後選單出現「上課文件」、可看到並下載測試文件(檔名、`Content-Disposition: attachment`、PDF 內容皆正確);切換到一般 NTNU Tutee 登入後選單不顯示該項目,且直接猜網址下載會被擋下回 404。
+- migrations:`accounts` 14 個、`tutoring` 20 個。
+- tests:`accounts` 54 個、`tutoring` 123 個,共 177 個,**全數通過**(2026-08-06 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

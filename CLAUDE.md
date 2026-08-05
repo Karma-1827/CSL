@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -288,6 +288,18 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
   - 建立/管理都**留在 Django Admin 裡**(`tutoring/admin.py::HourAdjustmentAdmin`),只能單筆新增/修改,沒有另外開一個獨立於 Django Admin 之外的自訂前台頁面,符合這個功能低頻率使用的定位;新增/修改時會寫入 `AuditLog`(`HOUR_ADJUSTMENT_CREATED`/`HOUR_ADJUSTMENT_UPDATED`)。model `clean()` 擋下時數 ≤ 0 與非 Tutor/Tutee 對象兩種情況,Django Admin 送出表單時會自動觸發。
   - **2026-08 已移除批次 Excel 匯入入口**(原「匯入 Excel / Import from Excel」連結、`import_hour_adjustments()`、`HourImportForm` 及對應測試已刪除,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 19 項):系辦決議不將系統上線前的舊紙本時數批次匯入新系統,此功能保留給未來 Admin 更正系統上線後的錯誤資料,不再用於補登舊紙本時數。model、migration 與既有資料未受影響。
 
+### 4.10 上課文件
+
+`tutoring.models.ClassDocument`(2026-08 新增,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 5 項):Admin 依合作計畫(必填)、適用學期(選填,留空代表適用該計畫所有學期)上傳課程文件,至少保存中文標題、英文標題、檔案、是否啟用、上傳時間、上傳者。
+
+- **顯示對象完全由資料驅動,不寫死計畫代碼**:`PartnerProgram.class_documents_enabled`(布林,預設 `False`)決定該計畫是否開放此功能;migration `accounts/0014` 目前只把 `MARYLAND` 設為 `True`,符合會議紀錄「第一階段顯示對象:馬里蘭 Tutee、馬里蘭課程名單中的大學部 Tutor」的範圍。之後若系辦決定讓 NTNU 或新計畫也使用這個功能,只需要在 Django Admin 把該計畫的這個欄位打開,不需要改程式。
+- **可見範圍與「可配對範圍」共用同一套判斷,不重新發明一套規則**:`tutoring/services.py::visible_class_document_programs(user)` 對 Tutee 直接看 `user_program(user)`(其唯一所屬計畫);對 Tutor 則對每個已開放此功能的計畫呼叫既有的 `tutor_can_serve_program(tutor, program)`(第 4 項的同一個函式,含馬里蘭限定大學部的規則),確保「看得到上課文件」與「配得到該計畫學生」的資格判斷永遠一致、不會分岔。`visible_class_documents(user)` 在此之上再過濾 `is_active=True`。
+- 使用者選單(`templates/components/app_header.html`)新增「上課文件 / Class documents」項目,只在 `class_documents_visible` 為真時顯示;此變數由新增的 `accounts/context_processors.py::class_documents_menu()` context processor(已加進 `config/settings.py` 的 `TEMPLATES.context_processors`)提供。選用 context processor 而非讓每個 view 各自傳入,是因為共用的 `components/app_header.html` 目前橫跨 9 個不同 view 的頁面(`accounts`、`tutoring` 兩個 app 都有),逐一修改容易漏掉且日後新增頁面也會忘記加。
+- 新頁面 `accounts:class_documents`(`templates/accounts/class_documents.html`)列出使用者有資格且已啟用的文件;下載走獨立的 `accounts:download_class_document` view(不是直接連到 `file.url`),原因是驗收條件明確要求「下載行為需保留稽核紀錄」——現有的口語能力證明、課堂紀錄附件下載都只是直接連到 media URL,沒有經過任何 view,不會產生 `AuditLog`,這個功能是本專案第一個「下載需要稽核」的檔案類型,因此需要自己的 gate 檢查(`document.program not in visible_class_document_programs(request.user)` 才放行)與 `AuditLog.record(event_type="CLASS_DOCUMENT_DOWNLOADED")`。
+- 檔案格式與大小:比照既有 `validate_qualification_file`/`validate_class_record_attachment` 共用的 `_validate_upload()` 擴充出 `validate_class_document_file()`,允許 PDF/Word/PowerPoint/Excel/JPG/PNG(課程教材常見格式,比證明文件/課堂附件的允許清單更寬),上限 10 MB(比 1 MB/500 KB 更寬,課程教材通常較大)。
+- 電子章、主管簽名、正式模板的邊界說明(見上方 4.9 節)同樣適用於此處:文件本身就是系辦上傳的原始檔案,系統不做任何浮水印或簽章疊加。
+- 上傳/管理仍**留在 Django Admin 裡**(`tutoring/admin.py::ClassDocumentAdmin`),沒有另開自訂前台上傳頁面,符合這個功能目前低頻率使用的定位;Admin 後台的新增/修改/刪除已由既有的 `mirror_admin_log_entry_to_audit_log()` 訊號自動鏡射進 `AuditLog`,不需要額外手動寫入。
+
 ## 5. 技術架構
 
 ### Runtime
@@ -307,6 +319,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 config/                 Django settings、root URL、WSGI/ASGI
 accounts/               User/名冊/註冊/登入/恢復/Profile/Admin dashboard
 accounts/services.py    名冊匯入(分類卡片快速匯入 + 進階完整欄位匯入,CSV/Excel 解析、驗證、範本產生)
+accounts/context_processors.py 全站共用的 template context(目前只有上課文件選單顯示與否)
 accounts/management/    本機 demo 帳號 seed
 tutoring/               配對、排課、簽到、紀錄、互認、補登、報表
 tutoring/services.py    核心業務規則;新規則優先放這裡而非 view/template

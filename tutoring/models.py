@@ -9,11 +9,11 @@ from django.utils import timezone
 from accounts.models import PartnerProgram, Role, User
 
 
-def _validate_upload(upload, *, max_bytes, size_label):
-    allowed = {".pdf", ".jpg", ".jpeg", ".png"}
+def _validate_upload(upload, *, max_bytes, size_label, allowed_extensions=None, allowed_label="PDF、JPG、PNG"):
+    allowed = allowed_extensions or {".pdf", ".jpg", ".jpeg", ".png"}
     extension = Path(upload.name).suffix.lower()
     if extension not in allowed:
-        raise ValidationError("僅接受 PDF、JPG、PNG。 / Only PDF, JPG, and PNG files are accepted.")
+        raise ValidationError(f"僅接受 {allowed_label}。 / Only {allowed_label} files are accepted.")
     if upload.size > max_bytes:
         raise ValidationError(f"檔案不可超過 {size_label}。 / File size must not exceed {size_label}.")
 
@@ -24,6 +24,14 @@ def validate_qualification_file(upload):
 
 def validate_class_record_attachment(upload):
     _validate_upload(upload, max_bytes=500_000, size_label="500 KB")
+
+
+def validate_class_document_file(upload):
+    _validate_upload(
+        upload, max_bytes=10_000_000, size_label="10 MB",
+        allowed_extensions={".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png"},
+        allowed_label="PDF、Word、PowerPoint、Excel、JPG、PNG",
+    )
 
 
 class QualificationStatus(models.TextChoices):
@@ -645,3 +653,41 @@ class HourAdjustment(models.Model):
 
     def __str__(self):
         return f"{self.user.username} +{self.hours} 小時 ({self.semester})"
+
+
+class ClassDocument(models.Model):
+    """Admin-uploaded reference material scoped to a partner program and, optionally, a
+    specific semester (e.g. syllabi or session handouts for a language-exchange course).
+    See MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 5. Visibility is driven entirely by
+    PartnerProgram.class_documents_enabled plus the same tutor_can_serve_program()/
+    user_program() eligibility rules used for candidate browsing and invitations, so a new
+    program can opt in without any code change."""
+
+    program = models.ForeignKey(PartnerProgram, on_delete=models.PROTECT, related_name="class_documents")
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL, null=True, blank=True, related_name="class_documents",
+        verbose_name="適用學期 / Applicable semester",
+        help_text="留空表示適用此計畫所有學期。 / Leave blank to apply to every semester of this program.",
+    )
+    title_zh = models.CharField("中文標題 / Chinese title", max_length=200)
+    title_en = models.CharField("英文標題 / English title", max_length=200)
+    file = models.FileField(
+        "檔案 / File", upload_to="class_documents/%Y/%m/", validators=[validate_class_document_file],
+    )
+    is_active = models.BooleanField("啟用 / Active", default=True)
+    uploaded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    uploaded_at = models.DateTimeField("上傳時間 / Uploaded at", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+        verbose_name = "上課文件 / Class document"
+        verbose_name_plural = "上課文件 / Class documents"
+
+    def __str__(self):
+        return f"{self.program.code} - {self.title_zh}"
+
+    @property
+    def filename(self):
+        return Path(self.file.name).name if self.file else ""

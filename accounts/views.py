@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -28,6 +28,7 @@ from tutoring.models import (
     QualificationDocument,
     QualificationStatus,
     Semester,
+    ClassDocument,
     ClassSession,
     ClassSessionStatus,
     ClassAlert,
@@ -57,6 +58,8 @@ from tutoring.services import (
     active_semester,
     semester_applies_to_user,
     user_program,
+    visible_class_document_programs,
+    visible_class_documents,
 )
 
 from .decorators import role_required
@@ -893,6 +896,25 @@ def handbook(request):
             "is_maryland": bool(roster and roster.program_id and roster.program.allow_tutee_initiate_invitation),
         },
     )
+
+
+@role_required(Role.TUTOR, Role.TUTEE)
+def class_documents(request):
+    documents = visible_class_documents(request.user)
+    return render(request, "accounts/class_documents.html", {"documents": documents})
+
+
+@role_required(Role.TUTOR, Role.TUTEE)
+def download_class_document(request, pk):
+    document = get_object_or_404(ClassDocument, pk=pk, is_active=True)
+    if document.program not in visible_class_document_programs(request.user):
+        raise Http404
+    AuditLog.record(
+        actor=request.user, target_user=request.user, event_type="CLASS_DOCUMENT_DOWNLOADED",
+        description="下載上課文件 / Class document downloaded",
+        metadata={"document_id": document.pk, "program": document.program.code, "title_zh": document.title_zh},
+    )
+    return FileResponse(document.file.open("rb"), as_attachment=True, filename=document.filename)
 
 
 @role_required(Role.TUTOR)

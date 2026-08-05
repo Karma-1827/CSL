@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}上課文件 / Class documents{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+  {% include "components/app_header.html" %}
+  <main id="main-content" class="guide-page-main">
+    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+    <section class="guide-hero">
+      <div><span class="section-kicker">CLASS DOCUMENTS</span><h1>上課文件 <small>Class documents</small></h1><p>系辦依合作計畫上傳的課程文件，僅顯示您有資格參與計畫的已啟用文件。<br>Documents uploaded by the department for your partner program. Only active documents for programs you're eligible for are shown.</p></div>
+    </section>
+    <section class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">DOCUMENTS</span><h2>文件清單 <small>Document list</small></h2></div></div>
+      <div class="conversation-link-list">
+        {% for document in documents %}
+          <a href="{% url 'accounts:download_class_document' document.pk %}"><span><strong>{{ document.title_zh }}</strong><small>{{ document.title_en }}</small></span>{% if document.semester %}<em>{{ document.semester.name_zh }}</em>{% else %}<em>適用所有學期 / All semesters</em>{% endif %}</a>
+        {% empty %}<div class="empty-state compact">目前沒有可下載的文件。 / No documents available yet.</div>{% endfor %}
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}

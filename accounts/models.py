@@ -51,6 +51,14 @@ class PartnerProgram(models.Model):
     tutee_can_download_hours = models.BooleanField(
         "Tutee 可下載時數證明 / Tutee can download hour certificates", default=False
     )
+    class_documents_enabled = models.BooleanField(
+        "開放上課文件 / Class documents enabled", default=False,
+        help_text=(
+            "開啟後，此計畫符合資格的 Tutor/Tutee 才會在選單看到「上課文件」並能查看已啟用的文件。 / "
+            "When enabled, eligible Tutors/Tutees of this program see the \"Class documents\" menu "
+            "item and can view active documents."
+        ),
+    )
     tutee_certificate_filename = models.CharField(
         "Tutee 證明模板檔名 / Tutee certificate template filename", max_length=150, blank=True,
         help_text="檔名需已存在於 tutoring/resources/certificate_templates/。多個計畫可共用同一份底圖。",

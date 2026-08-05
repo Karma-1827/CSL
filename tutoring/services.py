@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from accounts.models import AuditLog, EducationLevel, Role, User
+from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, User
 
 from .models import (
     InvitationStatus,
@@ -27,6 +27,7 @@ from .models import (
     ClassAlert,
     ClassAlertReason,
     ClassAlertStatus,
+    ClassDocument,
     ClassRecord,
     ClassSession,
     ClassSessionStatus,
@@ -138,6 +139,36 @@ def tutor_can_serve_program(tutor, program):
     if roster_program.code == "MARYLAND" and tutor.roster_entry.education_level != EducationLevel.BACHELOR:
         return False
     return True
+
+
+def visible_class_document_programs(user):
+    """Partner programs whose class documents `user` may see (item 5).
+
+    Reuses the same eligibility rules already used for candidate browsing and invitations
+    so "who can see documents" never drifts from "who belongs to this program": a Tutee's
+    single program comes from their roster entry (user_program()); a Tutor's eligibility is
+    checked against every program with the feature enabled via tutor_can_serve_program(),
+    which also covers "ordinary tutors implicitly serve NTNU" and the Maryland bachelor's
+    restriction — not just tutors with an explicit roster program.
+    """
+    if user.role == Role.TUTEE:
+        program = user_program(user)
+        return [program] if program and program.class_documents_enabled else []
+    if user.role == Role.TUTOR:
+        return [
+            program for program in PartnerProgram.objects.filter(class_documents_enabled=True)
+            if tutor_can_serve_program(user, program)
+        ]
+    return []
+
+
+def visible_class_documents(user):
+    programs = visible_class_document_programs(user)
+    if not programs:
+        return ClassDocument.objects.none()
+    return ClassDocument.objects.filter(
+        program__in=programs, is_active=True
+    ).select_related("program", "semester")
 
 
 def _six_months_before(value):

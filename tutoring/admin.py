@@ -7,6 +7,7 @@ from .models import (
     Attendance,
     ClassConfirmation,
     ClassAlert,
+    ClassDocument,
     ClassRecord,
     ClassSession,
     HourAdjustment,
@@ -165,6 +166,19 @@ class HourAdjustmentAdmin(admin.ModelAdmin):
                 "reason": obj.reason,
             },
         )
+
+
+@admin.register(ClassDocument)
+class ClassDocumentAdmin(admin.ModelAdmin):
+    list_display = ("title_zh", "program", "semester", "is_active", "uploaded_by", "uploaded_at")
+    list_filter = ("program", "is_active", "semester")
+    search_fields = ("title_zh", "title_en")
+    readonly_fields = ("uploaded_by", "uploaded_at")
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.uploaded_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 admin.site.site_header = "華語實習暨輔導系統管理 / MPTS Administration"

@@ -29,6 +29,7 @@ from .models import (
     TuteeProfile,
     TutorProfile,
     Attendance,
+    ClassDocument,
     ClassRecord,
     ClassConfirmation,
     ClassAlert,
@@ -67,6 +68,8 @@ from .services import (
     submit_pairing_release_request,
     submit_class_record,
     user_program,
+    visible_class_document_programs,
+    visible_class_documents,
 )
 
 
@@ -2223,4 +2226,82 @@ class PartnerProgramCertificateTests(TestCase):
         self.assertIn("Nationality", text)
         self.assertIn("Chinese level", text)
         self.assertNotIn("輔導時數明細", text)
+
+
+class ClassDocumentTests(MatchingFixtureTestCase):
+    """Item 5: 合作計畫「上課文件」. class_documents_enabled is only True for MARYLAND in
+    this first phase (see accounts/migrations/0014_enable_maryland_class_documents.py)."""
+
+    def make_document(self, program, *, is_active=True, semester=None):
+        return ClassDocument.objects.create(
+            program=program, semester=semester, title_zh="教材", title_en="Course material",
+            file=SimpleUploadedFile("material.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+            is_active=is_active,
+        )
+
+    def test_maryland_tutee_and_bachelor_tutor_see_the_maryland_program(self):
+        self.assertEqual(visible_class_document_programs(self.maryland), [self.maryland_program])
+        self.assertEqual(visible_class_document_programs(self.maryland_tutor), [self.maryland_program])
+
+    def test_ntnu_tutee_and_ordinary_tutor_see_nothing(self):
+        """NTNU does not have class_documents_enabled in this first phase, so neither an
+        NTNU tutee nor an ordinary tutor (who implicitly serves NTNU) sees any program."""
+        self.assertEqual(visible_class_document_programs(self.tutee), [])
+        self.assertEqual(visible_class_document_programs(self.tutor), [])
+
+    def test_maryland_roster_tutor_without_bachelor_level_sees_nothing(self):
+        """Mirrors tutor_can_serve_program()'s Maryland bachelor's restriction (item 4):
+        a tutor on the Maryland roster but not at bachelor's level still can't serve
+        Maryland, so they shouldn't see Maryland's class documents either."""
+        graduate_maryland_tutor = self.make_tutor(
+            "MARYTUTOR-GRAD", "馬里蘭碩士老師", "Maryland Grad Tutor",
+            program=self.maryland_program, education_level=EducationLevel.MASTER,
+        )
+        self.assertEqual(visible_class_document_programs(graduate_maryland_tutor), [])
+
+    def test_visible_class_documents_excludes_inactive_and_ineligible_programs(self):
+        active_doc = self.make_document(self.maryland_program)
+        self.make_document(self.maryland_program, is_active=False)
+        self.make_document(self.ntnu_program)
+        self.assertEqual(list(visible_class_documents(self.maryland)), [active_doc])
+        self.assertEqual(list(visible_class_documents(self.tutee)), [])
+
+    def test_class_documents_page_lists_only_eligible_active_documents(self):
+        active_doc = self.make_document(self.maryland_program)
+        self.make_document(self.ntnu_program)
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:class_documents"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["documents"]), [active_doc])
+
+    def test_menu_visibility_matches_eligibility(self):
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertTrue(response.context["class_documents_visible"])
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertFalse(response.context["class_documents_visible"])
+
+    def test_eligible_user_can_download_and_audit_log_is_written(self):
+        document = self.make_document(self.maryland_program)
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        log = AuditLog.objects.get(event_type="CLASS_DOCUMENT_DOWNLOADED")
+        self.assertEqual(log.actor, self.maryland)
+        self.assertEqual(log.metadata["program"], "MARYLAND")
+
+    def test_ineligible_user_cannot_download(self):
+        document = self.make_document(self.maryland_program)
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_inactive_document_cannot_be_downloaded_even_by_eligible_user(self):
+        document = self.make_document(self.maryland_program, is_active=False)
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
+        self.assertEqual(response.status_code, 404)
 
