@@ -8,6 +8,7 @@ app_name = "accounts"
 urlpatterns = [
     path("", views.CSLLoginView.as_view(), name="login"),
     path("register/", views.register, name="register"),
+    path("register/confirm/", views.register_confirm, name="register_confirm"),
     path("register/tutor/", views.register_tutor, name="register_tutor"),
     path("register/tutee/", views.register_tutee, name="register_tutee"),
     path("logout/", LogoutView.as_view(), name="logout"),

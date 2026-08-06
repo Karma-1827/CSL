@@ -74,6 +74,8 @@ class RegistrationTests(TestCase):
                 "password2": self.registration_data["password2"],
             },
         )
+        self.assertRedirects(response, reverse("accounts:register_confirm"))
+        response = self.client.post(reverse("accounts:register_confirm"))
         self.assertRedirects(response, reverse("accounts:register_tutor"))
         return self.client.post(reverse("accounts:register_tutor"), data or self.registration_data)
 
@@ -116,6 +118,7 @@ class RegistrationTests(TestCase):
             reverse("accounts:register"),
             {"student_id": "TEST1001", "password1": data["password1"], "password2": data["password2"]},
         )
+        self.client.post(reverse("accounts:register_confirm"))
         response = self.client.post(reverse("accounts:register_tutor"), data)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
@@ -126,6 +129,7 @@ class RegistrationTests(TestCase):
             reverse("accounts:register"),
             {"student_id": "TEST1001", "password1": data["password1"], "password2": data["password2"]},
         )
+        self.client.post(reverse("accounts:register_confirm"))
         response = self.client.post(reverse("accounts:register_tutor"), data)
         self.assertContains(response, "三題不可重複")
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
@@ -139,11 +143,68 @@ class RegistrationTests(TestCase):
                 "password2": self.registration_data["password2"],
             },
         )
-        self.assertRedirects(response, reverse("accounts:register_tutor"))
+        self.assertRedirects(response, reverse("accounts:register_confirm"))
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
         self.assertTrue(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
         self.roster.refresh_from_db()
         self.assertIsNone(self.roster.claimed_at)
+
+    def start_registration(self):
+        return self.client.post(
+            reverse("accounts:register"),
+            {
+                "student_id": "TEST1001",
+                "password1": self.registration_data["password1"],
+                "password2": self.registration_data["password2"],
+            },
+        )
+
+    def test_stage_two_url_cannot_be_opened_directly_without_confirming(self):
+        """Item 7 acceptance: visiting the stage-2 URL without having confirmed the
+        student ID must not open the profile form."""
+        self.start_registration()
+        response = self.client.get(reverse("accounts:register_tutor"))
+        self.assertRedirects(response, reverse("accounts:register_confirm"))
+        self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
+    def test_confirm_page_shows_student_id_and_does_not_create_account(self):
+        self.start_registration()
+        response = self.client.get(reverse("accounts:register_confirm"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "TEST1001")
+        self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
+    def test_refreshing_confirm_page_repeatedly_does_not_create_account(self):
+        self.start_registration()
+        for _ in range(3):
+            response = self.client.get(reverse("accounts:register_confirm"))
+            self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
+    def test_going_back_to_stage_one_discards_the_draft(self):
+        """Item 7 acceptance: back/refresh must not accidentally build up an account. Landing
+        back on the lookup form clears the in-progress draft and confirmation, so the stage-2
+        URL is unreachable until stage 1 is redone."""
+        self.start_registration()
+        self.client.post(reverse("accounts:register_confirm"))
+        self.client.get(reverse("accounts:register"))
+        self.assertFalse(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
+        response = self.client.get(reverse("accounts:register_tutor"))
+        self.assertRedirects(response, reverse("accounts:register"))
+
+    def test_confirming_does_not_extend_the_draft_expiry(self):
+        """Item 7 acceptance: confirming keeps the original draft's time limit — it isn't a
+        fresh 30-minute window."""
+        self.start_registration()
+        draft = RegistrationDraft.objects.get(roster_entry=self.roster)
+        original_expiry = draft.expires_at
+        self.client.post(reverse("accounts:register_confirm"))
+        draft.refresh_from_db()
+        self.assertEqual(draft.expires_at, original_expiry)
+
+    def test_register_confirm_without_a_pending_draft_redirects_to_stage_one(self):
+        response = self.client.get(reverse("accounts:register_confirm"))
+        self.assertRedirects(response, reverse("accounts:register"))
 
     def test_tutee_is_sent_to_tutee_form_and_profile_is_created(self):
         maryland = PartnerProgram.objects.get(code="MARYLAND")
@@ -164,6 +225,8 @@ class RegistrationTests(TestCase):
                 "password2": "Another-secure-password-2026",
             },
         )
+        self.assertRedirects(response, reverse("accounts:register_confirm"))
+        response = self.client.post(reverse("accounts:register_confirm"))
         self.assertRedirects(response, reverse("accounts:register_tutee"))
         data = {
             "name_zh": "受輔導學生",
@@ -213,6 +276,7 @@ class AccountRecoveryTests(TestCase):
                 "password2": self.registration_data["password2"],
             },
         )
+        self.client.post(reverse("accounts:register_confirm"))
         self.client.post(reverse("accounts:register_tutor"), self.registration_data)
         self.client.post(reverse("accounts:logout"))
 

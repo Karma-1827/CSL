@@ -1,0 +1,15 @@
+{% extends "accounts/auth_base.html" %}
+
+{% block title %}確認學號 / Confirm student ID{% endblock %}
+{% block auth_card_class %}register-auth-card{% endblock %}
+
+{% block auth_content %}
+<div class="section-kicker">CONFIRM STUDENT ID</div>
+<h2>確認學號</h2>
+<p class="help-text">請再次確認學號：<strong>{{ roster.student_id }}</strong>。完成註冊後，學號無法自行修改。<br>Please confirm your student ID. It cannot be changed by the user after registration.</p>
+<form method="post" class="stack-form" novalidate>
+  {% csrf_token %}
+  <button class="button button-primary button-full" type="submit">確認學號正確 <span>Confirm student ID</span></button>
+</form>
+<p class="auth-switch"><a href="{% url 'accounts:register' %}">返回修改 / Go back and edit</a></p>
+{% endblock %}

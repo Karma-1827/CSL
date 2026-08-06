@@ -126,19 +126,22 @@ def register(request):
         return redirect("accounts:dashboard")
     if request.method == "GET":
         old_draft_id = request.session.pop("registration_draft_id", None)
+        request.session.pop("registration_confirmed", None)
         if old_draft_id:
             RegistrationDraft.objects.filter(pk=old_draft_id).delete()
     form = RegistrationLookupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        roster = form.roster
         draft = form.save_draft()
         request.session["registration_draft_id"] = draft.pk
-        target = "accounts:register_tutor" if roster.role == Role.TUTOR else "accounts:register_tutee"
-        return redirect(target)
+        request.session.pop("registration_confirmed", None)
+        return redirect("accounts:register_confirm")
     return render(request, "accounts/register.html", {"form": form})
 
 
-def _registration_roster(request, expected_role):
+def _pending_registration(request):
+    """The roster/draft pair behind the current session's registration attempt, or None
+    if there isn't a still-valid one. Doesn't check the roster's role — see
+    _registration_roster() for the role-specific wrapper used by stage-2 views."""
     draft_id = request.session.get("registration_draft_id")
     if not draft_id:
         return None
@@ -148,13 +151,45 @@ def _registration_roster(request, expected_role):
         not draft
         or draft.is_expired
         or not roster.is_enabled
-        or roster.role != expected_role
         or roster.is_claimed
         or User.objects.filter(username=roster.student_id).exists()
     ):
         if draft:
             draft.delete()
         request.session.pop("registration_draft_id", None)
+        request.session.pop("registration_confirmed", None)
+        return None
+    return roster, draft
+
+
+def register_confirm(request):
+    """Item 7: a mandatory "confirm your student ID" step between stage 1 (roster lookup +
+    password) and stage 2 (Tutor/Tutee profile), so the account/roster claim isn't just one
+    accidental click away from the ID lookup form. Confirming only flips a session flag —
+    it never touches draft.expires_at, so the original 30-minute window still applies."""
+    if request.user.is_authenticated:
+        return redirect("accounts:dashboard")
+    registration = _pending_registration(request)
+    if registration is None:
+        messages.info(request, "請先輸入學號確認名冊身分。\nEnter your student ID to verify your roster role first.")
+        return redirect("accounts:register")
+    roster, draft = registration
+    if request.method == "POST":
+        request.session["registration_confirmed"] = True
+        target = "accounts:register_tutor" if roster.role == Role.TUTOR else "accounts:register_tutee"
+        return redirect(target)
+    return render(request, "accounts/register_confirm.html", {"roster": roster})
+
+
+def _registration_roster(request, expected_role):
+    registration = _pending_registration(request)
+    if registration is None:
+        return None
+    roster, draft = registration
+    if roster.role != expected_role:
+        draft.delete()
+        request.session.pop("registration_draft_id", None)
+        request.session.pop("registration_confirmed", None)
         return None
     return roster, draft
 
@@ -166,6 +201,8 @@ def _role_registration(request, role, form_class, template_name):
     if registration is None:
         messages.info(request, "請先輸入學號確認名冊身分。\nEnter your student ID to verify your roster role first.")
         return redirect("accounts:register")
+    if not request.session.get("registration_confirmed"):
+        return redirect("accounts:register_confirm")
     roster, draft = registration
     form = form_class(request.POST or None, request.FILES or None, roster=roster, draft=draft)
     if request.method == "POST" and form.is_valid():
@@ -173,9 +210,11 @@ def _role_registration(request, role, form_class, template_name):
             user = form.save()
         except ValidationError as error:
             request.session.pop("registration_draft_id", None)
+            request.session.pop("registration_confirmed", None)
             messages.error(request, " ".join(error.messages))
             return redirect("accounts:register")
         request.session.pop("registration_draft_id", None)
+        request.session.pop("registration_confirmed", None)
         log_event(
             request,
             "ACCOUNT_REGISTERED",

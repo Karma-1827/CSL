@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16、5 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(177 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16、5、7 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件、註冊確認學號中間步驟),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(183 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -102,8 +102,13 @@
     - 新增 `accounts:class_documents`(列表頁)與 `accounts:download_class_document`(下載,`role_required(TUTOR, TUTEE)` + 資格檢查 + `AuditLog.record(event_type="CLASS_DOCUMENT_DOWNLOADED")`)兩個 view。下載刻意走獨立 view 而非直接連到 `file.url`,因為驗收條件明確要求「下載行為需保留稽核紀錄」——這是本專案第一個「下載需要稽核」的檔案類型,既有的口語能力證明、課堂紀錄附件下載都只是直接連到 media URL,沒有經過任何 view,不會產生 `AuditLog`。
     - 上傳/管理留在 Django Admin(`tutoring/admin.py::ClassDocumentAdmin`),沒有另開自訂前台上傳頁面,符合低頻率使用的定位;Admin 後台操作已由既有的 `mirror_admin_log_entry_to_audit_log()` 訊號自動鏡射進 `AuditLog`。
     - 新增 `tutoring.tests.ClassDocumentTests`(9 個測試,繼承 `MatchingFixtureTestCase` 共用 fixture):馬里蘭 Tutee/大學部 Tutor 可見馬里蘭計畫、NTNU Tutee 與一般 Tutor(隱含服務 NTNU)皆看不到任何計畫(因為 NTNU 這一階段未開放)、馬里蘭名單但非大學部的 Tutor 看不到(鎖住與第 4 項相同的限制規則)、`visible_class_documents()` 正確排除停用文件與不合資格計畫、文件列表頁只列出合資格且啟用中的文件、選單顯示與資格判斷一致、合資格使用者下載成功並正確寫入 `AuditLog`、不合資格使用者下載回 404、停用文件即使對合資格使用者也回 404。另外用 curl 對 dev server 做過一次真實端到端驗證:馬里蘭 Tutee 登入後選單出現「上課文件」、可看到並下載測試文件(檔名、`Content-Disposition: attachment`、PDF 內容皆正確);切換到一般 NTNU Tutee 登入後選單不顯示該項目,且直接猜網址下載會被擋下回 404。
-- migrations:`accounts` 14 個、`tutoring` 20 個。
-- tests:`accounts` 54 個、`tutoring` 123 個,共 177 個,**全數通過**(2026-08-06 重新實際執行確認)。
+  - 第 7 項(進入個人檔案前再次確認學號)**已完成**:
+    - 第一階段(`accounts:register`)成功建立 `RegistrationDraft` 後,不再直接依角色導向 `/register/tutor/`/`/register/tutee/`,而是先導向新增的 `/register/confirm/`(`accounts:register_confirm`),清楚列出學號,要求按「確認學號正確」才會被導向對應的第二階段表單;按「返回修改」則回到第一階段。
+    - 確認狀態是 session 裡的一個布林旗標(`registration_confirmed`),`_role_registration()`(第二階段共用 view)一開始就檢查這個旗標,沒確認一律導回確認頁,不管是直接用網址列開啟第二階段網址、或重新整理確認頁多次都不會意外建立帳號。確認本身完全不動 `RegistrationDraft.expires_at`,原本 30 分鐘的時效不受影響。
+    - 抽出 `_pending_registration(request)`(不檢查角色)供確認頁與既有 `_registration_roster(request, expected_role)`(檢查角色,供第二階段 view 使用)共用核心的草稿有效性檢查,避免兩處各寫一份邏輯。既有的「GET `/register/` 時清掉舊草稿」邏輯同步也清掉確認旗標,確保用瀏覽器返回鍵回到第一階段永遠是乾淨重來。
+    - 修正既有 5 個測試(`RegistrationTests`/`AccountRecoveryTests`)在第一、二階段之間補上確認步驟的 POST,否則會卡在確認頁收不到預期的重新導向;新增 6 個測試涵蓋驗收條件本身:未確認不得直接開啟第二階段網址、確認頁正確顯示學號且不建立帳號、重新整理確認頁多次不建立帳號、返回第一階段會清掉草稿導致第二階段網址不可用、確認不會延長草稿時效、確認頁在沒有有效草稿時導回第一階段。另外用 curl 對 dev server 做過一次真實端到端驗證(第一階段→確認頁→直接猜第二階段網址被擋下→確認後才能正常進入第二階段表單)。
+- migrations:`accounts` 14 個、`tutoring` 20 個(第 7 項純屬 view/session 邏輯,無 model 異動)。
+- tests:`accounts` 60 個、`tutoring` 123 個,共 183 個,**全數通過**(2026-08-06 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

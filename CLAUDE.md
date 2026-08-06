@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5、7 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -124,6 +124,7 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 - `RosterEntry.student_id` 與 `User.username` 都代表學號;學號唯一。`RosterEntry.clean()` 會將學號正規化為大寫,註冊第一階段的學號查找也是大小寫不敏感,所以系辦名冊與使用者輸入不論大小寫都能對上(登入本來就是大小寫不敏感,這裡是補齊匯入/註冊端的一致性)。
 - 公開註冊第一階段只接受 `is_enabled=True`、尚未 claimed、角色為 Tutor/Tutee 的名冊。
 - 第一階段建立 `RegistrationDraft`,只保存 Django 密碼雜湊,30 分鐘到期。
+- **2026-08 新增「確認學號」中間步驟**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 7 項):第一階段成功後不會直接進入第二階段個人檔案表單,而是先導向 `/register/confirm/`(`accounts:register_confirm`),清楚列出學號並要求按「確認學號正確」才會被導向 `/register/tutor/`/`/register/tutee/`;按「返回修改」則回到第一階段。確認狀態只是 session 裡的一個布林旗標(`registration_confirmed`),完全不會動到 `RegistrationDraft.expires_at`,所以原本 30 分鐘的時效不受影響。直接用網址列開啟第二階段網址、或重新整理/返回確認頁都不會建立帳號:第二階段 view(`_role_registration()`)會先檢查這個旗標,沒確認就導回確認頁;任何時候重新整理或用瀏覽器返回鍵回到第一階段的 `/register/`(GET)都會清掉目前的草稿與確認旗標(既有的「GET 時清掉舊草稿」邏輯,`register()`),確保「返回」永遠是乾淨重來,不會意外殘留一個已確認但使用者其實想改的草稿。
 - 第二階段依名冊角色進入 `/register/tutor/` 或 `/register/tutee/`;完整 Profile、安全問題與同意欄位成功後才建立正式 `User`,並設定 `claimed_at`。
 - 中文姓名、英文姓名(選填)、身份別(本地生/僑生/外籍生)由**使用者於第二階段註冊時自行填寫**,不再要求系辦於名冊匯入時預先提供;Tutor 另外還要在註冊時自行選擇學制(大學部/碩士班/博士班)下拉選單。`RosterEntry.name_zh`/`identity_category`/`education_level` 因此在匯入時允許留空(`blank=True`),送出註冊表單時才寫回 `RosterEntry` 並鎖定,之後只能透過 `/profile/` 以外的管道(聯絡系辦)修改,見下方唯讀規則。中英文姓名欄位下方顯示提示,說明資料將顯示於時數證明,請填寫正式姓名。
 - 第二階段另新增暱稱(`User.nickname`,選填)與 Email(`AbstractUser.email`,必填,僅檢查基本格式,不寄驗證信)兩欄位。
@@ -338,6 +339,7 @@ output/                 本機人工檢查用預覽與會議輸出(PDF/DOCX 等)
 
 - `/` 登入
 - `/register/` 名冊核對與密碼草稿
+- `/register/confirm/` 確認學號(第一/第二階段之間的中間步驟,見第 4.1 節)
 - `/register/tutor/`、`/register/tutee/` 第二階段 Profile
 - `/dashboard/` 三角色 dashboard
 - `/profile/` 個人資料;Tutor/Tutee 可自行編輯非名冊類欄位(見第 4.1 節),姓名/學號唯讀
