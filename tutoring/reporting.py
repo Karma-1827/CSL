@@ -139,6 +139,35 @@ def _register_certificate_fonts():
     return font_name, bold_font_name, english_font_name, english_bold_font_name
 
 
+def _restrict_copy_and_selection(pdf_bytes):
+    """Best-effort "no copy / no text extraction" protection for every PDF this module
+    produces (item 3 of MEETING_CHANGE_REQUIREMENTS_2026-08-04.md).
+
+    This only sets a PDF permission flag honored by compliant readers — it is NOT real DRM.
+    It cannot stop screenshots, OCR, re-typing, or tools that deliberately ignore permission
+    flags (see pypdf's own docs; this is a property of the PDF encryption spec, not a pypdf
+    limitation). No user/open password is set, so the file still opens directly; printing is
+    still granted. The random owner password is generated per file and discarded immediately
+    — nothing in this codebase ever needs to remove the restriction again.
+    """
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.constants import UserAccessPermissions
+    import secrets
+
+    reader = PdfReader(BytesIO(pdf_bytes))
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.encrypt(
+        user_password="",
+        owner_password=secrets.token_urlsafe(24),
+        permissions_flag=UserAccessPermissions.PRINT | UserAccessPermissions.PRINT_TO_REPRESENTATION,
+    )
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, language="zh"):
     """Overlay a formal certificate onto the department-provided PDF template.
 
@@ -551,7 +580,7 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
         writer.add_page(page)
     output = BytesIO()
     writer.write(output)
-    return output.getvalue()
+    return _restrict_copy_and_selection(output.getvalue())
 
 
 EXPORT_HEADERS = ["學號 Student ID", "中文姓名", "英文姓名", "身分 Role", "學期 Semester", "日期 Date", "時間 Time", "時數 Hours", "對方學號", "輔導對象", "狀態 Status"]
@@ -682,4 +711,4 @@ def build_export_pdf(users, *, starts_on=None, ends_on=None):
         Spacer(1, 8),
         table,
     ])
-    return buffer.getvalue()
+    return _restrict_copy_and_selection(buffer.getvalue())

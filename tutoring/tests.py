@@ -1725,7 +1725,15 @@ class V2FeatureTests(TestCase):
         self.assertTrue(response["Content-Disposition"].endswith('.pdf"'))
         self.assertTrue(response.content.startswith(b"%PDF"))
         from pypdf import PdfReader
-        self.assertGreaterEqual(len(PdfReader(BytesIO(response.content)).pages), 1)
+        from pypdf.constants import UserAccessPermissions
+        reader = PdfReader(BytesIO(response.content))
+        self.assertGreaterEqual(len(reader.pages), 1)
+        # Item 3: exported administrative reports get the same copy/extraction restriction
+        # as certificates — see test_certificate_pdf_restricts_copy_but_allows_printing.
+        self.assertTrue(reader.is_encrypted)
+        permissions = reader.user_access_permissions
+        self.assertTrue(permissions & UserAccessPermissions.PRINT)
+        self.assertFalse(permissions & UserAccessPermissions.EXTRACT)
 
     def test_admin_export_rejects_reversed_date_range(self):
         admin = User.objects.create_superuser(username="EXPORT-RANGE-ADMIN", password="Admin-password-2026")
@@ -1808,6 +1816,27 @@ class PartnerProgramCertificateTests(TestCase):
 
     def test_ntnu_tutee_can_now_download_hours(self):
         self.assertTrue(user_has_hour_records(self.tutee))
+
+    def test_certificate_pdf_restricts_copy_but_allows_printing(self):
+        """Item 3: best-effort "no copy/extraction" PDF permission. No open password is
+        set (extract_text() below succeeds without ever calling reader.decrypt()), and
+        printing stays allowed — only text/graphics extraction is denied."""
+        from pypdf import PdfReader
+        from pypdf.constants import UserAccessPermissions
+
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        content = build_hours_pdf(data, version="summary", program=self.ntnu_program)
+        reader = PdfReader(BytesIO(content))
+        self.assertTrue(reader.is_encrypted)
+        self.assertTrue(reader.pages[0].extract_text().strip())
+        permissions = reader.user_access_permissions
+        self.assertTrue(permissions & UserAccessPermissions.PRINT)
+        self.assertTrue(permissions & UserAccessPermissions.PRINT_TO_REPRESENTATION)
+        self.assertFalse(permissions & UserAccessPermissions.EXTRACT)
+        self.assertFalse(permissions & UserAccessPermissions.MODIFY)
 
     def test_tutor_available_programs_only_lists_programs_actually_tutored(self):
         codes = {program.code for program in tutor_available_programs(self.tutor)}
