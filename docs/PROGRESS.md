@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16、5、7、3 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件、註冊確認學號中間步驟、PDF 限制選取與複製),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(184 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16、5、7、3、11 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件、註冊確認學號中間步驟、PDF 限制選取與複製、配對後顯示暱稱與 Email),詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(185 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -111,8 +111,13 @@
     - 新增 `tutoring/reporting.py::_restrict_copy_and_selection()`,用 `pypdf.PdfWriter.encrypt()` 只授予 `PRINT`/`PRINT_TO_REPRESENTATION` 權限、其餘(含 `EXTRACT`/`MODIFY`)一律禁止;`user_password=""` 代表不需密碼即可開啟,`owner_password` 是每次呼叫時隨機產生、用完即丟(系統本身不需要也不會再解除限制)。`build_hours_pdf()`(時數證明)與 `build_export_pdf()`(Admin 匯出 PDF)回傳前都會套用這道處理,兩種本模組會產生的 PDF 都受影響。
     - 刻意不指定 `encrypt()` 的 `algorithm=` 參數(維持 pypdf 預設的 RC4-128),因為這裡要的是「相容性優先的權限限制」而非「機密性」,RC4-128 對舊版 PDF 閱讀器的相容性比 AES-256 更廣;已在 `CLAUDE.md` 明確記錄「這只是依賴閱讀器配合的權限旗標,不是真正的 DRM,無法防止螢幕截圖、OCR 或忽略權限旗標的工具」的技術界線,避免對外誤宣稱為絕對防拷貝。
     - 新增 2 個測試:`PartnerProgramCertificateTests.test_certificate_pdf_restricts_copy_but_allows_printing`(直接呼叫 `build_hours_pdf()`,確認 `reader.is_encrypted`、`extract_text()` 不需密碼即可成功、`PRINT`/`PRINT_TO_REPRESENTATION` 權限存在、`EXTRACT`/`MODIFY` 權限不存在);擴充既有 `V2FeatureTests.test_admin_export_can_produce_pdf` 補上同樣的權限斷言。另外用 curl 對 dev server 下載真實的時數證明(單頁)與 Admin 匯出 PDF(兩頁),以 `pdfinfo`/`pdftoppm` 確認:兩者皆回報 `Encrypted: yes (print:yes copy:no change:no)`、不需密碼即可用 Poppler 轉圖、視覺排版與加密前完全一致(含多頁匯出報表的表頭重複與分頁)。
-- migrations:`accounts` 14 個、`tutoring` 20 個(第 3、7 項皆純屬邏輯變更,無 model 異動)。
-- tests:`accounts` 60 個、`tutoring` 124 個,共 184 個,**全數通過**(2026-08-06 重新實際執行確認)。
+  - 第 11 項(配對後顯示暱稱與 Email)**已完成**:
+    - `accounts:matched_profile`(配對後完整個人資料頁,`templates/accounts/matched_profile.html`)基本資料區塊新增暱稱、Email 兩欄,直接讀取 `counterpart.nickname`/`counterpart.email`,沒有另外的權限判斷——因為這個 view 本身早就只在雙方有 `ACTIVE` 配對時才會回應 200,查無配對直接 `Http404`(既有行為,未修改),等於天然只有配對雙方能看到這兩個新欄位。
+    - 私訊頁(`templates/tutoring/messages.html`)對方名稱區的 `<h1>` 名稱下方新增一行 Email(`{{ counterpart.email }}`)。私訊頁本身允許 `ENDED` 配對唯讀查看歷史(既有行為,見第 4.8 節),因此 Email 也比照對方真實姓名(`bilingual_name`)既有的顯示邏輯,配對結束後仍會留在歷史對話頁面,不特別為這個新欄位做「配對結束後在私訊頁隱藏」的特例——這是刻意的一致性選擇,不是遺漏,已記錄在 `CLAUDE.md` 4.3 節。
+    - 配對前的匿名候選卡片、邀請詳情、篩選結果皆不受影響(這些模板本來就沒有讀取 `nickname`/`email`/`name_zh`/`name_en`/`username` 等身分欄位,不需要額外的隱藏邏輯);`CLAUDE.md` 4.3 節「配對前不得顯示」清單新增「暱稱」一項,明確涵蓋這個欄位。
+    - 新增/擴充 4 個測試:擴充 `MatchingTests.test_tutee_can_expand_anonymous_teacher_information_from_received_invitation` 設定 Tutor 的暱稱/Email 後,確認配對前的匿名邀請詳情不會外流這兩個欄位;擴充 `test_active_pair_can_open_each_others_full_profile` 確認配對後雙方個人資料頁正確顯示彼此的暱稱/Email(暱稱刻意選用不是任何 fixture 真實姓名子字串的值,避免斷言誤判成功);新增 `V2FeatureTests.test_messages_page_shows_counterparts_email_next_to_their_name` 確認私訊頁對方名稱區顯示 Email。另外用 curl 對 dev server 做過端到端驗證:配對雙方的個人資料頁與私訊頁皆正確顯示暱稱/Email,同時確認未配對的候選卡片清單沒有外流測試帳號刻意設定的暱稱/Email 字串。
+- migrations:`accounts` 14 個、`tutoring` 20 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動)。
+- tests:`accounts` 60 個、`tutoring` 125 個,共 185 個,**全數通過**(2026-08-06 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

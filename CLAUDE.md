@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5、7、3 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5、7、3、11 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -157,10 +157,12 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 
 ### 4.3 匿名資料與邀請
 
-配對前不得顯示姓名、英文名、完整學號、電話、Email。程式目前匿名欄位如下:
+配對前不得顯示姓名、英文名、完整學號、電話、Email、暱稱。程式目前匿名欄位如下:
 
 - Tutee:性別、母語、國籍、整體華語程度、加強項目、學習時間、需求備註、可上課星期/時段。
 - Tutor:性別、母語、國籍、四項教學能力、教學簡介、可上課星期/時段。
+
+**配對成立後才顯示雙方正式姓名、暱稱、學號及 Email**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 11 項):`accounts:matched_profile`(配對後完整個人資料頁)與私訊頁(`templates/tutoring/messages.html`,對方名稱區下方)都會顯示對方的 `nickname`/`email`,兩者皆是直接讀 `User` model 欄位、無另外的權限判斷,因為這兩個頁面本身已經是「先確認雙方有過配對才能開啟,否則 404」的存取範圍(`matched_profile()` 只認 `ACTIVE` 配對,查無則 `Http404`;私訊頁只要曾經配對過就能開啟,`ACTIVE` 可發送、`ENDED` 唯讀,見第 4.8 節),Admin 則另有 `accounts:admin_user_profile` 可看,不受配對狀態限制。**兩個頁面的收回時機不同**:`matched_profile` 在配對結束(`ENDED`)後即整頁 404,連同暱稱/Email 一併收回;私訊頁本來就允許 `ENDED` 配對讀取歷史訊息與對方的真實姓名(既有行為,見第 4.8 節「使用者可隨時重新開啟唯讀歷史」),暱稱/Email 比照真實姓名的既有精神,同樣不會因配對結束而從歷史對話頁面消失——這不是疏漏,是刻意讓「歷史對話裡認得出是跟誰聊過」的既有行為維持一致,不特別為 Email 這個欄位另外做只在歷史頁隱藏的特例。Email 純粹作為聯絡資訊顯示,系統不寄信、不整合 Gmail、Google 登入或校內 SSO。
 
 Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、加強項目、星期、時段做複合篩選(`tutoring/services.py::anonymous_tutee_candidates()` 的 `filters` 參數;UI 見 `templates/dashboard/index.html` 的 `find-tutee` 分頁,GET 表單提交回 `accounts:dashboard`)。篩選邏輯:性別/華語程度/母語皆為精準比對(母語欄位是下拉選單,選項與註冊表單共用同一份 `static/js/profile-options.js` 產生的語言清單,值為 `Intl.DisplayNames` 產生的雙語字串,不是自由關鍵字);加強項目為「已選項目須全部命中」(AND);星期與時段各自為「命中任一已選值即算符合」(OR),兩者之間再取交集。篩選只是在既有候選清單上做子集過濾,不會新增可見欄位,也不做排序或推薦。篩選卡片預設收合,面板標題右上角的「搜尋條件 / Search filters」是 `<details>/<summary>` 原生收合元件(`.candidate-filter-disclosure`/`.candidate-filter-toggle`,無 JS),點擊才展開,取代原本常駐的「配對前不顯示姓名與學號」提示(該提示仍保留在側邊欄 `sidebar-note`)。Tutee(Maryland)瀏覽 Tutor 一側也已比照補上同一套機制(`anonymous_tutor_candidates()` 的 `filters` 參數,UI 見 `find-tutor` 分頁);差異是 Tutor 沒有對應「華語程度」與「加強項目」的欄位,所以只提供性別、母語、星期、時段四項,其餘篩選邏輯(精準比對/OR/收合式 UI)完全相同。
 

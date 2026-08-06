@@ -566,6 +566,8 @@ class MatchingTests(MatchingFixtureTestCase):
     def test_tutee_can_expand_anonymous_teacher_information_from_received_invitation(self):
         self.tutor.tutor_profile.teaching_notes = "重視生活會話與發音練習"
         self.tutor.tutor_profile.save(update_fields=["teaching_notes", "updated_at"])
+        self.tutor.nickname, self.tutor.email = "阿虎", "known.tutor@example.com"
+        self.tutor.save(update_fields=["nickname", "email"])
         send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
         self.client.force_login(self.tutee)
         response = self.client.get(reverse("accounts:dashboard"))
@@ -576,9 +578,20 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertNotContains(response, "知名小老師")
         self.assertNotContains(response, "Known Tutor")
         self.assertNotContains(response, "TUTOR100")
+        # Item 11: nickname/email are only disclosed after pairing, not in the pre-pairing
+        # anonymous invitation view.
+        self.assertNotContains(response, "阿虎")
+        self.assertNotContains(response, "known.tutor@example.com")
 
     def test_active_pair_can_open_each_others_full_profile(self):
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        # Nicknames deliberately don't overlap as substrings with any fixture's real name
+        # (e.g. "知名小老師"), so these assertions can't pass merely from the real name
+        # already being rendered elsewhere on the page.
+        self.tutee.nickname, self.tutee.email = "阿安", "known.tutee@example.com"
+        self.tutee.save(update_fields=["nickname", "email"])
+        self.tutor.nickname, self.tutor.email = "阿虎", "known.tutor@example.com"
+        self.tutor.save(update_fields=["nickname", "email"])
 
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:matched_profile", args=[self.tutee.pk]))
@@ -586,12 +599,17 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "知名外籍生")
         self.assertContains(response, "學習資料")
         self.assertContains(response, "希望加強日常會話")
+        # Item 11: nickname and email are shown once a pairing is active.
+        self.assertContains(response, "阿安")
+        self.assertContains(response, "known.tutee@example.com")
 
         self.client.force_login(self.tutee)
         response = self.client.get(reverse("accounts:matched_profile", args=[self.tutor.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "知名小老師")
         self.assertContains(response, "教學資料")
+        self.assertContains(response, "阿虎")
+        self.assertContains(response, "known.tutor@example.com")
 
     def test_unmatched_user_cannot_open_matched_profile(self):
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
@@ -1529,6 +1547,14 @@ class V2FeatureTests(TestCase):
         self.assertContains(response, "明天見 / See you tomorrow")
         self.assertContains(response, "已結束 · 僅供查看")
         self.assertNotContains(response, reverse("accounts:matched_profile", args=[self.tutee.pk]))
+
+    def test_messages_page_shows_counterparts_email_next_to_their_name(self):
+        """Item 11: the messages page's counterpart name area shows their email."""
+        self.tutee.email = "v2-tutee@example.com"
+        self.tutee.save(update_fields=["email"])
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:pairing_messages", args=[self.pairing.pk]))
+        self.assertContains(response, "v2-tutee@example.com")
 
     def test_dashboard_shows_unread_badge_and_preview_then_clears_on_open(self):
         self.client.force_login(self.tutee)

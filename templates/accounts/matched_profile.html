@@ -32,7 +32,9 @@
           <div class="profile-data-grid">
             <div class="profile-data-item"><span>中文姓名 / Chinese name</span><strong>{{ counterpart.name_zh|default:"未提供 / Not provided" }}</strong></div>
             <div class="profile-data-item"><span>英文姓名 / English name</span><strong>{{ counterpart.name_en|default:"未提供 / Not provided" }}</strong></div>
+            <div class="profile-data-item"><span>暱稱 / Nickname</span><strong>{{ counterpart.nickname|default:"未提供 / Not provided" }}</strong></div>
             <div class="profile-data-item"><span>學號 / Student ID</span><strong>{{ counterpart.username }}</strong></div>
+            <div class="profile-data-item"><span>Email</span><strong>{{ counterpart.email|default:"未提供 / Not provided" }}</strong></div>
             <div class="profile-data-item"><span>身分 / Role</span><strong>{{ counterpart.get_role_display }}</strong></div>
             {% if role_profile %}
               <div class="profile-data-item"><span>性別 / Gender</span><strong>{{ role_profile.get_gender_display }}</strong></div>
