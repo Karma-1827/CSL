@@ -92,31 +92,33 @@
   <div class="view-heading"><span>ROSTER IMPORT</span><h2>名冊批次匯入 <small>Roster batch import</small></h2><p>只有學號的名單，選對應身分卡片上傳即可；姓名、身份別、學制由學生註冊時自行填寫。已存在的學號會自動略過，不會覆蓋。 / For lists that only have student IDs, pick the matching category card. Names, identity category, and degree level are filled in by students when they register. Existing student IDs are skipped automatically, never overwritten.</p></div>
 
   <div class="quick-import-grid">
-    <section class="panel quick-import-card">
-      <div class="panel-heading"><div><span class="eyebrow">TUTOR</span><h2>華語系學生 <small>CSL students</small></h2></div></div>
-      <form action="{% url 'accounts:roster_import_quick' 'TUTOR' %}" method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-        <input type="file" name="file" accept=".csv,.xlsx" required>
-        <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
-      </form>
-    </section>
     {% for program in quick_import_programs %}
-      <section class="panel quick-import-card">
+      <section class="panel quick-import-card quick-import-card-program">
         <div class="panel-heading"><div><span class="eyebrow">{{ program.code }}</span><h2>{{ program.name_zh }} <small>{{ program.name_en }}</small></h2></div></div>
-        <form action="{% url 'accounts:roster_import_quick' program.code %}" method="post" enctype="multipart/form-data">
-          {% csrf_token %}
-          <input type="file" name="file" accept=".csv,.xlsx" required>
-          <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
-        </form>
-      </section>
-      <section class="panel quick-import-card">
-        <div class="panel-heading"><div><span class="eyebrow">{{ program.code }} TUTOR</span><h2>{{ program.name_zh }}修課 Tutor <small>{{ program.name_en }} tutor roster</small></h2></div></div>
-        <p class="quick-import-card-note">只有這份名單裡的 Tutor，才能在配對頁看到／配對到{{ program.name_zh }}的學生；一般華語系 Tutor 不受影響。<br>Only tutors on this list can see or match with {{ program.name_zh }} tutees; ordinary CSL tutors are unaffected.</p>
-        <form action="{% url 'accounts:roster_import_quick' 'TUTOR:'|add:program.code %}" method="post" enctype="multipart/form-data">
-          {% csrf_token %}
-          <input type="file" name="file" accept=".csv,.xlsx" required>
-          <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
-        </form>
+        <div class="quick-import-role-group">
+          <div class="quick-import-role-section">
+            <h3>Tutor 名單 <small>Tutor roster</small></h3>
+            {% if program.code == "NTNU" %}
+              <p class="quick-import-card-note">一般華語系 Tutor 不需限定名單，此處匯入的是可輔導師大外籍生的全體 Tutor 學號。<br>Ordinary CSL tutors don't need a restricted roster; this imports the general tutor pool that serves NTNU international students.</p>
+              <form action="{% url 'accounts:roster_import_quick' 'TUTOR' %}" method="post" enctype="multipart/form-data">
+            {% else %}
+              <p class="quick-import-card-note">只有這份名單裡的 Tutor，才能在配對頁看到／配對到{{ program.name_zh }}的學生；一般華語系 Tutor 不受影響。<br>Only tutors on this list can see or match with {{ program.name_zh }} tutees; ordinary CSL tutors are unaffected.</p>
+              <form action="{% url 'accounts:roster_import_quick' 'TUTOR:'|add:program.code %}" method="post" enctype="multipart/form-data">
+            {% endif %}
+              {% csrf_token %}
+              <input type="file" name="file" accept=".csv,.xlsx" required>
+              <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+            </form>
+          </div>
+          <div class="quick-import-role-section">
+            <h3>學生名單 <small>Tutee roster</small></h3>
+            <form action="{% url 'accounts:roster_import_quick' program.code %}" method="post" enctype="multipart/form-data">
+              {% csrf_token %}
+              <input type="file" name="file" accept=".csv,.xlsx" required>
+              <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+            </form>
+          </div>
+        </div>
       </section>
     {% endfor %}
     <section class="panel quick-import-card quick-import-add">
