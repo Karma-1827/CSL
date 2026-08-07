@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-06(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5、7、3、11 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
+> 最後盤點日期:2026-08-07(V3/V3.1 完成,V4 進行中;本次更新反映系辦會議後 20 項需求的第一批,以及第二批第 15、4、12、13、16、5、7、3、11、14 項,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -214,14 +214,19 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 
 1. 雙方各自簽到。
-2. 雙方各自填寫自己的課堂紀錄(地點、主題、內容、授課類型、備註、附件)。
+2. 雙方各自填寫自己的課堂紀錄(地點、主題、內容、授課類型、備註;Tutor 另填 1–5 個佐證連結,Tutee 則可選填附件)。
 3. 每人確認對方的簽到與課堂紀錄;可確認、要求修改或回報問題。
 4. 一般課程滿足條件後自動成為有效時數;Admin 不逐筆核准一般課。
 
 細節:
 
 - `ClassRecord.skills_practiced` 是選填的多選標籤(聽力/口說/閱讀/寫作,沿用 `accounts/forms.py::SKILL_CHOICES` 同一套分類,與 Tutor 教學能力、Tutee 加強項目共用同一詞彙),比照舊版「輔導類型」概念補回,方便 Admin 統計教學方式。不影響 `class_is_valid()` 的有效時數判定,單純是資料標籤。課程詳情頁(`class_detail.html`/`admin_record_card.html`)以標籤呈現;Django Admin 的 `ClassRecord` 清單另加 `SkillsPracticedFilter`(`tutoring/admin.py`),用 JSONField `contains` 查詢讓 Admin 依單一類型篩選/計數,沒有另外做自訂統計面板。
-- `ClassRecord.attachment` 是選填附件(比照舊版概念,已於系辦確認後加入),限 PDF/JPG/PNG、最大 500 KB(`validate_class_record_attachment()`,與口語能力證明的 `validate_qualification_file()` 共用同一個 `_validate_upload()` 驗證邏輯,只有大小上限不同:口語能力證明 1 MB、課堂紀錄附件 500 KB)。不影響 `class_is_valid()` 的有效時數判定。表單用一般 `FileInput`(不是 `ClearableFileInput`),所以**沒有「清除附件」的介面**——重新提交但不選新檔案時會保留原本的附件,要移除只能換上傳新檔案覆蓋,或請 Admin 從 Django Admin 處理。課程詳情頁與 Django Admin 的課程詳情卡都會顯示附件下載連結(`ClassRecord.attachment_filename` property 取檔名)。
+- `ClassRecord.attachment` 是 Tutee 課堂紀錄的選填附件(比照舊版概念,已於系辦確認後加入),限 PDF/JPG/PNG、最大 500 KB(`validate_class_record_attachment()`,與口語能力證明的 `validate_qualification_file()` 共用同一個 `_validate_upload()` 驗證邏輯,只有大小上限不同:口語能力證明 1 MB、課堂紀錄附件 500 KB)。不影響 `class_is_valid()` 的有效時數判定。表單用一般 `FileInput`(不是 `ClearableFileInput`),所以**沒有「清除附件」的介面**——重新提交但不選新檔案時會保留原本的附件,要移除只能換上傳新檔案覆蓋,或請 Admin 從 Django Admin 處理。
+- **2026-08 起 Tutor 課堂紀錄改用必填的外部佐證連結,不再有附件上傳**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 14 項;僅針對 Tutor,Tutee 不受影響、仍是上面的選填附件)。新增 `ClassRecord.evidence_links` JSONField(`list[str]`,`default=list`),`tutoring/forms.py::ClassRecordForm` 依 `author` 角色動態決定欄位組成:Tutor 拿掉 `attachment`、換上必填的 `evidence_links`(自訂 `EvidenceLinksField`/`EvidenceLinksWidget`);Tutee(或未指定 `author` 的呼叫端,視為 Tutee 形狀以維持既有測試相容)拿掉 `evidence_links`、保留 `attachment`。
+  - 驗證規則:最少 1 個、最多 5 個,且每個都必須是合法的 `https://` 網址(`URLValidator(schemes=["https"])`),不限制網域(Google Drive、YouTube 只是範例,不是白名單)。「至少 1 個」沿用 Django `Field.required` 的標準空值檢查(空列表屬於 `empty_values`),超過 5 個與網址格式錯誤才是自訂錯誤訊息。
+  - 顯示順序與 Tutor 輸入順序一致,可逐筆新增/刪除欄位:`EvidenceLinksWidget` 讓每個連結各自是一個 `name="evidence_links"` 的 `<input type="url">`,靠共用 name 讓 `value_from_datadict()` 用 `QueryDict.getlist()`(或一般 dict 時的 list 直接處理)收集回一個 list,與 Django 內建 `CheckboxSelectMultiple` 的原理相同。新增/刪除按鈕由 `static/js/class-record-links.js`(原生 DOM API + `data-*` hooks,無框架)在前端 clone/remove `.evidence-link-row`,最多到 5 筆;伺服器端驗證才是真正把關,前端只是操作便利性。
+  - 課程詳情頁(`class_detail.html`)與 Admin 課程詳情卡(`admin_record_card.html`)顯示對方紀錄時,改用「**資料存在與否**」而非「作者角色」決定顯示連結還是附件(`{% if counterpart_record.evidence_links %}...{% else %}附件...{% endif %}`):這是刻意的設計,為了讓 2026-08 前既有的 Tutor 附件紀錄(合法的歷史資料,`evidence_links` 會是空列表)仍然可以被看到,不會因為作者是 Tutor 就被新邏輯強制隱藏。連結一律以 `target="_blank" rel="noopener noreferrer"` 開新分頁。
+  - 系統不串接 Google Drive/YouTube API,不做連結有效性、權限或失效偵測;現有雙方互相確認流程本身就是查核機制(Tutee 點開發現打不開,可要求 Tutor 修改或回報問題),Admin 仍可人工抽查。
 - 舊 model 上還有一個 `reflection`(學習成果與回饋)欄位,但 `ClassRecordForm` 沒有把它列進 `Meta.fields`,提交流程完全不會用到,等同已棄用的欄位;修改課堂紀錄相關程式時不要誤以為它是現行必填欄位。
 - 簽到於上課前 10 分鐘開放。
 - 上課結束 30 分鐘後才簽到,視為補簽,必填原因。

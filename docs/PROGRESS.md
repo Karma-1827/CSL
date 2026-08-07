@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-06 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批進行中,已完成第 15、4、12、13、16、5、7、3、11 項(計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件、註冊確認學號中間步驟、PDF 限制選取與複製、配對後顯示暱稱與 Email),詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(185 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-07 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批(15、4、12、13、16、5、7、3、11、14 項)**已全數完成**:計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件、註冊確認學號中間步驟、PDF 限制選取與複製、配對後顯示暱稱與 Email、Tutor 課堂紀錄改用外部佐證連結。20 項需求全數完成,詳見下方「已完成」。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(191 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
 
 ## 已完成
 
@@ -116,8 +116,15 @@
     - 私訊頁(`templates/tutoring/messages.html`)對方名稱區的 `<h1>` 名稱下方新增一行 Email(`{{ counterpart.email }}`)。私訊頁本身允許 `ENDED` 配對唯讀查看歷史(既有行為,見第 4.8 節),因此 Email 也比照對方真實姓名(`bilingual_name`)既有的顯示邏輯,配對結束後仍會留在歷史對話頁面,不特別為這個新欄位做「配對結束後在私訊頁隱藏」的特例——這是刻意的一致性選擇,不是遺漏,已記錄在 `CLAUDE.md` 4.3 節。
     - 配對前的匿名候選卡片、邀請詳情、篩選結果皆不受影響(這些模板本來就沒有讀取 `nickname`/`email`/`name_zh`/`name_en`/`username` 等身分欄位,不需要額外的隱藏邏輯);`CLAUDE.md` 4.3 節「配對前不得顯示」清單新增「暱稱」一項,明確涵蓋這個欄位。
     - 新增/擴充 4 個測試:擴充 `MatchingTests.test_tutee_can_expand_anonymous_teacher_information_from_received_invitation` 設定 Tutor 的暱稱/Email 後,確認配對前的匿名邀請詳情不會外流這兩個欄位;擴充 `test_active_pair_can_open_each_others_full_profile` 確認配對後雙方個人資料頁正確顯示彼此的暱稱/Email(暱稱刻意選用不是任何 fixture 真實姓名子字串的值,避免斷言誤判成功);新增 `V2FeatureTests.test_messages_page_shows_counterparts_email_next_to_their_name` 確認私訊頁對方名稱區顯示 Email。另外用 curl 對 dev server 做過端到端驗證:配對雙方的個人資料頁與私訊頁皆正確顯示暱稱/Email,同時確認未配對的候選卡片清單沒有外流測試帳號刻意設定的暱稱/Email 字串。
-- migrations:`accounts` 14 個、`tutoring` 20 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動)。
-- tests:`accounts` 60 個、`tutoring` 125 個,共 185 個,**全數通過**(2026-08-06 重新實際執行確認)。
+  - 第 14 項(Tutor 課堂紀錄改用外部佐證連結)**已完成**(第二批最後一項,完成後系辦會議 20 項需求全數實作完畢):
+    - 新增 `ClassRecord.evidence_links` JSONField(`migration tutoring/0021`,`list[str]`,`default=list`),保留既有 `attachment` 欄位不變(Tutee 仍用)。`tutoring/forms.py::ClassRecordForm` 新增 `author` 參數,依角色動態拿掉/保留 `attachment`/`evidence_links` 兩個欄位其中一個:Tutor 只有 `evidence_links`(必填),Tutee(或未傳 `author` 的呼叫端,視為 Tutee 形狀以維持既有測試相容)只有 `attachment`(選填,不變)。
+    - 新增自訂 `EvidenceLinksField`/`EvidenceLinksWidget`:最少 1、最多 5 個連結,且每個都須為合法 `https://` 網址(`URLValidator(schemes=["https"])`,不限網域,Google Drive/YouTube 只是範例非白名單)。「至少 1 個」沿用 Django `required` 的標準空值檢查(空列表在 `Field.empty_values` 內),不另外寫自訂訊息;超過 5 個與網址格式錯誤才是自訂訊息。widget 讓每個連結都是共用 `name="evidence_links"` 的獨立 `<input type="url">`,靠 `value_from_datadict()` 用 `QueryDict.getlist()`(或一般 dict 傳 list 時的相容處理)收集回一個 list——這個 fallback 分支在直接用 `ClassRecordForm(data={...})` 建構、傳入純 Python list 的單元測試中曾經踩到一個 bug(把整個 list 當成單一元素塞進外層 list,對它呼叫 `.strip()` 就炸掉),已修正為先判斷 `isinstance(value, (list, tuple))`。
+    - 新增 `static/js/class-record-links.js`(原生 DOM API + `data-*` hooks,無框架)讓 Tutor 可逐筆新增(clone 一列,最多 5 列)/刪除(至少留 1 列)欄位,純粹是前端便利性,真正的把關在伺服器端驗證。
+    - `class_detail.html`/`admin_record_card.html` 顯示對方紀錄時改用「**資料是否存在**」(`{% if counterpart_record.evidence_links %}`)而非「作者角色」決定顯示連結還是附件——這是刻意設計,讓 2026-08 前的既有 Tutor 附件紀錄(合法歷史資料,`evidence_links` 會是空列表)仍可被看到,不會被新規則強制隱藏。連結一律 `target="_blank" rel="noopener noreferrer"` 開新分頁,符合驗收條件。
+    - 系統不串接 Google Drive/YouTube API,不做連結有效性、權限或失效偵測;沿用既有雙方互相確認流程作為查核機制。
+    - 新增 6 個測試(`ClassWorkflowTests`):Tutor/Tutee 表單欄位組成互斥、缺連結擋下、超過 5 個擋下、非 https 網址擋下、任意網域的合法 https 網址皆接受(不限 Drive/YouTube)、透過真實 view 送出後 `evidence_links` 依輸入順序存入且 Tutee 端能看到帶正確 `rel`/`target` 屬性的連結。其中最後一個 view 層級測試踩到一個時區陷阱:一開始直接用 `real_now.hour`/`real_now.minute`(UTC 時間)組出上課時間,但 `schedule_classes()` 是用 `Asia/Taipei` 本地時間解讀,導致算出的上課時間其實是「未來」判斷失敗;修正為先 `timezone.localtime(real_now)` 轉成本地時間再取 hour/minute。另外用 curl 對 dev server 做過端到端驗證:Tutor 畫面正確拿掉附件、換上連結欄位與新增按鈕;Tutee 畫面附件欄位不受影響;Tutor 送出 2 個連結後,Tutee 端正確看到兩個都帶 `target="_blank" rel="noopener noreferrer"` 的可點連結;Tutor 送出 0 個連結被正確擋下並顯示必填錯誤。
+- migrations:`accounts` 14 個、`tutoring` 21 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動;第 14 項新增 1 個 model 欄位)。
+- tests:`accounts` 60 個、`tutoring` 131 個,共 191 個,**全數通過**(2026-08-07 重新實際執行確認)。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

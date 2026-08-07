@@ -2,6 +2,9 @@ from datetime import time
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 
 from accounts.forms import SKILL_CHOICES
 from accounts.models import PartnerProgram, Role, User
@@ -91,23 +94,109 @@ class RescheduleClassForm(forms.Form):
             self.fields["scope"].choices = (("single", "只修改這堂 / This class only"),)
 
 
+MAX_EVIDENCE_LINKS = 5
+MIN_EVIDENCE_LINKS = 1
+
+
+class EvidenceLinksWidget(forms.Widget):
+    """Renders one <input type="url"> per link, all sharing `name`, plus an "add" button.
+
+    static/js/class-record-links.js clones/removes rows up to MAX_EVIDENCE_LINKS client-side
+    (project convention: vanilla JS + data-* hooks, no frontend framework); the shared name
+    lets value_from_datadict() collect the rows back into a list via QueryDict.getlist(),
+    the same trick Django's own CheckboxSelectMultiple relies on.
+    """
+
+    def value_from_datadict(self, data, files, name):
+        getter = getattr(data, "getlist", None)
+        if getter:
+            return getter(name)
+        value = data.get(name)
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        return [value] if value else []
+
+    def value_omitted_from_data(self, data, files, name):
+        return False
+
+    def render(self, name, value, attrs=None, renderer=None):
+        links = value or [""]
+        if not links:
+            links = [""]
+        rows = "".join(
+            '<div class="evidence-link-row" data-evidence-link-row>'
+            f'<input type="url" name="{name}" value="{escape(link)}" placeholder="https://..." data-evidence-link-input>'
+            '<button type="button" class="button button-ghost button-small" data-evidence-link-remove>移除 <span>Remove</span></button>'
+            "</div>"
+            for link in links
+        )
+        return mark_safe(
+            f'<div class="evidence-link-list" data-evidence-link-list data-max-links="{MAX_EVIDENCE_LINKS}">{rows}</div>'
+            '<button type="button" class="button button-secondary button-small" data-evidence-link-add>'
+            "+ 新增連結 <span>Add link</span></button>"
+        )
+
+
+class EvidenceLinksField(forms.Field):
+    """1–5 https:// URLs (item 14). The "at least one" rule comes from the standard
+    `required` empty-value check (an empty list is one of Field.empty_values) so it uses
+    the project's usual "此欄位為必填欄位" message; only the max-count and per-link URL
+    format get bespoke messages.
+    """
+
+    widget = EvidenceLinksWidget
+
+    def to_python(self, value):
+        if not value:
+            return []
+        return [item.strip() for item in value if item and item.strip()]
+
+    def validate(self, value):
+        super().validate(value)
+        if len(value) > MAX_EVIDENCE_LINKS:
+            raise ValidationError(
+                f"最多只能提供 {MAX_EVIDENCE_LINKS} 個佐證連結。 / At most {MAX_EVIDENCE_LINKS} evidence links are allowed."
+            )
+        validate_https_url = URLValidator(schemes=["https"])
+        for link in value:
+            try:
+                validate_https_url(link)
+            except ValidationError:
+                raise ValidationError(f"「{link}」不是合法的 https 網址。 / \"{link}\" is not a valid https:// URL.")
+
+
 class ClassRecordForm(forms.ModelForm):
     skills_practiced = forms.MultipleChoiceField(
         label="授課類型 / Skills practiced", choices=SKILL_CHOICES, required=False, widget=forms.CheckboxSelectMultiple
     )
+    evidence_links = EvidenceLinksField(label="佐證連結 / Evidence links")
 
     class Meta:
         model = ClassRecord
-        fields = ("location", "topic", "content", "skills_practiced", "remarks", "attachment")
+        fields = ("location", "topic", "content", "skills_practiced", "remarks", "attachment", "evidence_links")
         widgets = {
             "content": forms.Textarea(attrs={"rows": 5, "maxlength": 2000}),
             "remarks": forms.Textarea(attrs={"rows": 5, "maxlength": 2000}),
             "attachment": forms.FileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, author=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["attachment"].help_text = "PDF、JPG、PNG，最大 500 KB（選填）。\nPDF, JPG, or PNG, up to 500 KB (optional)."
+        self.fields["evidence_links"].help_text = (
+            "請提供 1–5 個可供對方及系辦查看的上課佐證連結。請確認分享權限，並於本次實習／輔導階段結束後至少 "
+            "10 天再刪除或下架；若查核時無法查看，該堂時數可能不予採計。\n"
+            "Provide 1–5 accessible evidence links. Check the sharing permissions and keep the links available for "
+            "at least 10 days after the practicum or tutoring stage ends. Hours may not be counted if the evidence "
+            "cannot be reviewed."
+        )
+        # Tutors submit evidence links instead of an attachment (item 14); Tutees keep the
+        # original optional attachment and never see the links field. Author is unknown in
+        # a few call sites (e.g. field-level unit tests) — default to the Tutee shape there.
+        if author is not None and author.role == Role.TUTOR:
+            del self.fields["attachment"]
+        else:
+            del self.fields["evidence_links"]
 
 
 class ClassAlertForm(forms.ModelForm):

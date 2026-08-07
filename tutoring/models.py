@@ -501,6 +501,10 @@ class ClassRecord(models.Model):
         blank=True,
         validators=[validate_class_record_attachment],
     )
+    evidence_links = models.JSONField(
+        "佐證連結 / Evidence links", default=list, blank=True,
+        help_text="僅 Tutor 課堂紀錄使用,取代附件上傳(item 14)。 / Tutor-only, replaces the file attachment.",
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_makeup = models.BooleanField("補課堂紀錄 / Makeup class record", default=False)

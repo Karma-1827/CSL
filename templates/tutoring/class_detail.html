@@ -67,7 +67,7 @@
           <div class="panel-heading"><div><span class="eyebrow">MY RECORD</span><h2>我的課堂紀錄 <small>My class record</small></h2></div></div>
           <form method="post" class="stack-form" enctype="multipart/form-data">
             {% csrf_token %}
-            {% if own_record.attachment %}<p class="current-attachment-note">目前附件 / Current attachment：<a href="{{ own_record.attachment.url }}" target="_blank" rel="noopener">{{ own_record.attachment_filename }}</a></p>{% endif %}
+            {% if request.user.role == 'TUTEE' and own_record.attachment %}<p class="current-attachment-note">目前附件 / Current attachment：<a href="{{ own_record.attachment.url }}" target="_blank" rel="noopener">{{ own_record.attachment_filename }}</a></p>{% endif %}
             {{ record_form.as_p }}
             {% if record_requires_makeup_reason %}<label class="makeup-reason-field">逾時補登原因 / Makeup reason<em class="required-chip">補登必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補登必填。 / Required for a late makeup record."></textarea></label>{% endif %}
             <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% else %}送出紀錄 / Submit record{% endif %}</button>
@@ -84,7 +84,11 @@
             <div><span>課堂主題 / Topic</span><strong>{{ counterpart_record.topic }}</strong></div>
             <div class="wide"><span>課堂內容 / Content</span><p>{{ counterpart_record.content|linebreaksbr }}</p></div>
             <div class="wide"><span>授課類型 / Skills practiced</span><div class="tag-list">{% for label in counterpart_record.skill_labels %}<b>{{ label }}</b>{% empty %}<em>未填寫 / Not provided</em>{% endfor %}</div></div>
-            <div><span>附件 / Attachment</span>{% if counterpart_record.attachment %}<strong><a href="{{ counterpart_record.attachment.url }}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong>{% else %}<strong>未上傳 / Not uploaded</strong>{% endif %}</div>
+            {% if counterpart_record.evidence_links %}
+              <div class="wide"><span>佐證連結 / Evidence links</span><div class="evidence-link-view-list">{% for link in counterpart_record.evidence_links %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a>{% endfor %}</div></div>
+            {% else %}
+              <div><span>附件 / Attachment</span>{% if counterpart_record.attachment %}<strong><a href="{{ counterpart_record.attachment.url }}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong>{% else %}<strong>未上傳 / Not uploaded</strong>{% endif %}</div>
+            {% endif %}
           </div>
           <form action="{% url 'tutoring:class_confirm' session.pk %}" method="post" class="confirmation-form">
             {% csrf_token %}<label>說明 / Note<textarea name="note" rows="3" placeholder="要求修改或回報問題時請填寫。 / Required for revision or issue reports."></textarea></label>
@@ -114,4 +118,5 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
+<script src="{% static 'js/class-record-links.js' %}?v=20260807-1" defer></script>
 {% endblock %}

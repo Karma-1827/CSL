@@ -1180,6 +1180,11 @@ class ClassWorkflowTests(TestCase):
         self.assertIn("remarks", over_limit_remarks_form.errors)
 
     def test_class_record_attachment_saved_and_downloadable_by_counterpart_and_admin(self):
+        """This exercises a Tutor record with an attachment via the service layer directly
+        (bypassing ClassRecordForm, which no longer offers Tutors an attachment field after
+        item 14) — representing pre-item-14 legacy data. class_detail/admin_record_card
+        fall back to showing the attachment whenever evidence_links is empty, so this old
+        shape must stay visible."""
         class_date = timezone.localdate()
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
@@ -1208,6 +1213,82 @@ class ClassWorkflowTests(TestCase):
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         self.assertContains(response, record.attachment.url)
+
+    def test_tutor_form_has_no_attachment_field_and_tutee_form_has_no_links_field(self):
+        """Item 14: only Tutors get the evidence-links field; Tutees keep the original
+        optional attachment and never see links."""
+        tutor_form = ClassRecordForm(author=self.tutor)
+        self.assertNotIn("attachment", tutor_form.fields)
+        self.assertIn("evidence_links", tutor_form.fields)
+
+        tutee_form = ClassRecordForm(author=self.tutee)
+        self.assertIn("attachment", tutee_form.fields)
+        self.assertNotIn("evidence_links", tutee_form.fields)
+
+    def test_tutor_record_requires_at_least_one_evidence_link(self):
+        data = self.record_data("佐證連結測試")
+        form = ClassRecordForm(data=data, author=self.tutor)
+        self.assertFalse(form.is_valid())
+        self.assertIn("evidence_links", form.errors)
+
+    def test_tutor_record_rejects_more_than_five_links(self):
+        data = {
+            **self.record_data("佐證連結測試"),
+            "evidence_links": [f"https://drive.example.com/file{i}" for i in range(6)],
+        }
+        form = ClassRecordForm(data=data, author=self.tutor)
+        self.assertFalse(form.is_valid())
+        self.assertIn("最多只能提供 5 個佐證連結", str(form.errors["evidence_links"]))
+
+    def test_tutor_record_rejects_non_https_links(self):
+        data = {**self.record_data("佐證連結測試"), "evidence_links": ["http://drive.example.com/file"]}
+        form = ClassRecordForm(data=data, author=self.tutor)
+        self.assertFalse(form.is_valid())
+        self.assertIn("不是合法的 https 網址", str(form.errors["evidence_links"]))
+
+    def test_tutor_record_accepts_one_to_five_https_links_from_any_domain(self):
+        """Item 14: accepts any https:// URL, not just Google Drive/YouTube."""
+        data = {
+            **self.record_data("佐證連結測試"),
+            "evidence_links": ["https://drive.example.com/a", "https://not-drive-or-youtube.example.org/b"],
+        }
+        form = ClassRecordForm(data=data, author=self.tutor)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.cleaned_data["evidence_links"],
+            ["https://drive.example.com/a", "https://not-drive-or-youtube.example.org/b"],
+        )
+
+    def test_tutor_submits_evidence_links_in_entered_order_via_class_detail_view(self):
+        # This posts through the real view (not the service layer directly, like the
+        # other tests in this class), so submit_class_record() below uses real
+        # timezone.now() with no override. Floor the start time to the current 5-minute
+        # mark so "now >= starts_at" holds no matter when the test actually runs, while
+        # scheduling it relative to an hour-earlier creation time keeps it "in the future"
+        # at creation, same as every other test's fixed 09:00→10:00 pattern.
+        real_now = timezone.now()
+        local_now = timezone.localtime(real_now)
+        class_date = local_now.date()
+        start_time = time(local_now.hour, (local_now.minute // 5) * 5)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=start_time, duration="1.0", now=real_now - timedelta(hours=1),
+        )[0]
+        check_in(session_id=session.pk, participant=self.tutor)
+        self.client.force_login(self.tutor)
+        links = ["https://drive.example.com/c", "https://youtube.example.com/watch", "https://third.example.net/x"]
+        response = self.client.post(
+            reverse("tutoring:class_detail", args=[session.pk]),
+            {**self.record_data("課堂佐證"), "evidence_links": links},
+        )
+        self.assertRedirects(response, reverse("tutoring:class_detail", args=[session.pk]))
+        record = ClassRecord.objects.get(session=session, author=self.tutor)
+        self.assertEqual(record.evidence_links, links)
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        for link in links:
+            self.assertContains(response, f'href="{link}" target="_blank" rel="noopener noreferrer"')
 
     def test_makeup_reason_fields_only_shown_when_overdue(self):
         today = timezone.localdate()

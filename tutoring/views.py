@@ -498,7 +498,7 @@ def class_detail(request, pk):
     ).first()
     own_incident_reports = IncidentReport.objects.filter(session=session, reporter=request.user)
     now = timezone.now()
-    form = ClassRecordForm(request.POST or None, request.FILES or None, instance=own_record)
+    form = ClassRecordForm(request.POST or None, request.FILES or None, instance=own_record, author=request.user)
     reschedule_form = RescheduleClassForm(
         session=session,
         initial={

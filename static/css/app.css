@@ -2821,6 +2821,11 @@ td small {
 .makeup-reason-field { margin-top: 10px; }
 .current-attachment-note { padding: 9px 12px; border: 1px solid #d8e2ec; border-radius: 9px; background: var(--paper); color: var(--ink-muted); font-size: .74rem; }
 .current-attachment-note a { font-weight: 750; }
+.evidence-link-list { display: grid; gap: 8px; margin-bottom: 8px; }
+.evidence-link-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; }
+.evidence-link-row input[type="url"] { min-height: 42px; padding: 0 12px; border: 1px solid #cdd9e2; border-radius: 9px; font-size: .82rem; }
+.evidence-link-view-list { display: grid; gap: 4px; }
+.evidence-link-view-list a { overflow-wrap: anywhere; font-size: .72rem; font-weight: 750; }
 .counterpart-record-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
 .counterpart-record-grid > div { display: grid; gap: 5px; padding: 13px; border: 1px solid #d8e2ec; border-radius: 10px; background: var(--paper); }
 .counterpart-record-grid .wide { grid-column: 1 / -1; }
