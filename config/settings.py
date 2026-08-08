@@ -1,17 +1,26 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    "dev-only-change-before-deployment-csl-tutoring-system",
-)
+# Only ever used when DJANGO_SECRET_KEY is unset. The fail-closed check below refuses to
+# start with DEBUG=False if this literal value is still in effect, so it can never reach
+# a production deployment even by accident.
+DEV_SECRET_KEY_FALLBACK = "dev-only-change-before-deployment-csl-tutoring-system"
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", DEV_SECRET_KEY_FALLBACK)
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if host.strip()
+]
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
 ]
 
 INSTALLED_APPS = [
@@ -103,10 +112,28 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 1_500_000
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2_000_000
 
 if not DEBUG:
+    # Fail closed (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 2): refuse to start rather
+    # than silently run production with dev-grade secrets, credentials, or host settings.
+    if not os.getenv("DJANGO_SECRET_KEY") or SECRET_KEY == DEV_SECRET_KEY_FALLBACK:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set to a real, unique production secret when "
+            "DJANGO_DEBUG=0; the development fallback key is not permitted."
+        )
+    if not DATABASES["default"]["PASSWORD"]:
+        raise ImproperlyConfigured("POSTGRES_PASSWORD must not be blank when DJANGO_DEBUG=0.")
+    _effective_hosts = {host.lower() for host in ALLOWED_HOSTS}
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS or _effective_hosts <= {"localhost", "127.0.0.1"}:
+        raise ImproperlyConfigured(
+            "DJANGO_ALLOWED_HOSTS must list real production hostnames when DJANGO_DEBUG=0; "
+            "it cannot be empty, '*', or only localhost/127.0.0.1."
+        )
+
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31_536_000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    # Trustworthy only if the reverse proxy strips any client-supplied X-Forwarded-Proto
+    # before setting its own (see docs/DEPLOY.md); Django has no way to verify this itself.
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

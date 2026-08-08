@@ -60,4 +60,8 @@ jobs:
       - name: Deployment checks (DEBUG off)
         env:
           DJANGO_DEBUG: "0"
+          # The job-level DJANGO_ALLOWED_HOSTS is localhost-only for the test DB step; the
+          # new fail-closed settings check (batch 2) rejects that under DEBUG=0, so this
+          # step needs a placeholder real-looking hostname instead.
+          DJANGO_ALLOWED_HOSTS: "mpts-ci-check.example.ntnu.edu.tw"
         run: python manage.py check --deploy

@@ -7,9 +7,10 @@ __pycache__/
 *.sqlite3
 db.sqlite3
 
-# 環境變數與機密
+# 環境變數與機密;.env.example 是不含機密的範本，需要進版控供部署參考
 .env
 .env.*
+!.env.example
 
 # 使用者上傳與真實資料(勿提交真實個資或資格文件)
 media/
