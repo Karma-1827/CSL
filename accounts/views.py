@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+import hashlib
+import random
 
 from django.contrib import messages
 from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -73,6 +76,7 @@ from .forms import (
     BilingualSetPasswordForm,
     QualificationUploadForm,
     client_ip,
+    RecoveryLookupForm,
     RecoveryVerificationForm,
     RegistrationLookupForm,
     RosterImportForm,
@@ -1124,26 +1128,93 @@ def download_roster_template(request, file_format):
     raise Http404
 
 
+class _FakeSecurityQuestions:
+    """Presents the same interface as SecurityQuestionAnswer for a student ID that has no
+    real account or security questions, so the recovery flow can render an
+    indistinguishable question form and reach the same "verification failed" outcome
+    without ever revealing that the account doesn't exist (item 4.4,
+    docs/VULNERABILITY_SCAN_IMPROVEMENTS.md).
+
+    The 3 decoy questions are deterministic per student ID (seeded hash, not Python's
+    global random state) so repeated lookups of the same ID show the same questions
+    instead of changing every request — a change on every request would itself be a
+    distinguishing signal an attacker could use to tell fake from real. check_answers()
+    always runs the same number of password-hash comparisons as the real implementation
+    so both code paths do roughly the same amount of work; this is a best-effort timing
+    mitigation, not a guarantee against a sufficiently precise timing attack (same caveat
+    already documented for the PDF copy-protection feature in CLAUDE.md).
+    """
+
+    _DECOY_HASH = make_password("recovery-enumeration-decoy")
+
+    def __init__(self, student_id):
+        choices = SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES
+        digest = hashlib.sha256(student_id.encode()).digest()
+        indices = list(range(len(choices)))
+        random.Random(int.from_bytes(digest, "big")).shuffle(indices)
+        self._labels = [choices[index][1] for index in indices[:3]]
+
+    def get_question_1_display(self):
+        return self._labels[0]
+
+    def get_question_2_display(self):
+        return self._labels[1]
+
+    def get_question_3_display(self):
+        return self._labels[2]
+
+    def check_answers(self, answers):
+        for value in answers:
+            check_password(SecurityQuestionAnswer.normalize_answer(value), self._DECOY_HASH)
+        return False
+
+
 def recover_account(request):
     if request.user.is_authenticated:
         return redirect("accounts:dashboard")
-    form = RecoveryVerificationForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        student_id = form.cleaned_data["student_id"].strip().upper()
+    lookup_form = RecoveryLookupForm(request.POST or None)
+    answer_form = None
+    student_id = ""
+    if request.method == "POST" and lookup_form.is_valid():
+        student_id = lookup_form.cleaned_data["student_id"]
+
+        # One shared IP+student_id throttle covers both the lookup step (just viewing the
+        # question form) and the verify step (submitting answers) — 5 combined attempts
+        # per 15 minutes, checked and incremented before the real/fake account branch
+        # below, so probing many nonexistent IDs can't dodge the same rate limit a real
+        # attempt would hit.
         throttle_key = f"recovery:{client_ip(request)}:{student_id}"
-        attempts = cache.get(throttle_key, 0)
-        if attempts >= 5:
+        if cache.get(throttle_key, 0) >= 5:
             messages.error(request, "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.")
-            return render(request, "accounts/recover.html", {"form": form})
-        cache.set(throttle_key, attempts + 1, 900)
-        user = User.objects.filter(username=student_id, is_active=True).first()
-        verified = False
-        if user:
-            questions = SecurityQuestionAnswer.objects.filter(user=user).first()
-            selected = [form.cleaned_data[f"question_{index}"] for index in range(1, 4)]
-            expected = [questions.question_1, questions.question_2, questions.question_3] if questions else []
-            answers = [form.cleaned_data[f"answer_{index}"] for index in range(1, 4)]
-            verified = bool(questions and selected == expected and questions.check_answers(answers))
+            return render(
+                request, "accounts/recover.html",
+                {"lookup_form": lookup_form, "answer_form": None, "student_id": student_id},
+            )
+        cache.set(throttle_key, cache.get(throttle_key, 0) + 1, 900)
+
+        # username is already normalized to uppercase by RecoveryLookupForm.clean_student_id();
+        # __iexact is defensive in depth in case a stored username were ever not uppercase.
+        user = User.objects.filter(username__iexact=student_id, is_active=True).first()
+        real_questions = SecurityQuestionAnswer.objects.filter(user=user).first() if user else None
+        account_exists = bool(user and real_questions)
+        # Real or fake, `questions` always has the same interface below — the view never
+        # branches on account_exists again until after check_answers() has already run.
+        questions = real_questions or _FakeSecurityQuestions(student_id)
+
+        is_verification = request.POST.get("action") == "verify"
+        answer_form = RecoveryVerificationForm(request.POST if is_verification else None, questions=questions)
+        if not is_verification or not answer_form.is_valid():
+            return render(
+                request, "accounts/recover.html",
+                {"lookup_form": lookup_form, "answer_form": answer_form, "student_id": student_id},
+            )
+
+        answers = [answer_form.cleaned_data[f"answer_{index}"] for index in range(1, 4)]
+        # Always call check_answers(), even for a nonexistent account, before looking at
+        # account_exists — this keeps the fake path doing the same password-hash work as
+        # the real path instead of short-circuiting past it.
+        answers_match = questions.check_answers(answers)
+        verified = account_exists and answers_match
         if verified:
             request.session["recovery_user_id"] = user.pk
             request.session["recovery_verified_at"] = timezone.now().isoformat()
@@ -1152,7 +1223,10 @@ def recover_account(request):
             return redirect("accounts:set_recovered_password")
         log_event(request, "RECOVERY_FAILED", "帳號恢復驗證失敗 / Account recovery verification failed")
         messages.error(request, "資料無法驗證，請重新確認或洽系辦。 / We could not verify the information. Please check again or contact the office.")
-    return render(request, "accounts/recover.html", {"form": form})
+    return render(
+        request, "accounts/recover.html",
+        {"lookup_form": lookup_form, "answer_form": answer_form, "student_id": student_id},
+    )
 
 
 def set_recovered_password(request):

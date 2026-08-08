@@ -270,6 +270,7 @@ class RegistrationTests(TestCase):
 
 class AccountRecoveryTests(TestCase):
     def setUp(self):
+        cache.clear()
         RegistrationTests.setUp(self)
         self.client.post(
             reverse("accounts:register"),
@@ -283,17 +284,24 @@ class AccountRecoveryTests(TestCase):
         self.client.post(reverse("accounts:register_tutor"), self.registration_data)
         self.client.post(reverse("accounts:logout"))
 
+    def lookup_then_verify(self, verify_data):
+        """The recovery flow is two separate POSTs to the same view: a lookup step (just
+        student_id) that returns the account's own 3 questions, then a verify step
+        (student_id + action=verify + the 3 answers) that actually checks them. The
+        question text itself is never submitted by the client — the server already knows
+        which questions belong to the user from SecurityQuestionAnswer."""
+        lookup_response = self.client.post(reverse("accounts:recover"), {"student_id": "TEST1001"})
+        self.assertEqual(lookup_response.status_code, 200)
+        return self.client.post(reverse("accounts:recover"), {**verify_data, "action": "verify"})
+
     def test_valid_answers_allow_password_reset(self):
         verify_data = {
             "student_id": "TEST1001",
-            "question_1": "Q1",
             "answer_1": "Alpha answer",
-            "question_2": "Q2",
             "answer_2": "Beta answer",
-            "question_3": "Q3",
             "answer_3": "Gamma answer",
         }
-        response = self.client.post(reverse("accounts:recover"), verify_data)
+        response = self.lookup_then_verify(verify_data)
         self.assertRedirects(response, reverse("accounts:set_recovered_password"))
         response = self.client.post(
             reverse("accounts:set_recovered_password"),
@@ -311,31 +319,95 @@ class AccountRecoveryTests(TestCase):
         questions.save()
         verify_data = {
             "student_id": "TEST1001",
-            "question_1": "Q4",
             "answer_1": "Homeroom teacher answer",
-            "question_2": "Q2",
             "answer_2": "Beta answer",
-            "question_3": "Q3",
             "answer_3": "Gamma answer",
         }
-        response = self.client.post(reverse("accounts:recover"), verify_data)
+        response = self.lookup_then_verify(verify_data)
         self.assertRedirects(response, reverse("accounts:set_recovered_password"))
 
     def test_wrong_answers_do_not_reveal_account(self):
+        verify_data = {
+            "student_id": "TEST1001",
+            "answer_1": "wrong",
+            "answer_2": "wrong",
+            "answer_3": "wrong",
+        }
+        response = self.lookup_then_verify(verify_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "資料無法驗證")
+
+    def test_invalid_student_id_shows_a_question_form_like_a_real_one(self):
+        """Item 4.4: a nonexistent student ID must get the same shape of response
+        (status code, an answer form with the usual 3 fields) as a real one, not an
+        immediate error that reveals the account doesn't exist."""
+        response = self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context["answer_form"])
+        for field_name in ("answer_1", "answer_2", "answer_3"):
+            self.assertIn(field_name, response.context["answer_form"].fields)
+
+    def test_invalid_student_id_verification_fails_generically_without_creating_a_session(self):
+        self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
         response = self.client.post(
             reverse("accounts:recover"),
-            {
-                "student_id": "TEST1001",
-                "question_1": "Q1",
-                "answer_1": "wrong",
-                "question_2": "Q2",
-                "answer_2": "wrong",
-                "question_3": "Q3",
-                "answer_3": "wrong",
-            },
+            {"student_id": "NOSUCHID999", "action": "verify", "answer_1": "a", "answer_2": "b", "answer_3": "c"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "資料無法驗證")
+        self.assertNotIn("recovery_user_id", self.client.session)
+
+    def test_invalid_id_and_wrong_answer_responses_are_structurally_identical(self):
+        """Both failure paths must look identical to an outside observer — same status
+        code and the same generic message — so the response can't distinguish a real
+        account with a wrong answer from a nonexistent one."""
+        valid_wrong = self.lookup_then_verify(
+            {"student_id": "TEST1001", "answer_1": "wrong", "answer_2": "wrong", "answer_3": "wrong"}
+        )
+        self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
+        invalid_response = self.client.post(
+            reverse("accounts:recover"),
+            {"student_id": "NOSUCHID999", "action": "verify", "answer_1": "wrong", "answer_2": "wrong", "answer_3": "wrong"},
+        )
+        self.assertEqual(valid_wrong.status_code, invalid_response.status_code)
+        self.assertContains(valid_wrong, "資料無法驗證")
+        self.assertContains(invalid_response, "資料無法驗證")
+
+    def test_invalid_student_id_shows_stable_decoy_questions_across_lookups(self):
+        """Decoy questions must be deterministic per student ID, not re-randomized on
+        every request — instability itself would be a distinguishing signal."""
+        first = self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
+        second = self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
+        for field_name in ("answer_1", "answer_2", "answer_3"):
+            self.assertEqual(
+                first.context["answer_form"].fields[field_name].label,
+                second.context["answer_form"].fields[field_name].label,
+            )
+
+    def test_student_id_lookup_is_case_insensitive(self):
+        lookup_response = self.client.post(reverse("accounts:recover"), {"student_id": "test1001"})
+        self.assertEqual(lookup_response.status_code, 200)
+        response = self.client.post(
+            reverse("accounts:recover"),
+            {
+                "student_id": "test1001", "action": "verify",
+                "answer_1": "Alpha answer", "answer_2": "Beta answer", "answer_3": "Gamma answer",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:set_recovered_password"))
+
+    def test_recovery_throttles_valid_and_invalid_ids_alike_after_five_attempts(self):
+        """Item 4.4/batch 5: both the lookup and verify steps share one throttle, and it
+        must apply the same way regardless of whether the student ID is real."""
+        for _ in range(5):
+            self.client.post(reverse("accounts:recover"), {"student_id": "TEST1001"})
+        response = self.client.post(reverse("accounts:recover"), {"student_id": "TEST1001"})
+        self.assertContains(response, "嘗試次數過多")
+
+        for _ in range(5):
+            self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
+        response = self.client.post(reverse("accounts:recover"), {"student_id": "NOSUCHID999"})
+        self.assertContains(response, "嘗試次數過多")
 
 
 class LoginLockoutTests(TestCase):

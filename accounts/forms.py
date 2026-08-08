@@ -498,17 +498,30 @@ class TuteeRegistrationForm(BaseRoleRegistrationForm):
         return user
 
 
-class RecoveryVerificationForm(forms.Form):
+class RecoveryLookupForm(forms.Form):
     student_id = forms.CharField(label="學號 / Student ID", max_length=24)
-    question_1 = forms.ChoiceField(label="安全問題一 / Security question 1", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
-    answer_1 = forms.CharField(label="答案一 / Answer 1", widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_2 = forms.ChoiceField(label="安全問題二 / Security question 2", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
-    answer_2 = forms.CharField(label="答案二 / Answer 2", widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_3 = forms.ChoiceField(label="安全問題三 / Security question 3", choices=SecurityQuestionAnswer.QUESTION_CHOICES)
-    answer_3 = forms.CharField(label="答案三 / Answer 3", widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        add_form_classes(self)
+
+    def clean_student_id(self):
+        return self.cleaned_data["student_id"].strip().upper()
+
+
+class RecoveryVerificationForm(forms.Form):
+    answer_1 = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
+    answer_2 = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
+    answer_3 = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
+
+    def __init__(self, *args, questions, **kwargs):
+        self.questions = questions
+        super().__init__(*args, **kwargs)
+        self.fields["answer_1"].label = questions.get_question_1_display()
+        self.fields["answer_2"].label = questions.get_question_2_display()
+        self.fields["answer_3"].label = questions.get_question_3_display()
+        for field in self.fields.values():
+            field.widget.attrs["placeholder"] = "請輸入答案 / Enter answer"
         add_form_classes(self)
 
 
