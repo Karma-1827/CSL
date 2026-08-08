@@ -1011,7 +1011,13 @@ class ClassWorkflowTests(TestCase):
         }
 
     def test_schedule_reserves_weekly_quota_and_dashboard_shows_class(self):
-        class_date = timezone.localdate() + timedelta(days=1)
+        # Anchor to the Tuesday/Wednesday of a future week instead of "today + 1/+2 days":
+        # the old relative offsets silently crossed two different Mon-Sun weeks whenever
+        # the test happened to run on a Saturday (today+1 = Sunday, today+2 = Monday), so
+        # the weekly quota check below never actually triggered on that one day of the week.
+        today = timezone.localdate()
+        next_monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+        class_date = next_monday + timedelta(days=1)
         sessions = schedule_classes(
             tutor=self.tutor,
             pairing=self.pairing,
