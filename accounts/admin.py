@@ -6,9 +6,15 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
+from .forms import ThrottledAdminAuthenticationForm
 from .models import AuditLog, PartnerProgram, Role, RosterEntry, SecurityQuestionAnswer, User
 
 IDLE_ACCOUNT_THRESHOLD_DAYS = 180
+
+# Batch 4 item 6 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): give /system-admin/'s own login
+# view the same shared IP+username throttle as the main site login, since Django Admin's
+# default login form has no rate limiting of its own.
+admin.site.login_form = ThrottledAdminAuthenticationForm
 
 
 class IdleAccountFilter(admin.SimpleListFilter):

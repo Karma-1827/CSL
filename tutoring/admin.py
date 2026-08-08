@@ -23,6 +23,26 @@ from .models import (
 )
 
 
+class ReadOnlyAdminMixin:
+    """Core business state that only tutoring/services.py may change (transaction-locked
+    quota, status, and matching rules; AuditLog writes) — Django Admin stays view-only for
+    these models so an Admin login can't be used to add/edit/delete records in a way that
+    bypasses those rules (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 4 item 3). List
+    display, filters, and search are kept so Admin can still inspect and search records;
+    corrections that are actually needed go through the real Admin dashboard or a Django
+    shell, not through this form.
+    """
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(QualificationDocument)
 class QualificationDocumentAdmin(admin.ModelAdmin):
     list_display = ("tutor", "status", "original_filename", "uploaded_at", "reviewed_by")
@@ -52,7 +72,7 @@ class TuteeProfileAdmin(admin.ModelAdmin):
 
 
 @admin.register(MatchingInvitation)
-class MatchingInvitationAdmin(admin.ModelAdmin):
+class MatchingInvitationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("semester", "tutor", "tutee", "initiated_by", "status", "expires_at")
     list_filter = ("semester", "status", "created_at")
     search_fields = ("tutor__username", "tutee__username")
@@ -60,7 +80,7 @@ class MatchingInvitationAdmin(admin.ModelAdmin):
 
 
 @admin.register(Pairing)
-class PairingAdmin(admin.ModelAdmin):
+class PairingAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("semester", "tutor", "tutee", "status", "started_at", "ended_at")
     list_filter = ("semester", "status")
     search_fields = ("tutor__username", "tutee__username")
@@ -68,7 +88,7 @@ class PairingAdmin(admin.ModelAdmin):
 
 
 @admin.register(PairingReleaseRequest)
-class PairingReleaseRequestAdmin(admin.ModelAdmin):
+class PairingReleaseRequestAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("pairing", "requested_by", "reason", "status", "auto_resolve_at", "created_at")
     list_filter = ("status", "reason", "pairing__semester")
     search_fields = (
@@ -81,7 +101,7 @@ class PairingReleaseRequestAdmin(admin.ModelAdmin):
 
 
 @admin.register(ClassSession)
-class ClassSessionAdmin(admin.ModelAdmin):
+class ClassSessionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("class_date", "start_time", "duration", "pairing", "status")
     list_filter = ("pairing__semester", "status", "class_date")
     search_fields = ("pairing__tutor__username", "pairing__tutee__username")
@@ -89,7 +109,7 @@ class ClassSessionAdmin(admin.ModelAdmin):
 
 
 @admin.register(Attendance)
-class AttendanceAdmin(admin.ModelAdmin):
+class AttendanceAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("session", "participant", "signed_at", "is_makeup")
     list_filter = ("is_makeup", "session__pairing__semester")
 
@@ -108,20 +128,20 @@ class SkillsPracticedFilter(admin.SimpleListFilter):
 
 
 @admin.register(ClassRecord)
-class ClassRecordAdmin(admin.ModelAdmin):
+class ClassRecordAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("session", "author", "topic", "skills_practiced", "submitted_at", "is_makeup")
     list_filter = ("is_makeup", "session__pairing__semester", SkillsPracticedFilter)
     search_fields = ("author__username", "topic")
 
 
 @admin.register(ClassConfirmation)
-class ClassConfirmationAdmin(admin.ModelAdmin):
+class ClassConfirmationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("session", "reviewer", "subject", "status", "confirmed_at")
     list_filter = ("status", "session__pairing__semester")
 
 
 @admin.register(MakeupReview)
-class MakeupReviewAdmin(admin.ModelAdmin):
+class MakeupReviewAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("session", "status", "reviewed_by", "reviewed_at")
     list_filter = ("status", "session__pairing__semester")
 

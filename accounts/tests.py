@@ -443,6 +443,53 @@ class LoginLockoutTests(TestCase):
         self.assertRedirects(response, reverse("accounts:dashboard"))
 
 
+class AdminLoginThrottleTests(TestCase):
+    """Batch 4 item 6 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): Django Admin's own login
+    view has no rate limiting by default, so /system-admin/ needs the same standard of
+    protection as the main site login."""
+
+    def setUp(self):
+        cache.clear()
+        self.password = "Admin-password-2026"
+        self.admin = User.objects.create_superuser(username="ADMIN-THROTTLE-TEST", password=self.password)
+
+    def test_admin_login_locks_after_five_failed_attempts(self):
+        for _ in range(5):
+            response = self.client.post(
+                reverse("admin:login"), {"username": "ADMIN-THROTTLE-TEST", "password": "wrong-password"}
+            )
+            self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            reverse("admin:login"), {"username": "ADMIN-THROTTLE-TEST", "password": self.password}
+        )
+        self.assertContains(response, "嘗試次數過多")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_admin_login_throttle_is_independent_of_main_site_login_throttle(self):
+        """Failing the main site's login form 5 times must not lock out the admin login
+        for the same account, since the two forms use separate cache key prefixes."""
+        for _ in range(5):
+            self.client.post(
+                reverse("accounts:login"), {"username": "ADMIN-THROTTLE-TEST", "password": "wrong-password"}
+            )
+        response = self.client.post(
+            reverse("admin:login"), {"username": "ADMIN-THROTTLE-TEST", "password": self.password}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self.client.session.get("_auth_user_id"))
+
+    def test_successful_admin_login_clears_throttle_counter(self):
+        for _ in range(3):
+            self.client.post(
+                reverse("admin:login"), {"username": "ADMIN-THROTTLE-TEST", "password": "wrong-password"}
+            )
+        response = self.client.post(
+            reverse("admin:login"), {"username": "ADMIN-THROTTLE-TEST", "password": self.password}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self.client.session.get("_auth_user_id"))
+
+
 class QualificationTests(TestCase):
     def setUp(self):
         self.tutor = User.objects.create_user(username="TUTOR1", password="Tutor-password-2026", role=Role.TUTOR)

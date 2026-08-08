@@ -45,6 +45,36 @@
 11. 建立容量、CPU、RAM、磁碟、HTTP 5xx、服務存活與備份失敗告警。
 12. `/media/` 不得設成 Nginx 可直接公開存取的 static location(口語能力證明、課堂紀錄附件、上課文件三種私人檔案都已改走受保護下載 view,見 `accounts:download_qualification`、`tutoring:download_class_record_attachment`、`accounts:download_class_document`,批次3)。目前開發環境用 Django `FileResponse` 直接讀檔案回應,正式環境應改用 Nginx `X-Accel-Redirect`(view 只驗證權限並回傳內部重導頭,實際傳檔交給 Nginx),減少 WSGI worker 花時間搬檔案;三個 view 目前的 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`、`Content-Disposition: attachment` 這三個回應標頭在改用 `X-Accel-Redirect` 後仍要保留。
 
+## Django Admin(`/system-admin/`)存取限制
+
+自製 Admin dashboard 尚未涵蓋合作計畫、上課文件、Admin 帳號、AuditLog 檢視、時數調整（單筆）、特殊資料修正等行政功能，因此**批次 4 完成後仍不能移除 `/system-admin/`**，只先做兩層防護,等自製功能補齊再評估是否完全不掛載這個 URL:
+
+1. **核心業務 model 已在 Django Admin 改為唯讀**(`tutoring/admin.py::ReadOnlyAdminMixin`,套用於 `Pairing`、`MatchingInvitation`、`ClassSession`、`Attendance`、`ClassRecord`、`ClassConfirmation`、`MakeupReview`、`PairingReleaseRequest`):保留清單、篩選、搜尋與唯讀檢視,但新增/修改/刪除一律回傳 `False`(即使是 superuser),避免 Admin 登入被用來繞過 `tutoring/services.py` 的配對名額、狀態機與交易鎖規則。`ClassAlert`、`IncidentReport`、`HourAdjustment`、`ClassDocument` 等其餘 model 不在此範圍內,因為它們本來就是設計成透過 Django Admin 或 Admin dashboard 直接管理(見 `CLAUDE.md` 第 4.7/4.9/4.10 節)。
+2. **`/system-admin/` 登入已套用與主站相同標準的共享節流**(`accounts/forms.py::ThrottledAdminAuthenticationForm`,經 `accounts/admin.py` 的 `admin.site.login_form` 掛載):同一 IP+帳號 15 分鐘內 5 次失敗即鎖定,使用獨立的 cache key 前綴(`admin_login:`)而非與主站共用計數,因為兩邊帳號池幾乎不重疊(只有 `is_staff` 帳號能通過 Admin 登入的 `confirm_login_allowed()`)。
+
+**正式 VM 取得網段後,還需要在 Nginx 加上 IP／VPN 白名單**,把 `/system-admin/` 限制在校內或 VPN 來源,避免只靠登入節流面對整個公開網路。以下是範本,實際 IP／CIDR 待網管確認:
+
+```nginx
+location /system-admin/ {
+    # 只允許校內網段／VPN 出口 IP,其餘一律拒絕。實際範圍待網管確認,
+    # 不可用註解掉 deny all 的方式暫時放行。
+    allow 140.122.0.0/16;       # 範例:師大校內網段(需網管確認實際範圍)
+    allow 203.0.113.10;         # 範例:VPN 出口固定 IP(需網管確認實際位址)
+    deny all;
+
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+這段只是 `/system-admin/` 專屬的 location block 範本,不是完整的 Nginx server 設定(完整 server block、靜態檔案、`/media/` 的 `X-Accel-Redirect` location 留待批次 8 一併產出)。套用前務必:
+
+- 用實際核配的校內網段/VPN 出口 IP 取代範例值,不可用 `0.0.0.0/0` 或留空等同開放。
+- 確認 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` 會**覆蓋**、而非附加用戶端自行帶入的 `X-Forwarded-For`,否則 Django 這端信任代理鏈時可能被偽造的標頭混淆。
+- 若之後改用 Cloudflare 或其他 CDN/WAF,校內網段清單需要換成該服務的來源 IP 清單,不能直接沿用這份範本。
+
 ## 上線前仍待確認
 
 - 正式 DNS 主機名稱與單位英文縮寫。

@@ -5,9 +5,10 @@ from pathlib import Path
 
 import openpyxl
 
+from django.contrib import admin as django_admin
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -17,6 +18,8 @@ from .reporting import build_hours_pdf, tutor_available_programs, user_has_hour_
 
 from .models import (
     InvitationStatus,
+    MatchingInvitation,
+    MakeupReview,
     Pairing,
     PairingReleaseReason,
     PairingReleaseRequest,
@@ -42,6 +45,16 @@ from .models import (
     IncidentReportCategory,
     IncidentReportStatus,
     MakeupReviewStatus,
+)
+from .admin import (
+    AttendanceAdmin,
+    ClassConfirmationAdmin,
+    ClassRecordAdmin,
+    ClassSessionAdmin,
+    MakeupReviewAdmin,
+    MatchingInvitationAdmin,
+    PairingAdmin,
+    PairingReleaseRequestAdmin,
 )
 from .services import (
     active_semester,
@@ -2544,4 +2557,80 @@ class ClassDocumentTests(MatchingFixtureTestCase):
         self.client.force_login(self.maryland)
         response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
         self.assertEqual(response.status_code, 404)
+
+
+READ_ONLY_ADMIN_CLASSES = [
+    (PairingAdmin, Pairing),
+    (MatchingInvitationAdmin, MatchingInvitation),
+    (ClassSessionAdmin, ClassSession),
+    (AttendanceAdmin, Attendance),
+    (ClassRecordAdmin, ClassRecord),
+    (ClassConfirmationAdmin, ClassConfirmation),
+    (MakeupReviewAdmin, MakeupReview),
+    (PairingReleaseRequestAdmin, PairingReleaseRequest),
+]
+
+
+class CoreModelAdminReadOnlyTests(TestCase):
+    """Batch 4 item 3 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): the 8 core business
+    models must be read-only in Django Admin so an Admin login can't add/change/delete
+    records in a way that bypasses tutoring/services.py's quota, status, and locking
+    rules. Checked two ways: directly against each ModelAdmin's permission methods (fast,
+    covers all 8 without needing a fixture per model) below, then end-to-end through the
+    test client for one representative model (PairingAdminViewTests) to confirm Django
+    Admin actually enforces it at the HTTP layer, not just that the method returns False
+    in isolation."""
+
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(username="ADMIN-RO-TEST", password="Admin-password-2026")
+        self.request = RequestFactory().get("/system-admin/")
+        self.request.user = self.admin_user
+
+    def test_add_change_delete_all_denied_even_for_a_real_superuser(self):
+        for admin_class, model in READ_ONLY_ADMIN_CLASSES:
+            with self.subTest(model=model.__name__):
+                instance = admin_class(model, django_admin.site)
+                self.assertFalse(instance.has_add_permission(self.request))
+                self.assertFalse(instance.has_change_permission(self.request))
+                self.assertFalse(instance.has_change_permission(self.request, obj=object()))
+                self.assertFalse(instance.has_delete_permission(self.request))
+                self.assertFalse(instance.has_delete_permission(self.request, obj=object()))
+
+
+class PairingAdminViewTests(TestCase):
+    """End-to-end confirmation, for one representative model, that Django Admin itself
+    enforces the ReadOnlyAdminMixin permissions (view/changelist still work, add/change/
+    delete are blocked) rather than just the permission methods returning False."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="ADMIN-PAIRING-RO", password="Admin-password-2026")
+        semester = Semester.objects.create(
+            name_zh="唯讀測試學期", name_en="Read-only test semester",
+            starts_on=date(2026, 1, 1), ends_on=date(2026, 6, 30), is_active=True,
+        )
+        tutor = User.objects.create_user(username="RO-TUTOR", password="Test-password-2026", role=Role.TUTOR)
+        tutee = User.objects.create_user(username="RO-TUTEE", password="Test-password-2026", role=Role.TUTEE)
+        self.pairing = Pairing.objects.create(semester=semester, tutor=tutor, tutee=tutee)
+        self.client.force_login(self.admin)
+
+    def test_changelist_and_detail_are_still_viewable(self):
+        response = self.client.get(reverse("admin:tutoring_pairing_changelist"))
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(reverse("admin:tutoring_pairing_change", args=[self.pairing.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_add_view_is_forbidden(self):
+        response = self.client.get(reverse("admin:tutoring_pairing_add"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_change_post_is_forbidden(self):
+        response = self.client.post(reverse("admin:tutoring_pairing_change", args=[self.pairing.pk]), {})
+        self.assertEqual(response.status_code, 403)
+        self.pairing.refresh_from_db()
+        self.assertEqual(self.pairing.status, PairingStatus.ACTIVE)
+
+    def test_delete_view_is_forbidden(self):
+        response = self.client.post(reverse("admin:tutoring_pairing_delete", args=[self.pairing.pk]), {"post": "yes"})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Pairing.objects.filter(pk=self.pairing.pk).exists())
 

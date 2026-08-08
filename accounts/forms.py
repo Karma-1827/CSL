@@ -1,6 +1,7 @@
 from django import forms
 from datetime import timedelta
 
+from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
@@ -63,6 +64,39 @@ class BilingualAuthenticationForm(AuthenticationForm):
 
     def _throttle_key(self, username):
         return f"login:{client_ip(self.request)}:{username.strip().upper()}"
+
+    def clean(self):
+        username = self.cleaned_data.get("username")
+        if not username:
+            return super().clean()
+        throttle_key = self._throttle_key(username)
+        if cache.get(throttle_key, 0) >= 5:
+            raise ValidationError(
+                "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.",
+                code="throttled",
+            )
+        try:
+            cleaned = super().clean()
+        except ValidationError:
+            cache.set(throttle_key, cache.get(throttle_key, 0) + 1, 900)
+            raise
+        cache.delete(throttle_key)
+        return cleaned
+
+
+class ThrottledAdminAuthenticationForm(AdminAuthenticationForm):
+    """Applies the same shared IP+username throttle as BilingualAuthenticationForm to the
+    Django Admin login (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 4 item 6). Django
+    Admin's own login view bypasses the main site's throttle entirely by default, which
+    would let /system-admin/ credentials be brute-forced without any rate limit as long as
+    the URL is reachable, ahead of the Nginx/VPN restriction planned for the real VM. Uses
+    a separate cache key prefix ("admin_login") from the main site's ("login") rather than
+    sharing counters — the two account pools barely overlap, since only is_staff accounts
+    can ever pass AdminAuthenticationForm.confirm_login_allowed().
+    """
+
+    def _throttle_key(self, username):
+        return f"admin_login:{client_ip(self.request)}:{username.strip().upper()}"
 
     def clean(self):
         username = self.cleaned_data.get("username")
