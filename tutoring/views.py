@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
-from django.http import Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -18,7 +18,7 @@ from .forms import (
     RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
 )
 from .models import (
-    ClassAlert, ClassAlertStatus, ClassSession, IncidentReport,
+    ClassAlert, ClassAlertStatus, ClassRecord, ClassSession, IncidentReport,
     Pairing, PairingMessage, PairingStatus, Semester,
 )
 from .reporting import (
@@ -442,6 +442,29 @@ def _session_for_user(user, pk):
     if user.role != Role.ADMIN and user.pk not in {session.pairing.tutor_id, session.pairing.tutee_id}:
         raise Http404
     return session
+
+
+@login_required
+def download_class_record_attachment(request, pk):
+    record = get_object_or_404(ClassRecord.objects.select_related("session__pairing"), pk=pk)
+    # Reuses the same session-participant-or-admin check as class_detail (which is where
+    # this download link lives), so access to an attachment always matches access to the
+    # class page it's shown on — including after the pairing has ended, since
+    # _session_for_user doesn't gate on pairing status (batch 3 item 9: this mirrors the
+    # existing "view class details after pairing ends" behavior rather than introducing a
+    # new, undecided policy).
+    _session_for_user(request.user, record.session_id)
+    if not record.attachment:
+        raise Http404
+    AuditLog.record(
+        actor=request.user, target_user=request.user, event_type="CLASS_RECORD_ATTACHMENT_DOWNLOADED",
+        description="下載課堂紀錄附件 / Class record attachment downloaded",
+        metadata={"record_id": record.pk, "session_id": record.session_id},
+    )
+    response = FileResponse(record.attachment.open("rb"), as_attachment=True, filename=record.attachment_filename)
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required

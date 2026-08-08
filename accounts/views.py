@@ -947,6 +947,17 @@ def class_documents(request):
     return render(request, "accounts/class_documents.html", {"documents": documents})
 
 
+def _private_file_response(file_field, filename):
+    """Shared response shaping for private, permission-gated file downloads (batch 3,
+    docs/VULNERABILITY_SCAN_IMPROVEMENTS.md item 6): force download (never render inline
+    in the browser, which could execute an uploaded HTML/SVG file in the app's origin),
+    and tell caches/proxies never to store a copy of someone's private document."""
+    response = FileResponse(file_field.open("rb"), as_attachment=True, filename=filename)
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @role_required(Role.TUTOR, Role.TUTEE)
 def download_class_document(request, pk):
     document = get_object_or_404(ClassDocument, pk=pk, is_active=True)
@@ -957,7 +968,7 @@ def download_class_document(request, pk):
         description="下載上課文件 / Class document downloaded",
         metadata={"document_id": document.pk, "program": document.program.code, "title_zh": document.title_zh},
     )
-    return FileResponse(document.file.open("rb"), as_attachment=True, filename=document.filename)
+    return _private_file_response(document.file, document.filename)
 
 
 @role_required(Role.TUTOR)
@@ -981,6 +992,19 @@ def upload_qualification(request):
             for error in errors:
                 messages.error(request, error)
     return redirect("accounts:dashboard")
+
+
+@login_required
+def download_qualification(request, pk):
+    document = get_object_or_404(QualificationDocument, pk=pk)
+    if request.user.role != Role.ADMIN and document.tutor_id != request.user.pk:
+        raise Http404
+    AuditLog.record(
+        actor=request.user, target_user=request.user, event_type="QUALIFICATION_DOCUMENT_DOWNLOADED",
+        description="下載口語能力證明 / Oral proficiency document downloaded",
+        metadata={"document_id": document.pk, "tutor_id": document.tutor_id},
+    )
+    return _private_file_response(document.file, document.original_filename)
 
 
 @role_required(Role.ADMIN)

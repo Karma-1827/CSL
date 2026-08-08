@@ -22,6 +22,7 @@ urlpatterns = [
     path("class-documents/", views.class_documents, name="class_documents"),
     path("class-documents/<int:pk>/download/", views.download_class_document, name="download_class_document"),
     path("qualification/upload/", views.upload_qualification, name="upload_qualification"),
+    path("qualification/<int:pk>/download/", views.download_qualification, name="download_qualification"),
     path("qualification/<int:pk>/review/", views.review_qualification, name="review_qualification"),
     path("roster/import/", views.roster_import, name="roster_import"),
     path("roster/import/quick/<str:category_code>/", views.roster_import_quick, name="roster_import_quick"),

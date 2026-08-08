@@ -1209,16 +1209,102 @@ class ClassWorkflowTests(TestCase):
         )
         record = ClassRecord.objects.get(session=session, author=self.tutor)
         self.assertTrue(record.attachment.name)
-        self.assertEqual(record.attachment_filename, Path(record.attachment.name).name)
+        # Item 3 (batch 3): the stored path is now a randomized UUID name, not the
+        # original filename, so attachment_filename must come from the separately
+        # tracked original_attachment_filename instead of the storage path.
+        self.assertEqual(record.attachment_filename, "proof.pdf")
+        self.assertNotEqual(Path(record.attachment.name).name, "proof.pdf")
+
+        download_url = reverse("tutoring:download_class_record_attachment", args=[record.pk])
 
         self.client.force_login(self.tutee)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertContains(response, record.attachment.url)
+        self.assertContains(response, download_url)
+        self.assertNotContains(response, record.attachment.url)
 
         admin = User.objects.create_superuser(username="RECORD-ATTACHMENT-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertContains(response, record.attachment.url)
+        self.assertContains(response, download_url)
+        self.assertNotContains(response, record.attachment.url)
+
+    def make_record_with_attachment(self):
+        """Shared setup for download_class_record_attachment authorization tests below."""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutee, now=now)
+        submit_class_record(
+            session_id=session.pk,
+            author=self.tutee,
+            data={
+                **self.record_data("附件下載測試"),
+                "attachment": SimpleUploadedFile("evidence.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+            },
+            now=now,
+        )
+        record = ClassRecord.objects.get(session=session, author=self.tutee)
+        return session, record
+
+    def test_participant_can_download_attachment_with_private_headers(self):
+        _, record = self.make_record_with_attachment()
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn("evidence.pdf", response["Content-Disposition"])
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+
+    def test_admin_can_download_attachment(self):
+        _, record = self.make_record_with_attachment()
+        admin = User.objects.create_superuser(username="DOWNLOAD-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_unrelated_user_cannot_download_attachment(self):
+        _, record = self.make_record_with_attachment()
+        outsider = User.objects.create_user(
+            username="OUTSIDER-TUTOR", password="Test-password-2026", role=Role.TUTOR,
+        )
+        self.client.force_login(outsider)
+        response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_unauthenticated_user_cannot_download_attachment(self):
+        _, record = self.make_record_with_attachment()
+        response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_record_without_attachment_is_not_downloadable(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutee, now=now)
+        submit_class_record(session_id=session.pk, author=self.tutee, data=self.record_data("無附件"), now=now)
+        record = ClassRecord.objects.get(session=session, author=self.tutee)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_participant_can_still_download_attachment_after_pairing_ends(self):
+        """Item 9 (batch 3): download access mirrors class_detail's own access rule
+        (_session_for_user), which doesn't gate on Pairing status — so this is already
+        consistent with the existing "read-only history after pairing ends" behavior
+        documented for messaging (CLAUDE.md 4.8), not a new policy decision."""
+        _, record = self.make_record_with_attachment()
+        self.pairing.status = PairingStatus.ENDED
+        self.pairing.save()
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
+        self.assertEqual(response.status_code, 200)
 
     def test_tutor_form_has_no_attachment_field_and_tutee_form_has_no_links_field(self):
         """Item 14: only Tutors get the evidence-links field; Tutees keep the original
@@ -2431,9 +2517,21 @@ class ClassDocumentTests(MatchingFixtureTestCase):
         response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn("material.pdf", response["Content-Disposition"])
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
         log = AuditLog.objects.get(event_type="CLASS_DOCUMENT_DOWNLOADED")
         self.assertEqual(log.actor, self.maryland)
         self.assertEqual(log.metadata["program"], "MARYLAND")
+
+    def test_stored_filename_is_randomized_but_original_name_is_kept(self):
+        """Batch 3 item 5, applied consistently to the third file type: Admin-uploaded
+        class documents also get a UUID-based stored filename, with the original name
+        preserved via ClassDocument.original_filename for display/Content-Disposition."""
+        document = self.make_document(self.maryland_program)
+        self.assertEqual(document.filename, "material.pdf")
+        self.assertEqual(document.original_filename, "material.pdf")
+        self.assertNotIn("material", document.file.name)
 
     def test_ineligible_user_cannot_download(self):
         document = self.make_document(self.maryland_program)

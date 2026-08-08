@@ -464,6 +464,56 @@ class QualificationTests(TestCase):
         self.assertRedirects(response, reverse("accounts:dashboard"))
         self.assertFalse(QualificationDocument.objects.filter(tutor=tutee).exists())
 
+    def upload_and_get_document(self):
+        self.client.force_login(self.tutor)
+        upload = SimpleUploadedFile("proof.pdf", b"%PDF-1.4\nsmall test file", content_type="application/pdf")
+        self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
+        return QualificationDocument.objects.get(tutor=self.tutor)
+
+    def test_stored_filename_is_randomized_but_original_name_is_kept_for_display(self):
+        """Batch 3 item 5: new uploads use a UUID-based server-side filename so stored
+        paths aren't predictable/enumerable; original_filename (already tracked) is what
+        gets shown and used for Content-Disposition."""
+        document = self.upload_and_get_document()
+        self.assertEqual(document.original_filename, "proof.pdf")
+        self.assertNotIn("proof", document.file.name)
+
+    def test_owner_can_download_with_private_headers(self):
+        document = self.upload_and_get_document()
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:download_qualification", args=[document.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn("proof.pdf", response["Content-Disposition"])
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+
+    def test_admin_can_download_qualification(self):
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:download_qualification", args=[document.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_other_tutor_cannot_download_qualification(self):
+        document = self.upload_and_get_document()
+        other_tutor = User.objects.create_user(username="TUTOR2", password="Tutor-password-2026", role=Role.TUTOR)
+        self.client.force_login(other_tutor)
+        response = self.client.get(reverse("accounts:download_qualification", args=[document.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_tutee_cannot_download_qualification(self):
+        document = self.upload_and_get_document()
+        tutee = User.objects.create_user(username="TUTEE2", password="Tutee-password-2026", role=Role.TUTEE)
+        self.client.force_login(tutee)
+        response = self.client.get(reverse("accounts:download_qualification", args=[document.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_unauthenticated_user_cannot_download_qualification(self):
+        document = self.upload_and_get_document()
+        self.client.logout()
+        response = self.client.get(reverse("accounts:download_qualification", args=[document.pk]))
+        self.assertNotEqual(response.status_code, 200)
+
 
 @override_settings(DEBUG=True)
 class RegistrationPreviewTests(TestCase):

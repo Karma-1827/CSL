@@ -25,6 +25,11 @@ urlpatterns = [
         name="review_pairing_release",
     ),
     path("classes/<int:pk>/", views.class_detail, name="class_detail"),
+    path(
+        "class-records/<int:pk>/attachment/download/",
+        views.download_class_record_attachment,
+        name="download_class_record_attachment",
+    ),
     path("classes/<int:pk>/check-in/", views.class_check_in, name="class_check_in"),
     path("classes/<int:pk>/confirm/", views.class_confirm, name="class_confirm"),
     path("classes/<int:pk>/cancel/", views.class_cancel, name="class_cancel"),

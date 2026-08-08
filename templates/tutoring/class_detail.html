@@ -67,7 +67,7 @@
           <div class="panel-heading"><div><span class="eyebrow">MY RECORD</span><h2>我的課堂紀錄 <small>My class record</small></h2></div></div>
           <form method="post" class="stack-form" enctype="multipart/form-data">
             {% csrf_token %}
-            {% if request.user.role == 'TUTEE' and own_record.attachment %}<p class="current-attachment-note">目前附件 / Current attachment：<a href="{{ own_record.attachment.url }}" target="_blank" rel="noopener">{{ own_record.attachment_filename }}</a></p>{% endif %}
+            {% if request.user.role == 'TUTEE' and own_record.attachment %}<p class="current-attachment-note">目前附件 / Current attachment：<a href="{% url 'tutoring:download_class_record_attachment' own_record.pk %}" target="_blank" rel="noopener">{{ own_record.attachment_filename }}</a></p>{% endif %}
             {{ record_form.as_p }}
             {% if record_requires_makeup_reason %}<label class="makeup-reason-field">逾時補登原因 / Makeup reason<em class="required-chip">補登必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補登必填。 / Required for a late makeup record."></textarea></label>{% endif %}
             <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% else %}送出紀錄 / Submit record{% endif %}</button>
@@ -87,7 +87,7 @@
             {% if counterpart_record.evidence_links %}
               <div class="wide"><span>佐證連結 / Evidence links</span><div class="evidence-link-view-list">{% for link in counterpart_record.evidence_links %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a>{% endfor %}</div></div>
             {% else %}
-              <div><span>附件 / Attachment</span>{% if counterpart_record.attachment %}<strong><a href="{{ counterpart_record.attachment.url }}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong>{% else %}<strong>未上傳 / Not uploaded</strong>{% endif %}</div>
+              <div><span>附件 / Attachment</span>{% if counterpart_record.attachment %}<strong><a href="{% url 'tutoring:download_class_record_attachment' counterpart_record.pk %}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong>{% else %}<strong>未上傳 / Not uploaded</strong>{% endif %}</div>
             {% endif %}
           </div>
           <form action="{% url 'tutoring:class_confirm' session.pk %}" method="post" class="confirmation-form">

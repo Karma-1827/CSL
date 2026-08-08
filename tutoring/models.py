@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from pathlib import Path
+import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -34,6 +35,30 @@ def validate_class_document_file(upload):
     )
 
 
+def _uuid_upload_path(directory, filename):
+    """Randomize the on-disk filename for newly uploaded private files (batch 3,
+    docs/VULNERABILITY_SCAN_IMPROVEMENTS.md) so stored paths aren't predictable/
+    enumerable from the original filename. The human-readable original name is kept
+    separately (original_filename / original_attachment_filename) for display and
+    Content-Disposition; historical rows saved before this change keep their old,
+    name-derived paths untouched since this only affects new saves going forward.
+    """
+    extension = Path(filename).suffix.lower()
+    return f"{directory}/{timezone.now():%Y/%m}/{uuid.uuid4().hex}{extension}"
+
+
+def qualification_upload_to(instance, filename):
+    return _uuid_upload_path("qualifications", filename)
+
+
+def class_record_attachment_upload_to(instance, filename):
+    return _uuid_upload_path("class_record_attachments", filename)
+
+
+def class_document_upload_to(instance, filename):
+    return _uuid_upload_path("class_documents", filename)
+
+
 class QualificationStatus(models.TextChoices):
     NOT_SUBMITTED = "NOT_SUBMITTED", "未提交 / Not submitted"
     PENDING = "PENDING", "待審核 / Pending review"
@@ -45,7 +70,7 @@ class QualificationDocument(models.Model):
     tutor = models.OneToOneField(User, on_delete=models.CASCADE, related_name="qualification")
     file = models.FileField(
         "口語能力證明 / Oral proficiency document",
-        upload_to="qualifications/%Y/%m/",
+        upload_to=qualification_upload_to,
         validators=[validate_qualification_file],
     )
     original_filename = models.CharField(max_length=255)
@@ -497,10 +522,11 @@ class ClassRecord(models.Model):
     remarks = models.TextField("備註 / Remarks", max_length=2000, blank=True)
     attachment = models.FileField(
         "附件 / Attachment",
-        upload_to="class_record_attachments/%Y/%m/",
+        upload_to=class_record_attachment_upload_to,
         blank=True,
         validators=[validate_class_record_attachment],
     )
+    original_attachment_filename = models.CharField(max_length=255, blank=True)
     evidence_links = models.JSONField(
         "佐證連結 / Evidence links", default=list, blank=True,
         help_text="僅 Tutor 課堂紀錄使用,取代附件上傳(item 14)。 / Tutor-only, replaces the file attachment.",
@@ -513,9 +539,16 @@ class ClassRecord(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["session", "author"], name="one_record_per_person")]
 
+    def save(self, *args, **kwargs):
+        if self.attachment and not self.attachment._committed and not self.original_attachment_filename:
+            self.original_attachment_filename = Path(self.attachment.name).name
+        super().save(*args, **kwargs)
+
     @property
     def attachment_filename(self):
-        return Path(self.attachment.name).name if self.attachment else ""
+        if not self.attachment:
+            return ""
+        return self.original_attachment_filename or Path(self.attachment.name).name
 
 
 class ConfirmationStatus(models.TextChoices):
@@ -676,8 +709,9 @@ class ClassDocument(models.Model):
     title_zh = models.CharField("中文標題 / Chinese title", max_length=200)
     title_en = models.CharField("英文標題 / English title", max_length=200)
     file = models.FileField(
-        "檔案 / File", upload_to="class_documents/%Y/%m/", validators=[validate_class_document_file],
+        "檔案 / File", upload_to=class_document_upload_to, validators=[validate_class_document_file],
     )
+    original_filename = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField("啟用 / Active", default=True)
     uploaded_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
@@ -692,6 +726,13 @@ class ClassDocument(models.Model):
     def __str__(self):
         return f"{self.program.code} - {self.title_zh}"
 
+    def save(self, *args, **kwargs):
+        if self.file and not self.file._committed and not self.original_filename:
+            self.original_filename = Path(self.file.name).name
+        super().save(*args, **kwargs)
+
     @property
     def filename(self):
-        return Path(self.file.name).name if self.file else ""
+        if not self.file:
+            return ""
+        return self.original_filename or Path(self.file.name).name
