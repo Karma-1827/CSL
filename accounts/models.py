@@ -23,7 +23,7 @@ class EducationLevel(models.TextChoices):
 
 
 class IdentityCategory(models.TextChoices):
-    LOCAL = "LOCAL", "本地生 / Local student"
+    LOCAL = "LOCAL", "本地生 / Domestic student"
     OVERSEAS = "OVERSEAS", "僑生 / Overseas Chinese student"
     INTERNATIONAL = "INTERNATIONAL", "外籍生 / International student"
 

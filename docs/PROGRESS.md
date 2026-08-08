@@ -2,8 +2,8 @@
 
 本文件記錄專案的開發進度、已知缺口與尚未定案的產品/維運決策。這是「會頻繁變動」的內容,從 `CLAUDE.md` 拆出以減少每次 agent 啟動時的 context 負擔。
 
-> 最後盤點日期:2026-08-07 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)第一批(低風險/獨立項目,共 10 項)已完成;第二批(15、4、12、13、16、5、7、3、11、14 項)**已全數完成**:計畫別可重疊期間、馬里蘭修課 Tutor 限定配對、Admin 手動配對、證明語言選擇、證明缺文案驗證修正、合作計畫上課文件、註冊確認學號中間步驟、PDF 限制選取與複製、配對後顯示暱稱與 Email、Tutor 課堂紀錄改用外部佐證連結。20 項需求全數完成,詳見下方「已完成」。
-> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。盤點時已實際執行 `python manage.py test --verbosity 1`(191 個測試全數通過)、`python manage.py check`、`python manage.py makemigrations --check --dry-run`、`DJANGO_DEBUG=0 python manage.py check --deploy` 與 `ruff check .`(均無異常)。
+> 最後盤點日期:2026-08-08 —— V3/V3.1 核心項目完成,V4 進行中。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)已全數完成(第一批 10 項 + 第二批 10 項),詳見下方「已完成」。20 項需求之外,另有使用者事後追加的名冊匯入卡片 UI 調整(以合作計畫為單位重新分組,見下方「已完成」最新一條)。
+> 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。本次盤點已實際執行 `python manage.py check`、`python manage.py makemigrations --check --dry-run` 與完整測試套件(均無異常);測試總數請直接執行 `python manage.py test` 取得目前準確數字。
 
 ## 已完成
 
@@ -123,8 +123,9 @@
     - `class_detail.html`/`admin_record_card.html` 顯示對方紀錄時改用「**資料是否存在**」(`{% if counterpart_record.evidence_links %}`)而非「作者角色」決定顯示連結還是附件——這是刻意設計,讓 2026-08 前的既有 Tutor 附件紀錄(合法歷史資料,`evidence_links` 會是空列表)仍可被看到,不會被新規則強制隱藏。連結一律 `target="_blank" rel="noopener noreferrer"` 開新分頁,符合驗收條件。
     - 系統不串接 Google Drive/YouTube API,不做連結有效性、權限或失效偵測;沿用既有雙方互相確認流程作為查核機制。
     - 新增 6 個測試(`ClassWorkflowTests`):Tutor/Tutee 表單欄位組成互斥、缺連結擋下、超過 5 個擋下、非 https 網址擋下、任意網域的合法 https 網址皆接受(不限 Drive/YouTube)、透過真實 view 送出後 `evidence_links` 依輸入順序存入且 Tutee 端能看到帶正確 `rel`/`target` 屬性的連結。其中最後一個 view 層級測試踩到一個時區陷阱:一開始直接用 `real_now.hour`/`real_now.minute`(UTC 時間)組出上課時間,但 `schedule_classes()` 是用 `Asia/Taipei` 本地時間解讀,導致算出的上課時間其實是「未來」判斷失敗;修正為先 `timezone.localtime(real_now)` 轉成本地時間再取 hour/minute。另外用 curl 對 dev server 做過端到端驗證:Tutor 畫面正確拿掉附件、換上連結欄位與新增按鈕;Tutee 畫面附件欄位不受影響;Tutor 送出 2 個連結後,Tutee 端正確看到兩個都帶 `target="_blank" rel="noopener noreferrer"` 的可點連結;Tutor 送出 0 個連結被正確擋下並顯示必填錯誤。
-- migrations:`accounts` 14 個、`tutoring` 21 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動;第 14 項新增 1 個 model 欄位)。
-- tests:`accounts` 60 個、`tutoring` 131 個,共 191 個,**全數通過**(2026-08-07 重新實際執行確認)。
+- **2026-08-08 名冊匯入卡片改為「以合作計畫為單位」**(20 項需求之外,使用者事後追加的 UI 調整):`templates/dashboard/admin_v2_panels.html` 的快速匯入卡片從「固定 Tutor 卡片 + 每計畫兩張卡片(Tutee、Tutor 修課名單各一張)」改成「每個啟用中 `PartnerProgram` 一張卡片,卡片內同時有 Tutor 名單與學生名單兩個上傳區塊」,對應系辦實際的心智模型(NTNU = 華語系碩班 Tutor + 師大外籍生 Tutee;MARYLAND = 限定大學部 Tutor + 馬里蘭 Tutee)。純模板/CSS 改動,`accounts:roster_import_quick` view 與 `import_roster_ids()` 完全未變:NTNU 卡片的 Tutor 區塊沿用既有的 `category_code="TUTOR"`(即 `RosterEntry.program=None`,對應 `tutor_can_serve_program()` 把無計畫 Tutor 隱含視為服務 NTNU 的既有規則),其餘計畫沿用既有的 `category_code="TUTOR:<程式碼>"`;新增計畫的流程不變,仍是先在 Django Admin 新增 `PartnerProgram`。已用真實 HTTP 流程(登入 Admin、對 NTNU/MARYLAND 兩個計畫各自的 Tutor/Tutee 兩個上傳區塊各匯入一筆測試學號)驗證四種組合都正確寫入對應的 `role`/`program`。
+- migrations:`accounts` 14 個、`tutoring` 21 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動;第 14 項新增 1 個 model 欄位;名冊匯入卡片改版無 model 異動)。
+- tests:**每次開發前建議重新執行 `python manage.py test` 確認實際數字**,不同 session 間可能因外部改動而變化,不在此維護容易過期的固定數字。
 - 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。

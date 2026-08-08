@@ -1942,6 +1942,41 @@ td small {
 .quick-import-add p { margin: 8px 0 0; font-size: 0.74rem; color: var(--ink-muted); }
 .quick-import-card-note { margin: 0 0 8px; font-size: 0.74rem; color: var(--ink-muted); line-height: 1.5; }
 .quick-import-card h2 small { display: block; }
+.quick-import-card-program {
+  grid-column: span 2;
+}
+.quick-import-role-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 10px;
+}
+.quick-import-role-section {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid #d8e2ec;
+  border-radius: 10px;
+  background: var(--paper);
+}
+.quick-import-role-section h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--navy);
+}
+.quick-import-role-section h3 small {
+  display: block;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.quick-import-role-section form {
+  margin-top: 0;
+}
+@media (max-width: 760px) {
+  .quick-import-card-program {
+    grid-column: span 1;
+  }
+}
 .review-note {
   padding: 12px;
   border-left: 3px solid var(--warning);
