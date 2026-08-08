@@ -1,10 +1,10 @@
 from datetime import date
 
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.management.commands._demo_guard import ensure_demo_seed_allowed
 from accounts.models import EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
 from tutoring.models import QualificationDocument, QualificationStatus, Semester, TuteeProfile, TutorProfile
 
@@ -17,8 +17,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if not settings.DEBUG:
-            raise CommandError("This demo command is disabled when DEBUG is false.")
+        ensure_demo_seed_allowed()
 
         password = options["password"]
         Semester.objects.filter(is_active=True).update(is_active=False)

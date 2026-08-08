@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly re-check for newly disclosed CVEs in pinned dependencies even when nobody
+    # pushes code that week (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 1/5.5).
+    - cron: "0 3 * * 1"
 
 jobs:
   test:

@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from accounts.management.commands._demo_guard import ensure_demo_seed_allowed
 from accounts.models import EducationLevel, IdentityCategory, PartnerProgram, RegistrationDraft, Role, RosterEntry, User
 
 
@@ -56,6 +57,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        ensure_demo_seed_allowed()
         student_ids = [row["student_id"] for row in TEST_ROSTER]
         if options["reset"]:
             User.objects.filter(username__in=student_ids).delete()

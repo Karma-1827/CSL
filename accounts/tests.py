@@ -1,11 +1,14 @@
 from datetime import timedelta
 import io
+import os
 from unittest.mock import patch
 
 import openpyxl
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import transaction
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -1012,3 +1015,51 @@ class ProductionErrorPageTests(TestCase):
         self.assertNotIn("Traceback", body)
         self.assertNotIn(str(settings.BASE_DIR), body)
         self.assertNotIn("Simulated failure", body)
+
+
+class DemoSeedGuardTests(TestCase):
+    """Vulnerability scan prep (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 1): every
+    seed/demo command must require DEBUG=True AND an explicit ALLOW_DEMO_SEED=1, not just
+    DEBUG, so a production host misconfigured with DJANGO_DEBUG=1 can't still be used to
+    create a persistent DEMO-ADMIN superuser or self-registerable TEST roster entries."""
+
+    # seed_matching_demo/seed_admin_demo/seed_demo require --password; seed_test_roster,
+    # seed_v2_demo, and seed_v2_time_demo take no arguments at all.
+    SEED_COMMAND_KWARGS = {
+        "seed_demo": {"password": "Password-2026"},
+        "seed_test_roster": {},
+        "seed_matching_demo": {"password": "Password-2026"},
+        "seed_admin_demo": {"password": "Password-2026"},
+        "seed_v2_demo": {},
+        "seed_v2_time_demo": {},
+    }
+
+    def assert_blocked(self, command_name):
+        with self.assertRaises(CommandError):
+            call_command(command_name, **self.SEED_COMMAND_KWARGS[command_name])
+
+    @override_settings(DEBUG=True)
+    def test_blocked_when_debug_true_but_allow_flag_missing(self):
+        os.environ.pop("ALLOW_DEMO_SEED", None)
+        for command_name in self.SEED_COMMAND_KWARGS:
+            with self.subTest(command=command_name):
+                self.assert_blocked(command_name)
+
+    @override_settings(DEBUG=False)
+    def test_blocked_when_allow_flag_set_but_debug_false(self):
+        with patch.dict(os.environ, {"ALLOW_DEMO_SEED": "1"}):
+            for command_name in self.SEED_COMMAND_KWARGS:
+                with self.subTest(command=command_name):
+                    self.assert_blocked(command_name)
+
+    @override_settings(DEBUG=False)
+    def test_blocked_when_both_conditions_missing(self):
+        os.environ.pop("ALLOW_DEMO_SEED", None)
+        for command_name in self.SEED_COMMAND_KWARGS:
+            with self.subTest(command=command_name):
+                self.assert_blocked(command_name)
+
+    def test_seed_demo_runs_when_both_conditions_met(self):
+        with override_settings(DEBUG=True), patch.dict(os.environ, {"ALLOW_DEMO_SEED": "1"}):
+            call_command("seed_demo", password="Password-2026")
+        self.assertTrue(User.objects.filter(username="DEMO-ADMIN").exists())

@@ -115,8 +115,8 @@
 
 | # | 等級 | 控制措施 | 狀態 | CSL 現況與待辦 |
 | - | - | - | - | - |
-| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到 `Pillow 12.3.0`、`pypdf 6.14.2`(當時的最新版),`pip-audit` 重跑確認 0 已知漏洞。升級前查過 Pillow 12.0 的破壞性變更(`ImageCms`/`fromarray()`/`ImageMorph`,專案完全沒用到這些 API,風險低;而且專案其實沒有任何程式碼直接 `import PIL`,`Pillow` 只是宣告的依賴,未被直接呼叫);pypdf 只用到穩定的 `PdfReader`/`PdfWriter`/`merge_page`/`add_page` 基本 API。升級後重新產生 NTNU 摘要版與詳細版(含跨頁)PDF,用 Poppler 轉圖比對確認排版與升級前一致;2026-07-31 再次執行目前完整 134 項測試亦全數通過。CI 的 `pip-audit` step 已從 `continue-on-error: true` 改回會擋 build。 |
-| 57 | 中 | 定期確認漏洞修復狀態 | 🟡 | 掃描機制已建立、目前是乾淨的,且會在每次 CI 執行時重新確認;但「定期」仍需要有人固定看 CI 執行結果,目前沒有排程性的通知機制(例如新 CVE 出現但沒人 push 程式碼觸發 CI 的情況不會被主動發現)。 |
+| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到 `Pillow 12.3.0`、`pypdf 6.14.2`。**2026-08-08 再次掃出 `pypdf 6.14.2` 的 2 個新公開 CVE(CVE-2026-71852、CVE-2026-71870),已升級到 `pypdf 6.15.0`**,`pip-audit` 重跑確認 0 已知漏洞。升級前查過 Pillow 12.0 的破壞性變更(`ImageCms`/`fromarray()`/`ImageMorph`,專案完全沒用到這些 API,風險低;而且專案其實沒有任何程式碼直接 `import PIL`,`Pillow` 只是宣告的依賴,未被直接呼叫);pypdf 只用到穩定的 `PdfReader`/`PdfWriter`/`merge_page`/`add_page`/`encrypt` 基本 API。每次升級後都重新產生 NTNU/Maryland 摘要版、詳細版(含跨頁)、Admin 匯出 PDF,用 Poppler 轉圖比對確認排版、加密權限旗標與升級前一致;完整測試套件亦全數通過。CI 的 `pip-audit` step 維持會擋 build(非 `continue-on-error`)。 |
+| 57 | 中 | 定期確認漏洞修復狀態 | ✅ | 2026-08-08 為 `.github/workflows/ci.yml` 新增 `schedule: cron: "0 3 * * 1"`(每週一 UTC 03:00),即使該週沒有任何 push/PR 觸發 CI,也會固定重新執行含 `pip-audit` 的完整流程,解決「新 CVE 出現但沒人 push 程式碼觸發 CI」的空窗;實際範例就是這次的 `pypdf` 新 CVE 是靠手動執行 `pip-audit` 才發現,凸顯排程掃描的必要性。通知接收人仍依賴 GitHub 預設的 Actions 失敗通知(送給觸發者/repo watcher),尚未指定專責窗口,屬管理程序而非程式碼缺口。 |
 | 58 | 普 | 發現入侵跡象應通報特定人員 | ❌ | 沒有正式的通報聯絡窗口/流程文件。 |
 | 59 | 中 | 監控偵測攻擊與未授權連線 | ❌ | VM 層級,沒有 WAF/IDS 之類的工具。 |
 | 60 | 普(調降) | 使用者輸入合法性檢查於伺服器端 | ✅ | Django Form/Model 驗證均在伺服器端執行,不依賴前端 JS。 |
@@ -133,7 +133,7 @@
 | psycopg[binary] | 3.2.13 | PostgreSQL 資料庫驅動 | LGPL-3.0 |
 | Pillow | 12.3.0 | 宣告的依賴,但目前**沒有任何程式碼直接 `import PIL`**;資格文件/課堂紀錄附件的驗證(`tutoring/models.py::_validate_upload()`)只檢查副檔名與檔案大小,不會實際開啟或解析圖片內容(見 `docs/CODE_REVIEW_IMPROVEMENTS.md` 5.1)。是否為 Django/reportlab 等套件的間接需求尚未確認,暫不建議直接移除。 | HPND(類 MIT) |
 | reportlab | 4.4.9 | PDF 產生(時數證明疊字) | BSD-3-Clause(open-source 版) |
-| pypdf | 6.14.2 | PDF 合併(疊字內容併入底圖) | BSD-3-Clause |
+| pypdf | 6.15.0 | PDF 合併(疊字內容併入底圖)、證明加密權限旗標 | BSD-3-Clause |
 | openpyxl | 3.1.5 | Excel 讀寫(名冊/時數匯入、範本產生) | MIT |
 
 間接依賴(Django/psycopg 等各自拉入的子套件)由 `pip` 自動解析,版本隨上述套件鎖定,未逐一列出;若需要完整清單可執行 `pip freeze` 產生。
@@ -164,7 +164,8 @@
 - 第 45 項:實際寫測試驗證 `DEBUG=False` 時未處理例外只會顯示 Django 內建通用 500 頁面,不含 traceback/路徑/例外訊息。
 - 第 3 項(部分):新增 Django Admin「閒置帳號」篩選器(180 天以上未登入/從未登入),供 Admin 人工複核;刻意只標記不自動停用,避免寒暑假空窗誤鎖使用者。
 - 第 15 項:Django Admin 後台的新增/修改/刪除透過 `post_save` 訊號鏡射進 `AuditLog`,補齊原本只有內建 `LogEntry`、查不到我們自己稽核表的缺口。
-- 第 56 項:升級 `Pillow`(11.3.0→12.3.0)與 `pypdf`(6.10.0→6.14.2)修復 `pip-audit` 掃出的所有已知 CVE,`pip-audit` 重跑確認乾淨,CI 步驟改回會擋 build。
+- 第 56 項:升級 `Pillow`(11.3.0→12.3.0)與 `pypdf`(6.10.0→6.14.2→6.15.0,2026-08-08 再次升級修復 CVE-2026-71852/CVE-2026-71870)修復 `pip-audit` 掃出的所有已知 CVE,`pip-audit` 重跑確認乾淨,CI 步驟維持會擋 build。
+- 第 57 項:`.github/workflows/ci.yml` 新增每週一 `schedule` 排程,不再只靠 push/PR 觸發依賴掃描(2026-08-08)。
 
 ### 還可以直接改 Django 程式碼的(建議排入 V4 前期)
 

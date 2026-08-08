@@ -2,11 +2,11 @@ from datetime import timedelta
 from decimal import Decimal
 import uuid
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.management.commands._demo_guard import ensure_demo_seed_allowed
 from tutoring.models import ClassSession, ClassSessionStatus, Pairing, PairingStatus
 
 
@@ -19,8 +19,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if not settings.DEBUG:
-            raise CommandError("This demo command is disabled when DEBUG is false.")
+        ensure_demo_seed_allowed()
 
         pairing = Pairing.objects.filter(
             tutor__username="DEMO-TUTOR",

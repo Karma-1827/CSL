@@ -126,9 +126,20 @@
 - **2026-08-08 名冊匯入卡片改為「以合作計畫為單位」**(20 項需求之外,使用者事後追加的 UI 調整):`templates/dashboard/admin_v2_panels.html` 的快速匯入卡片從「固定 Tutor 卡片 + 每計畫兩張卡片(Tutee、Tutor 修課名單各一張)」改成「每個啟用中 `PartnerProgram` 一張卡片,卡片內同時有 Tutor 名單與學生名單兩個上傳區塊」,對應系辦實際的心智模型(NTNU = 華語系碩班 Tutor + 師大外籍生 Tutee;MARYLAND = 限定大學部 Tutor + 馬里蘭 Tutee)。純模板/CSS 改動,`accounts:roster_import_quick` view 與 `import_roster_ids()` 完全未變:NTNU 卡片的 Tutor 區塊沿用既有的 `category_code="TUTOR"`(即 `RosterEntry.program=None`,對應 `tutor_can_serve_program()` 把無計畫 Tutor 隱含視為服務 NTNU 的既有規則),其餘計畫沿用既有的 `category_code="TUTOR:<程式碼>"`;新增計畫的流程不變,仍是先在 Django Admin 新增 `PartnerProgram`。已用真實 HTTP 流程(登入 Admin、對 NTNU/MARYLAND 兩個計畫各自的 Tutor/Tutee 兩個上傳區塊各匯入一筆測試學號)驗證四種組合都正確寫入對應的 `role`/`program`。
 - migrations:`accounts` 14 個、`tutoring` 21 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動;第 14 項新增 1 個 model 欄位;名冊匯入卡片改版無 model 異動)。
 - tests:**每次開發前建議重新執行 `python manage.py test` 確認實際數字**,不同 session 間可能因外部改動而變化,不在此維護容易過期的固定數字。
-- 已知不穩定測試(非本次修正,屬既有測試缺陷):`ClassWorkflowTests.test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 用 `class_date = timezone.localdate() + timedelta(days=1)` 排第一堂,`class_date + timedelta(days=1)` 排第二堂。當**執行測試那天剛好是週六**時,第一堂落在隔天週日(當週最後一天),第二堂落在再隔天週一(下一週第一天),兩堂被視為不同週,不會觸發每週 2 小時上限的 `ValidationError`,測試失敗;其餘星期執行都會通過。2026-07-26(週日)這次盤點剛好不是週六,所以整批測試顯示全數通過,但週界問題本身還沒修——應改用固定星期幾的日期計算而非單純相對天數,尚待排入待辦。
+- ~~已知不穩定測試~~:**2026-08-08 已修正**(弱掃整改批次 0,見下方新段落)。`test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 原本用「今天+1 天、今天+2 天」推算兩堂課日期,週六執行時兩者會跨到不同的週一至週日區間,導致每週 2 小時上限的 `ValidationError` 沒被觸發而失敗。已改為錨定在未來某週固定的週二/週三,不論執行當天是星期幾都同週且必為未來日期,已用 7 種星期模擬驗證。
 - 順手修正一個與先前改動無關的既有測試斷言:`test_summary_and_detailed_certificate_use_pdf_template` 檢查的證明書標題文字是舊版(「輔導實習時數證明書」),證明 PDF 模板早已更新為「實習證明」,測試斷言沒同步更新,已改為比對目前正確標題。
 - **多數項目仍只用 Django test client 驗證過,尚未完成整套真實瀏覽器 golden path 人工驗收。**目前已用瀏覽器驗證學期編輯/刪除,並抽查登入頁與 Tutor 註冊頁的手機版響應式排版;另用 `curl` 模擬真實登入/表單提交流程(取 CSRF token、帶 session cookie)對「使用手冊」頁面、`.xlsx`/`.csv` 匯出做過端到端驗證(下載檔案分別用 `openpyxl`/`file`/`xxd` 確認格式與內容正確)。候選篩選、邀請/配對、排課至互認等其餘完整情境仍應安排一次瀏覽器 golden path,不能只靠 test client/curl 累積信心。
+
+### 2026-08-08 起:師大資訊中心網站弱點掃描前整改(見 `docs/VULNERABILITY_SCAN_IMPROVEMENTS.md`)
+
+進行中,依該文件第 8 節的批次順序執行,批次 7(註冊本人驗證)因涉及業務規則決策,等系辦回覆前不動,不阻擋其他批次:
+
+- **批次 0(建立乾淨基準)已完成**:補上缺少的 `accounts/migrations/0015_alter_rosterentry_identity_category.py`(`IdentityCategory.LOCAL` 標籤文字調整,無資料影響);修正上方提到的週六排課測試。
+- **批次 1(套件升級與 Demo seed 雙重防呆)已完成**:
+  - `pypdf` 6.14.2→6.15.0,修復 `pip-audit` 新掃出的 CVE-2026-71852、CVE-2026-71870,`pip-audit` 重跑確認 0 已知漏洞。重新產生 NTNU Tutor 摘要版/詳細版(含跨頁)、Maryland Tutee、Admin 匯出 PDF,用 Poppler 轉圖比對排版、字型、加密權限旗標(`Encrypted: yes (print:yes copy:no)`)皆與升級前一致。
+  - 新增 `accounts/management/commands/_demo_guard.py::ensure_demo_seed_allowed()`(檔名底線開頭,Django 的 `find_commands()` 會自動排除,不會被誤判成一條指令),所有 6 個 `seed_*` 指令(`seed_demo`、`seed_test_roster`、`seed_matching_demo`、`seed_admin_demo`、`seed_v2_demo`、`seed_v2_time_demo`)改用同一個共用檢查,要求同時滿足 `DEBUG=True` **且**環境變數 `ALLOW_DEMO_SEED=1` 才可執行,不再只檢查 `DEBUG`——原本 `seed_demo.py`/`seed_test_roster.py` 完全沒有防呆,其餘 4 個只檢查 `DEBUG`,任何一項正式主機誤設 `DJANGO_DEBUG=1` 都會讓這些指令可執行。`seed_demo.py` 的風險是意外建立一個持續存在的高權限 `DEMO-ADMIN`(注意:密碼由執行者以 `--password` 提供,不是寫死明碼,風險是「帳號長期存在」而非「密碼外流」);`seed_test_roster.py` 的風險是污染正式名冊、留下可被公開自行註冊的 `TEST-*` 身分。這屬於維運防呆,防的是操作者手滑,不是外部攻擊者(攻擊者若已能執行伺服器管理指令,直接下 `createsuperuser` 更快)。新增 `accounts/tests.py::DemoSeedGuardTests`(4 個測試,涵蓋全部 6 個指令):`DEBUG=True` 但缺 `ALLOW_DEMO_SEED`會擋、`ALLOW_DEMO_SEED=1` 但 `DEBUG=False` 會擋、兩者皆缺會擋、兩者皆滿足才會真的執行。
+  - `.github/workflows/ci.yml` 新增 `schedule: cron: "0 3 * * 1"`(每週一),即使當週沒有 push/PR 也會重跑含 `pip-audit` 的完整 CI,避免「新 CVE 出現但沒人 push 觸發 CI」的空窗——這次的 `pypdf` 新 CVE 正是手動執行 `pip-audit` 才發現,凸顯排程掃描的實際必要性。
+  - `docs/SECURITY_CHECKLIST.md` 第 56、57 項與 SBOM 表格已同步更新 pypdf 版本與掃描狀態,第 57 項由 🟡 升級為 ✅。
 
 ## 版本規劃
 
