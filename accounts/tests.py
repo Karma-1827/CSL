@@ -29,6 +29,19 @@ from .models import (
 )
 
 
+def minimal_pdf_bytes():
+    """A genuinely parseable single-page PDF (batch 6 item 1 added real content
+    validation via pypdf, so a plain b"%PDF-1.4..." byte string with no actual PDF
+    structure is no longer accepted as a valid upload in tests)."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
 class RegistrationTests(TestCase):
     def setUp(self):
         self.roster = RosterEntry.objects.create(
@@ -490,6 +503,50 @@ class AdminLoginThrottleTests(TestCase):
         self.assertTrue(self.client.session.get("_auth_user_id"))
 
 
+class PrivateNoStoreMiddlewareTests(TestCase):
+    """Batch 6 item 3 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): logged-in responses must
+    not be cacheable, so the browser back button after logout can't replay a sensitive
+    page."""
+
+    def setUp(self):
+        self.tutor = User.objects.create_user(username="NOSTORE-TUTOR", password="Test-password-2026", role=Role.TUTOR)
+
+    def test_authenticated_page_gets_private_no_store(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_admin_page_gets_private_no_store(self):
+        admin = User.objects.create_superuser(username="NOSTORE-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_unauthenticated_login_page_is_not_forced_no_store(self):
+        response = self.client.get(reverse("accounts:login"))
+        self.assertNotEqual(response.get("Cache-Control"), "private, no-store")
+
+
+class ContentSecurityPolicyMiddlewareTests(TestCase):
+    """Batch 6 item 5 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): CSP ships in
+    Report-Only mode first, on every response, without any 'unsafe-inline'."""
+
+    def test_login_page_carries_report_only_csp_header(self):
+        response = self.client.get(reverse("accounts:login"))
+        header = response["Content-Security-Policy-Report-Only"]
+        self.assertIn("default-src 'self'", header)
+        self.assertIn("script-src-attr 'none'", header)
+        self.assertIn("frame-ancestors 'none'", header)
+        self.assertNotIn("unsafe-inline", header)
+        self.assertNotIn("Content-Security-Policy", response.headers)
+
+    def test_authenticated_dashboard_also_carries_the_policy(self):
+        tutor = User.objects.create_user(username="CSP-TUTOR", password="Test-password-2026", role=Role.TUTOR)
+        self.client.force_login(tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertIn("default-src 'self'", response["Content-Security-Policy-Report-Only"])
+
+
 class QualificationTests(TestCase):
     def setUp(self):
         self.tutor = User.objects.create_user(username="TUTOR1", password="Tutor-password-2026", role=Role.TUTOR)
@@ -497,7 +554,7 @@ class QualificationTests(TestCase):
 
     def test_tutor_can_upload_valid_document(self):
         self.client.force_login(self.tutor)
-        upload = SimpleUploadedFile("proof.pdf", b"%PDF-1.4\nsmall test file", content_type="application/pdf")
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
         response = self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
         self.assertRedirects(response, reverse("accounts:dashboard"))
         document = QualificationDocument.objects.get(tutor=self.tutor)
@@ -506,14 +563,14 @@ class QualificationTests(TestCase):
     def test_tutee_cannot_upload_qualification(self):
         tutee = User.objects.create_user(username="TUTEE1", password="Tutee-password-2026", role=Role.TUTEE)
         self.client.force_login(tutee)
-        upload = SimpleUploadedFile("proof.pdf", b"%PDF-1.4\nsmall", content_type="application/pdf")
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
         response = self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
         self.assertRedirects(response, reverse("accounts:dashboard"))
         self.assertFalse(QualificationDocument.objects.filter(tutor=tutee).exists())
 
     def upload_and_get_document(self):
         self.client.force_login(self.tutor)
-        upload = SimpleUploadedFile("proof.pdf", b"%PDF-1.4\nsmall test file", content_type="application/pdf")
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
         self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
         return QualificationDocument.objects.get(tutor=self.tutor)
 

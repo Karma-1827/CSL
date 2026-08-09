@@ -10,6 +10,104 @@ from django.utils import timezone
 from accounts.models import PartnerProgram, Role, User
 
 
+MAX_IMAGE_DIMENSION_PX = 6000
+MAX_PDF_PAGES = 500
+_OOXML_EXTENSIONS = {".docx", ".pptx", ".xlsx"}
+_LEGACY_OFFICE_EXTENSIONS = {".doc", ".ppt", ".xls"}
+_OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def _validate_image_content(upload):
+    """Batch 6 item 1 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): reject anything that
+    isn't actually a decodable image, not just files with a .jpg/.png extension — e.g. an
+    HTML or script file renamed to bypass the extension check. Also caps resolution as a
+    decompression-bomb guard, on top of Pillow's own built-in MAX_IMAGE_PIXELS warning
+    threshold, since a small file can still declare an enormous pixel count.
+    """
+    from PIL import Image, UnidentifiedImageError
+
+    upload.seek(0)
+    try:
+        with Image.open(upload) as image:
+            image.verify()
+    except (UnidentifiedImageError, OSError, ValueError) as error:
+        raise ValidationError(
+            "圖片檔案已損毀或不是有效的圖片。 / The image file is corrupted or not a valid image."
+        ) from error
+    finally:
+        upload.seek(0)
+    # verify() leaves the Image object unusable for further reads, so reopen fresh to
+    # check dimensions (verify() alone doesn't expose a reliable, always-populated .size).
+    with Image.open(upload) as image:
+        width, height = image.size
+    upload.seek(0)
+    if width > MAX_IMAGE_DIMENSION_PX or height > MAX_IMAGE_DIMENSION_PX:
+        raise ValidationError(
+            f"圖片尺寸過大，長寬不可超過 {MAX_IMAGE_DIMENSION_PX}px。 / "
+            f"Image dimensions must not exceed {MAX_IMAGE_DIMENSION_PX}px."
+        )
+
+
+def _validate_pdf_content(upload):
+    """Checks the file header and that pypdf can actually parse it and enumerate its
+    pages. This is a best-effort check, not a sandboxed parse: a maliciously crafted PDF
+    could still make pypdf spend excessive CPU/memory while resolving its page tree before
+    this function's own page-count check ever runs. Full protection would need parsing in
+    an isolated, resource-limited subprocess, which is out of scope here (no VM/process
+    isolation infrastructure exists yet) — the size cap on all three upload types (500 KB
+    to 10 MB) bounds how much a legitimate file can contain and limits how elaborate such
+    an attack payload can be.
+    """
+    upload.seek(0)
+    header = upload.read(5)
+    upload.seek(0)
+    if header != b"%PDF-":
+        raise ValidationError("檔案不是有效的 PDF。 / The file is not a valid PDF.")
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        page_count = len(PdfReader(upload).pages)
+    except (PdfReadError, ValueError, OSError) as error:
+        raise ValidationError(
+            "PDF 檔案已損毀或無法解析。 / The PDF file is corrupted or unreadable."
+        ) from error
+    finally:
+        upload.seek(0)
+    if page_count > MAX_PDF_PAGES:
+        raise ValidationError(
+            f"PDF 頁數不可超過 {MAX_PDF_PAGES} 頁。 / The PDF must not exceed {MAX_PDF_PAGES} pages."
+        )
+
+
+def _validate_office_content(upload, extension):
+    """OOXML formats (.docx/.pptx/.xlsx) are ZIP archives with a required manifest entry;
+    legacy formats (.doc/.ppt/.xls) are OLE2 compound files with a fixed magic header.
+    Checking these catches a renamed non-Office file even though, unlike PDF/image, this
+    doesn't fully validate the internal document structure.
+    """
+    import zipfile
+
+    upload.seek(0)
+    if extension in _OOXML_EXTENSIONS:
+        try:
+            with zipfile.ZipFile(upload) as archive:
+                names = archive.namelist()
+        except zipfile.BadZipFile as error:
+            raise ValidationError(
+                "檔案不是有效的 Office 文件。 / The file is not a valid Office document."
+            ) from error
+        finally:
+            upload.seek(0)
+        if "[Content_Types].xml" not in names:
+            raise ValidationError("檔案不是有效的 Office 文件。 / The file is not a valid Office document.")
+    else:
+        header = upload.read(8)
+        upload.seek(0)
+        if header != _OLE_SIGNATURE:
+            raise ValidationError("檔案不是有效的 Office 文件。 / The file is not a valid Office document.")
+
+
 def _validate_upload(upload, *, max_bytes, size_label, allowed_extensions=None, allowed_label="PDF、JPG、PNG"):
     allowed = allowed_extensions or {".pdf", ".jpg", ".jpeg", ".png"}
     extension = Path(upload.name).suffix.lower()
@@ -17,6 +115,12 @@ def _validate_upload(upload, *, max_bytes, size_label, allowed_extensions=None, 
         raise ValidationError(f"僅接受 {allowed_label}。 / Only {allowed_label} files are accepted.")
     if upload.size > max_bytes:
         raise ValidationError(f"檔案不可超過 {size_label}。 / File size must not exceed {size_label}.")
+    if extension in {".jpg", ".jpeg", ".png"}:
+        _validate_image_content(upload)
+    elif extension == ".pdf":
+        _validate_pdf_content(upload)
+    elif extension in _OOXML_EXTENSIONS | _LEGACY_OFFICE_EXTENSIONS:
+        _validate_office_content(upload, extension)
 
 
 def validate_qualification_file(upload):

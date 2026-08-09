@@ -18,9 +18,9 @@
             <span class="semester-setting-status status-{{ semester.lifecycle_status|lower }}">{% if semester.lifecycle_status == 'CURRENT' %}目前學期<small>Current</small>{% elif semester.lifecycle_status == 'FUTURE' %}未來學期<small>Upcoming</small>{% else %}已結束<small>Ended</small>{% endif %}</span>
             <div class="semester-setting-actions">
               {% if semester.pk not in semester_ids_with_pairings %}
-                <form action="{% url 'tutoring:delete_semester' semester.pk %}" method="post" onsubmit="return confirm('確定刪除此學期設定？此學期尚無配對資料，可安全刪除重建。');">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除 <small>Delete</small></button></form>
+                <form action="{% url 'tutoring:delete_semester' semester.pk %}" method="post" data-confirm="確定刪除此學期設定？此學期尚無配對資料，可安全刪除重建。">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除 <small>Delete</small></button></form>
               {% elif semester.lifecycle_status == 'PAST' %}
-                <form action="{% url 'tutoring:archive_semester' semester.pk %}" method="post" onsubmit="return confirm('確定刪除此學期設定？歷史課程與時數仍會保留。');">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除設定 <small>Delete</small></button></form>
+                <form action="{% url 'tutoring:archive_semester' semester.pk %}" method="post" data-confirm="確定刪除此學期設定？歷史課程與時數仍會保留。">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除設定 <small>Delete</small></button></form>
               {% endif %}
             </div>
           </div>

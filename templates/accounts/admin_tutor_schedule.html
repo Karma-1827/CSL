@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{{ tutor.bilingual_name }}－個人課表 / Tutor schedule{% endblock %}
 
@@ -10,7 +11,7 @@
     <a class="back-link" href="{% url 'accounts:dashboard' %}#class-overview">← 返回全系課程總覽 / Back to class overview</a>
     <header class="tutor-schedule-hero">
       <div><span class="section-kicker">TUTOR SCHEDULE</span><h1>{{ tutor.bilingual_name }}</h1><p>{{ tutor.username }}</p></div>
-      <form method="get"><label>檢視學期 / Semester<select name="semester" onchange="this.form.submit()">{% for semester in semesters %}<option value="{{ semester.pk }}"{% if selected_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></form>
+      <form method="get"><label>檢視學期 / Semester<select name="semester" data-auto-submit-select>{% for semester in semesters %}<option value="{{ semester.pk }}"{% if selected_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></form>
     </header>
     <div class="tutor-schedule-metrics">
       <div><span>配對學生<small>Students</small></span><strong>{{ pairings|length }}</strong></div>
@@ -34,4 +35,5 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
+<script src="{% static 'js/auto-submit-select.js' %}?v=20260809-1" defer></script>
 {% endblock %}

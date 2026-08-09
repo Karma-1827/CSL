@@ -44,6 +44,7 @@
 10. PostgreSQL 與 media 都要納入備份;至少完成一次「從備份還原到測試環境」演練,不能只確認備份檔有產生。
 11. 建立容量、CPU、RAM、磁碟、HTTP 5xx、服務存活與備份失敗告警。
 12. `/media/` 不得設成 Nginx 可直接公開存取的 static location(口語能力證明、課堂紀錄附件、上課文件三種私人檔案都已改走受保護下載 view,見 `accounts:download_qualification`、`tutoring:download_class_record_attachment`、`accounts:download_class_document`,批次3)。目前開發環境用 Django `FileResponse` 直接讀檔案回應,正式環境應改用 Nginx `X-Accel-Redirect`(view 只驗證權限並回傳內部重導頭,實際傳檔交給 Nginx),減少 WSGI worker 花時間搬檔案;三個 view 目前的 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`、`Content-Disposition: attachment` 這三個回應標頭在改用 `X-Accel-Redirect` 後仍要保留。
+13. `accounts/middleware.py::ContentSecurityPolicyMiddleware` 目前送出的是 `Content-Security-Policy-Report-Only`(批次6 item 5),尚未強制生效,只會在瀏覽器主控台顯示違規、不會擋下任何資源。正式上線前應先用實際瀏覽器逐一操作登入、註冊、Dashboard、排課、訊息、Admin、PDF 預覽等主要流程,確認主控台沒有 CSP violation,再把該 middleware 回應標頭名稱從 `Content-Security-Policy-Report-Only` 改成 `Content-Security-Policy`(或改由 Nginx 統一設定,兩者擇一,不要重複設定造成瀏覽器同時收到兩個不同來源的政策)。政策內容本身刻意不含任何 `unsafe-inline`;若之後某個頁面違規,應優先把違規的 inline 內容搬到 `static/` 底下的檔案,而不是放寬政策。
 
 ## Django Admin(`/system-admin/`)存取限制
 

@@ -176,6 +176,9 @@ a {
 .register-auth-card .stack-form {
   gap: 13px;
 }
+.confirm-student-id-highlight {
+  color: var(--danger);
+}
 .auth-card h2 {
   margin: 5px 0 10px;
   font-size: clamp(1.75rem, 3vw, 2.25rem);

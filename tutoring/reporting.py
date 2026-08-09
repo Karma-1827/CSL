@@ -585,6 +585,29 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
 
 EXPORT_HEADERS = ["學號 Student ID", "中文姓名", "英文姓名", "身分 Role", "學期 Semester", "日期 Date", "時間 Time", "時數 Hours", "對方學號", "輔導對象", "狀態 Status"]
 
+_SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _spreadsheet_safe_value(value):
+    """Neutralize CSV/Excel formula injection (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md
+    batch 6 item 2): a cell that starts with =, +, -, or @ is interpreted as a formula by
+    Excel/LibreOffice/Google Sheets when the export is opened, so a crafted student ID or
+    name (e.g. "=HYPERLINK(...)") could run arbitrary formulas — including data
+    exfiltration — on whoever opens the file. Prefixing a leading apostrophe is the
+    standard escape both applications already understand as "force literal text"; it also
+    stops openpyxl's own Cell.value setter from auto-detecting the string as a formula
+    (which it does purely based on a leading "="), so this one prefix protects CSV and
+    XLSX identically.
+    """
+    text = str(value)
+    if text.startswith(_SPREADSHEET_FORMULA_PREFIXES):
+        return "'" + text
+    return text
+
+
+def _spreadsheet_safe_rows(rows):
+    return [[_spreadsheet_safe_value(value) for value in row] for row in rows]
+
 
 def _export_rows(users, *, starts_on=None, ends_on=None):
     rows = []
@@ -621,7 +644,7 @@ def build_excel_xlsx(users, *, starts_on=None, ends_on=None):
     worksheet = workbook.active
     worksheet.title = "輔導資料"
     worksheet.append(EXPORT_HEADERS)
-    for row in rows:
+    for row in _spreadsheet_safe_rows(rows):
         worksheet.append(row)
     header_fill = PatternFill(start_color="0F4C75", end_color="0F4C75", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF")
@@ -653,7 +676,7 @@ def build_export_csv(users, *, starts_on=None, ends_on=None):
     buffer = StringIO()
     writer = csv_module.writer(buffer)
     writer.writerow(EXPORT_HEADERS)
-    writer.writerows(rows)
+    writer.writerows(_spreadsheet_safe_rows(rows))
     return codecs.BOM_UTF8 + buffer.getvalue().encode("utf-8")
 
 

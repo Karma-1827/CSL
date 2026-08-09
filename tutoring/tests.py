@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 import openpyxl
 
@@ -14,7 +15,7 @@ from django.utils import timezone
 
 from accounts.models import AuditLog, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
 from .forms import ClassRecordForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
-from .reporting import build_hours_pdf, tutor_available_programs, user_has_hour_records
+from .reporting import build_excel_xlsx, build_export_csv, build_hours_pdf, tutor_available_programs, user_has_hour_records
 
 from .models import (
     InvitationStatus,
@@ -45,6 +46,9 @@ from .models import (
     IncidentReportCategory,
     IncidentReportStatus,
     MakeupReviewStatus,
+    validate_class_document_file,
+    validate_class_record_attachment,
+    validate_qualification_file,
 )
 from .admin import (
     AttendanceAdmin,
@@ -84,6 +88,20 @@ from .services import (
     visible_class_document_programs,
     visible_class_documents,
 )
+
+
+def minimal_pdf_bytes():
+    """A genuinely parseable single-page PDF (batch 6 item 1 added real content
+    validation via pypdf, so a plain b"%PDF-1.4..." byte string with no actual PDF
+    structure is no longer accepted wherever a validator actually runs, e.g. through a
+    ModelForm's is_valid())."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    buffer = BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
 
 
 class SemesterTests(TestCase):
@@ -1156,7 +1174,7 @@ class ClassWorkflowTests(TestCase):
         }
         valid_form = ClassRecordForm(
             data=base_data,
-            files={"attachment": SimpleUploadedFile("outcome.pdf", b"%PDF-1.4 test", content_type="application/pdf")},
+            files={"attachment": SimpleUploadedFile("outcome.pdf", minimal_pdf_bytes(), content_type="application/pdf")},
         )
         self.assertTrue(valid_form.is_valid(), valid_form.errors)
 
@@ -2633,4 +2651,126 @@ class PairingAdminViewTests(TestCase):
         response = self.client.post(reverse("admin:tutoring_pairing_delete", args=[self.pairing.pk]), {"post": "yes"})
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Pairing.objects.filter(pk=self.pairing.pk).exists())
+
+
+class SpreadsheetInjectionTests(TestCase):
+    """Batch 6 item 2 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): CSV/XLSX exports must
+    neutralize values that would be interpreted as spreadsheet formulas."""
+
+    def setUp(self):
+        self.tutor = User.objects.create_user(
+            username="INJECT-TUTOR", password="Test-password-2026", role=Role.TUTOR,
+            name_zh='=HYPERLINK("https://evil.example")', name_en="+SUM(1,2)",
+        )
+
+    def test_csv_export_escapes_formula_prefixed_values(self):
+        content = build_export_csv([self.tutor])
+        text = content.decode("utf-8-sig")
+        self.assertIn("'=HYPERLINK", text)
+        self.assertIn("'+SUM", text)
+
+    def test_xlsx_export_stores_formula_prefixed_values_as_literal_text(self):
+        content = build_excel_xlsx([self.tutor])
+        workbook = openpyxl.load_workbook(BytesIO(content))
+        data_rows = list(workbook.active.iter_rows(min_row=2))
+        cell_values = {cell.value for row in data_rows for cell in row}
+        self.assertIn('\'=HYPERLINK("https://evil.example")', cell_values)
+        self.assertIn("'+SUM(1,2)", cell_values)
+        # openpyxl only classifies a cell as a formula (data_type "f") when the raw value
+        # it was given starts with "="; the leading apostrophe must prevent that.
+        for row in data_rows:
+            for cell in row:
+                self.assertNotEqual(cell.data_type, "f")
+
+    def test_ordinary_names_are_not_altered(self):
+        ordinary = User.objects.create_user(
+            username="ORDINARY-TUTOR", password="Test-password-2026", role=Role.TUTOR, name_zh="王小明",
+        )
+        content = build_export_csv([ordinary])
+        text = content.decode("utf-8-sig")
+        self.assertIn("王小明", text)
+        self.assertNotIn("'王小明", text)
+
+
+def minimal_png_bytes(size=(10, 10)):
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", size, color=(255, 0, 0)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def minimal_docx_bytes():
+    """A ZIP archive with the one manifest entry validate_class_document_file actually
+    checks for — not a fully valid Word document, since the validator doesn't parse the
+    document body, only that it's a real ZIP with that entry."""
+    import zipfile
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+    return buffer.getvalue()
+
+
+class UploadContentValidationTests(TestCase):
+    """Batch 6 item 1 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): uploads must be validated
+    by actual content, not just extension/size, so a renamed HTML/script file can't pass
+    as a PDF/JPG/PNG/Office document."""
+
+    def upload(self, name, content, content_type):
+        return SimpleUploadedFile(name, content, content_type=content_type)
+
+    def test_fake_pdf_content_is_rejected(self):
+        upload = self.upload("fake.pdf", b"not actually a pdf", "application/pdf")
+        with self.assertRaises(ValidationError):
+            validate_qualification_file(upload)
+
+    def test_real_pdf_content_is_accepted(self):
+        upload = self.upload("real.pdf", minimal_pdf_bytes(), "application/pdf")
+        validate_qualification_file(upload)
+
+    def test_pdf_page_count_over_the_limit_is_rejected(self):
+        from pypdf import PdfWriter
+
+        writer = PdfWriter()
+        for _ in range(3):
+            writer.add_blank_page(width=72, height=72)
+        buffer = BytesIO()
+        writer.write(buffer)
+        upload = self.upload("many-pages.pdf", buffer.getvalue(), "application/pdf")
+        with self.assertRaises(ValidationError), patch("tutoring.models.MAX_PDF_PAGES", 2):
+            validate_qualification_file(upload)
+
+    def test_fake_image_content_is_rejected(self):
+        upload = self.upload("fake.png", b"not actually a png", "image/png")
+        with self.assertRaises(ValidationError):
+            validate_qualification_file(upload)
+
+    def test_real_image_content_is_accepted(self):
+        upload = self.upload("real.png", minimal_png_bytes(), "image/png")
+        validate_qualification_file(upload)
+
+    def test_oversized_image_dimensions_are_rejected(self):
+        upload = self.upload("huge.png", minimal_png_bytes(size=(6001, 2)), "image/png")
+        with self.assertRaises(ValidationError):
+            validate_class_record_attachment(upload)
+
+    def test_fake_docx_content_is_rejected(self):
+        upload = self.upload("fake.docx", b"not actually a docx", "application/octet-stream")
+        with self.assertRaises(ValidationError):
+            validate_class_document_file(upload)
+
+    def test_real_docx_content_is_accepted(self):
+        upload = self.upload("real.docx", minimal_docx_bytes(), "application/octet-stream")
+        validate_class_document_file(upload)
+
+    def test_fake_legacy_doc_content_is_rejected(self):
+        upload = self.upload("fake.doc", b"not actually a doc", "application/octet-stream")
+        with self.assertRaises(ValidationError):
+            validate_class_document_file(upload)
+
+    def test_real_legacy_doc_header_is_accepted(self):
+        header = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+        upload = self.upload("real.doc", header + b"\x00" * 100, "application/octet-stream")
+        validate_class_document_file(upload)
 
