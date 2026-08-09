@@ -1,0 +1,42 @@
+# systemd unit for the Gunicorn application server (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md
+# batch 8 item 3). Copy to /etc/systemd/system/mpts-gunicorn.service, fill in the TODOs,
+# then:
+#   systemctl daemon-reload
+#   systemctl enable --now mpts-gunicorn.service
+#
+# RuntimeDirectory=mpts makes systemd create/own /run/mpts (mode 0755, owned by the
+# service user) before each start and remove it on stop, so the Unix socket directory
+# always exists without a separate tmpfiles.d entry — this must match GUNICORN_BIND in
+# the environment file and the `upstream` block in deploy/nginx/mpts.conf.example.
+
+[Unit]
+Description=MPTS Gunicorn application server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=TODO-mpts
+Group=TODO-mpts
+WorkingDirectory=TODO/opt/mpts
+RuntimeDirectory=mpts
+EnvironmentFile=TODO/opt/mpts/.env
+ExecStart=TODO/opt/mpts/.venv/bin/gunicorn \
+    --config TODO/opt/mpts/deploy/gunicorn.conf.py \
+    config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Defense in depth beyond the application-level fail-closed settings check
+# (config/settings.py, batch 2): the service itself can't write to most of the
+# filesystem even if the app were somehow compromised. media/ and any log directory
+# outside WorkingDirectory need their own explicit ReadWritePaths.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=TODO/opt/mpts/media
+
+[Install]
+WantedBy=multi-user.target

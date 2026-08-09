@@ -1,0 +1,25 @@
+# Runs `python manage.py process_matching_state` once per invocation (docs/PROGRESS.md /
+# CLAUDE.md 第 4.2 節: "正式環境仍須排程 python manage.py process_matching_state,否則無
+# 流量時不會即時處理"). Triggered by mpts-process-matching-state.timer — do not `enable`
+# this .service directly, only the .timer.
+#
+# Type=oneshot is correct here (unlike the long-running gunicorn service): the management
+# command runs to completion and exits every time.
+
+[Unit]
+Description=MPTS process_matching_state (one-shot run)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=TODO-mpts
+Group=TODO-mpts
+WorkingDirectory=TODO/opt/mpts
+EnvironmentFile=TODO/opt/mpts/.env
+ExecStart=TODO/opt/mpts/.venv/bin/python manage.py process_matching_state
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=TODO/opt/mpts/media

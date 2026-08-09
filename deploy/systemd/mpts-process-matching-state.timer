@@ -1,0 +1,18 @@
+# Runs mpts-process-matching-state.service every minute, matching the README's
+# recommended cadence (docs/DEPLOY.md 第 6 項: "cron/systemd timer 定期執行
+# python manage.py process_matching_state(README 建議每分鐘)"). Install with:
+#   systemctl daemon-reload
+#   systemctl enable --now mpts-process-matching-state.timer
+# (enable the .timer, not the .service — the .service only runs when the timer fires or
+# via `systemctl start mpts-process-matching-state.service` for a manual one-off run).
+
+[Unit]
+Description=Run MPTS process_matching_state every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,85 @@
+# Template Nginx server block for MPTS (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 8
+# item 2). This is a TEMPLATE, not a ready-to-use config: every value marked TODO depends
+# on the real DNS name, TLS certificate, deployment path, and internal network ranges,
+# none of which are known yet (see docs/DEPLOY.md "上線前仍待確認"). Copy this file and
+# proxy_params_mpts.conf to /etc/nginx/, fill in the TODOs, symlink into
+# /etc/nginx/sites-enabled/, then `nginx -t` before reloading.
+#
+# Prerequisites this config assumes:
+#   - Gunicorn is running via deploy/systemd/mpts-gunicorn.service, bound to the Unix
+#     socket referenced below (must match deploy/gunicorn.conf.py's GUNICORN_BIND).
+#   - `python manage.py collectstatic` has been run so STATIC_ROOT (staticfiles/) exists.
+#   - TLS certificates are already issued and readable by nginx.
+#
+# The TODO placeholders are written so an un-edited copy of this file fails `nginx -t`
+# outright (invalid CIDR syntax, nonexistent cert paths) rather than silently loading
+# with a nonsensical-but-valid config — deliberate, not a typo.
+
+upstream mpts_app {
+    server unix:/run/mpts/gunicorn.sock fail_timeout=0;
+}
+
+# Plain HTTP only exists to redirect to HTTPS (and to answer ACME HTTP-01 challenges if
+# certbot/acme.sh is used for renewal — add a location for that here if needed).
+server {
+    listen 80;
+    listen [::]:80;
+    server_name TODO-mpts.example.ntnu.edu.tw;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name TODO-mpts.example.ntnu.edu.tw;
+
+    ssl_certificate     TODO/etc/ssl/mpts/fullchain.pem;
+    ssl_certificate_key TODO/etc/ssl/mpts/privkey.pem;
+
+    # Largest single upload today is a class document at 10 MB (tutoring/models.py
+    # validate_class_document_file); a little headroom above that for request overhead.
+    client_max_body_size 12m;
+
+    access_log /var/log/nginx/mpts_access.log;
+    error_log  /var/log/nginx/mpts_error.log;
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+
+    # Matches STATIC_ROOT in config/settings.py. Re-run collectstatic and reload nginx
+    # (not required, just to pick up new files — nginx reads the directory live) after
+    # every deploy that changes static/.
+    location /static/ {
+        alias TODO/opt/mpts/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public";
+    }
+
+    # Reserved for the private-download views (accounts:download_qualification,
+    # tutoring:download_class_record_attachment, accounts:download_class_document) to
+    # X-Accel-Redirect into, once DJANGO_X_ACCEL_REDIRECT=1 is set on the app (see
+    # docs/DEPLOY.md item 13 — not wired up yet, so this location is currently unused and
+    # every download still streams through Django's own FileResponse). `internal` means
+    # this can only be reached via an X-Accel-Redirect from the app, never a direct
+    # client request, so nginx here is not itself doing the permission check — Django
+    # already did that before issuing the redirect.
+    location /protected-media/ {
+        internal;
+        alias TODO/opt/mpts/media/;
+    }
+
+    # /system-admin/ 限制在校內／VPN 來源(批次4);實際網段待網管確認,
+    # 不可用 0.0.0.0/0 或留空等同開放。
+    location /system-admin/ {
+        allow TODO-140.122.0.0/16;   # 範例：師大校內網段，需網管確認實際範圍
+        allow TODO-203.0.113.10;     # 範例：VPN 出口固定 IP，需網管確認實際位址
+        deny all;
+
+        proxy_pass http://mpts_app;
+        include proxy_params_mpts.conf;
+    }
+
+    location / {
+        proxy_pass http://mpts_app;
+        include proxy_params_mpts.conf;
+    }
+}

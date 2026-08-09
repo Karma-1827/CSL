@@ -4,7 +4,7 @@
 
 ## 目標環境
 
-學校提供的 Linux VM＋PostgreSQL。現在只有 Django WSGI/ASGI entry 與 production security settings,**尚無正式 deployment artifacts**(無 Dockerfile、Gunicorn 設定、Nginx、systemd unit、CI/CD)。
+學校提供的 Linux VM＋PostgreSQL。`deploy/` 目錄(批次8)已提供 Gunicorn 設定、Nginx server block 範本、systemd unit/timer 與正式環境 `.env` 範本,但**都是範本,套用前必須先填入實際 DNS、TLS 憑證路徑、部署路徑與網段**(見下方「上線前仍待確認」);尚無 Dockerfile 或 CI/CD 自動部署,取得實際 VM 前也無法完成套件安裝、TLS 憑證與網段相關的最後一哩驗證。
 
 此系統預計歸類為「校務行政系統及隸屬系所之行政資訊系統」,依目前取得的校方說明免收 VM 租賃費用;正式申請仍以學校審核結果為準。預估帳號規模 500 人以上,服務對外開放且需支援手機瀏覽。
 
@@ -32,18 +32,18 @@
 
 ## 正式部署至少需要
 
-1. 設定 `.env.example` 中所有環境變數,使用長且隨機的 `DJANGO_SECRET_KEY`。
+1. 依 `deploy/.env.production.example` 填好 `/opt/mpts/.env`(路徑僅為範例,實際部署路徑待定),使用長且隨機的 `DJANGO_SECRET_KEY`,`chmod 600` 並確認擁有者是服務帳號。
 2. `DJANGO_DEBUG=0`、正確 `DJANGO_ALLOWED_HOSTS` 與 PostgreSQL 連線資訊。
 3. `python manage.py migrate`、`python manage.py collectstatic`。
-4. 用正式 WSGI/ASGI server,不使用 `runserver`。
-5. 反向代理 HTTPS;`DEBUG=False` 時已啟用 Secure Cookie、SSL redirect、HSTS。
-6. cron/systemd timer 定期執行 `python manage.py process_matching_state`(README 建議每分鐘)。
+4. 用 `deploy/gunicorn.conf.py` + `deploy/systemd/mpts-gunicorn.service` 啟動 Gunicorn,不使用 `runserver`;Gunicorn 只綁 Unix socket,不對外開任何 TCP port(見該 service 檔案的 `ReadWritePaths`/`ProtectSystem` 說明)。
+5. 用 `deploy/nginx/mpts.conf.example` + `deploy/nginx/proxy_params_mpts.conf` 設定反向代理 HTTPS;`DEBUG=False` 時已啟用 Secure Cookie、SSL redirect、HSTS。
+6. `deploy/systemd/mpts-process-matching-state.service` + `.timer` 每分鐘執行 `python manage.py process_matching_state`(啟用 `.timer`,不要直接啟用 `.service`)。
 7. 另外設計 DB/media 備份、log rotation、監控與災難復原;RPO/RTO 尚待系辦決定。
 8. 設定正式 DNS、TLS 憑證、`DJANGO_CSRF_TRUSTED_ORIGINS`(逗號分隔的 `scheme://host`,例如 `https://mpts.xxx.ntnu.edu.tw`)。`SECURE_PROXY_SSL_HEADER` 已在 `config/settings.py` 寫死信任 `X-Forwarded-Proto`,**部署前必須先確認反向代理(Nginx)一律清除用戶端自行帶入的 `X-Forwarded-Proto`/`X-Forwarded-For` 再重新設定**,否則等同讓外部請求自行宣稱是 HTTPS,繞過 `SECURE_SSL_REDIRECT`/Secure Cookie 的保護;Django 本身無法偵測反向代理是否確實清除。
 9. `DJANGO_DEBUG=0` 啟動時,`config/settings.py` 會 fail closed:缺少或等於開發預設值的 `DJANGO_SECRET_KEY`、空白的 `POSTGRES_PASSWORD`,或 `DJANGO_ALLOWED_HOSTS` 為空/`*`/只有 localhost,都會讓應用程式直接拋出 `ImproperlyConfigured` 無法啟動。部署前務必確認這三項環境變數都已填入正式值,而不是等啟動失敗才發現。
 10. PostgreSQL 與 media 都要納入備份;至少完成一次「從備份還原到測試環境」演練,不能只確認備份檔有產生。
 11. 建立容量、CPU、RAM、磁碟、HTTP 5xx、服務存活與備份失敗告警。
-12. `/media/` 不得設成 Nginx 可直接公開存取的 static location(口語能力證明、課堂紀錄附件、上課文件三種私人檔案都已改走受保護下載 view,見 `accounts:download_qualification`、`tutoring:download_class_record_attachment`、`accounts:download_class_document`,批次3)。目前開發環境用 Django `FileResponse` 直接讀檔案回應,正式環境應改用 Nginx `X-Accel-Redirect`(view 只驗證權限並回傳內部重導頭,實際傳檔交給 Nginx),減少 WSGI worker 花時間搬檔案;三個 view 目前的 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`、`Content-Disposition: attachment` 這三個回應標頭在改用 `X-Accel-Redirect` 後仍要保留。
+12. `/media/` 不得設成 Nginx 可直接公開存取的 static location(口語能力證明、課堂紀錄附件、上課文件三種私人檔案都已改走受保護下載 view,見 `accounts:download_qualification`、`tutoring:download_class_record_attachment`、`accounts:download_class_document`,批次3)。目前開發環境用 Django `FileResponse` 直接讀檔案回應,正式環境應改用 Nginx `X-Accel-Redirect`(view 只驗證權限並回傳內部重導頭,實際傳檔交給 Nginx),減少 WSGI worker 花時間搬檔案;三個 view 目前的 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`、`Content-Disposition: attachment` 這三個回應標頭在改用 `X-Accel-Redirect` 後仍要保留。`deploy/nginx/mpts.conf.example` 已預留 `/protected-media/`(`internal`)location 對應這個用途,但**三個 view 尚未真的送出 `X-Accel-Redirect` 標頭**,目前這個 location 還沒有任何流量走到——這是刻意留給之後有真實 Nginx 環境可以整合測試時才實作與驗證的項目,不在批次 8(純文件/範本準備)範圍內。
 13. `accounts/middleware.py::ContentSecurityPolicyMiddleware` 目前送出的是 `Content-Security-Policy-Report-Only`(批次6 item 5),尚未強制生效,只會在瀏覽器主控台顯示違規、不會擋下任何資源。正式上線前應先用實際瀏覽器逐一操作登入、註冊、Dashboard、排課、訊息、Admin、PDF 預覽等主要流程,確認主控台沒有 CSP violation,再把該 middleware 回應標頭名稱從 `Content-Security-Policy-Report-Only` 改成 `Content-Security-Policy`(或改由 Nginx 統一設定,兩者擇一,不要重複設定造成瀏覽器同時收到兩個不同來源的政策)。政策內容本身刻意不含任何 `unsafe-inline`;若之後某個頁面違規,應優先把違規的 inline 內容搬到 `static/` 底下的檔案,而不是放寬政策。
 
 ## Django Admin(`/system-admin/`)存取限制
@@ -53,27 +53,10 @@
 1. **核心業務 model 已在 Django Admin 改為唯讀**(`tutoring/admin.py::ReadOnlyAdminMixin`,套用於 `Pairing`、`MatchingInvitation`、`ClassSession`、`Attendance`、`ClassRecord`、`ClassConfirmation`、`MakeupReview`、`PairingReleaseRequest`):保留清單、篩選、搜尋與唯讀檢視,但新增/修改/刪除一律回傳 `False`(即使是 superuser),避免 Admin 登入被用來繞過 `tutoring/services.py` 的配對名額、狀態機與交易鎖規則。`ClassAlert`、`IncidentReport`、`HourAdjustment`、`ClassDocument` 等其餘 model 不在此範圍內,因為它們本來就是設計成透過 Django Admin 或 Admin dashboard 直接管理(見 `CLAUDE.md` 第 4.7/4.9/4.10 節)。
 2. **`/system-admin/` 登入已套用與主站相同標準的共享節流**(`accounts/forms.py::ThrottledAdminAuthenticationForm`,經 `accounts/admin.py` 的 `admin.site.login_form` 掛載):同一 IP+帳號 15 分鐘內 5 次失敗即鎖定,使用獨立的 cache key 前綴(`admin_login:`)而非與主站共用計數,因為兩邊帳號池幾乎不重疊(只有 `is_staff` 帳號能通過 Admin 登入的 `confirm_login_allowed()`)。
 
-**正式 VM 取得網段後,還需要在 Nginx 加上 IP／VPN 白名單**,把 `/system-admin/` 限制在校內或 VPN 來源,避免只靠登入節流面對整個公開網路。以下是範本,實際 IP／CIDR 待網管確認:
-
-```nginx
-location /system-admin/ {
-    # 只允許校內網段／VPN 出口 IP,其餘一律拒絕。實際範圍待網管確認,
-    # 不可用註解掉 deny all 的方式暫時放行。
-    allow 140.122.0.0/16;       # 範例:師大校內網段(需網管確認實際範圍)
-    allow 203.0.113.10;         # 範例:VPN 出口固定 IP(需網管確認實際位址)
-    deny all;
-
-    proxy_pass http://127.0.0.1:8000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-}
-```
-
-這段只是 `/system-admin/` 專屬的 location block 範本,不是完整的 Nginx server 設定(完整 server block、靜態檔案、`/media/` 的 `X-Accel-Redirect` location 留待批次 8 一併產出)。套用前務必:
+**正式 VM 取得網段後,還需要在 Nginx 加上 IP／VPN 白名單**,把 `/system-admin/` 限制在校內或 VPN 來源,避免只靠登入節流面對整個公開網路。完整範本(含 `/system-admin/` 的 IP 白名單 location、靜態檔案、`/protected-media/` 的 `X-Accel-Redirect` 預留 location)已在批次 8 產出:`deploy/nginx/mpts.conf.example` + `deploy/nginx/proxy_params_mpts.conf`。套用前務必:
 
 - 用實際核配的校內網段/VPN 出口 IP 取代範例值,不可用 `0.0.0.0/0` 或留空等同開放。
-- 確認 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` 會**覆蓋**、而非附加用戶端自行帶入的 `X-Forwarded-For`,否則 Django 這端信任代理鏈時可能被偽造的標頭混淆。
+- `proxy_params_mpts.conf` 把 `X-Forwarded-For` 設為 `$remote_addr`(**覆蓋**,不是用 `$proxy_add_x_forwarded_for` 附加)——這點曾在本文件寫錯:`$proxy_add_x_forwarded_for` 實際上是「把 nginx 看到的來源 IP,接在用戶端原本送來的 `X-Forwarded-For` 值後面」,不是覆蓋;若用這個變數,惡意用戶端自行帶入的偽造值會留在第一個位置,而 `accounts/forms.py::client_ip()` 正是取第一個值,等於完全沒有防到偽造。因為 Nginx 是這個部署唯一、直接面對用戶端的一層(Gunicorn 只綁 Unix socket、不對外),沒有更前面的可信代理需要保留其標頭,所以直接覆蓋成 `$remote_addr` 是正確做法;之後如果在 Nginx 前面再加 Cloudflare 或其他 CDN/WAF,才需要改成信任並轉發那一層的標頭。
 - 若之後改用 Cloudflare 或其他 CDN/WAF,校內網段清單需要換成該服務的來源 IP 清單,不能直接沿用這份範本。
 
 ## 上線前仍待確認
@@ -106,3 +89,49 @@ python manage.py makemigrations --check --dry-run
 DJANGO_DEBUG=0 DJANGO_SECRET_KEY='deployment-check-only-secret-key-that-is-long-and-random-2026' \
   python manage.py check --deploy
 ```
+
+## 部署、升級、回滾、備份與故障排除(批次8)
+
+以下流程假設 `deploy/` 目錄下的範本已經套用成正式設定(見上方各節),部署路徑以 `/opt/mpts` 為例,實際路徑、服務帳號名稱由正式環境決定時一併更新本節。**這是流程草稿,尚未在真實 VM 上實際演練過**,取得 VM 後第一次操作應視為對這份文件的驗證,發現落差要回頭更新這裡。
+
+### 初次部署
+
+1. 建立服務帳號、`/opt/mpts` 目錄與 Python virtualenv(`python -m venv /opt/mpts/.venv`),`pip install -r requirements.txt`。
+2. 依 `deploy/.env.production.example` 建立 `/opt/mpts/.env`,權限設為 `600`。
+3. `python manage.py migrate`、`python manage.py collectstatic --noinput`。
+4. 複製 `deploy/systemd/*.service`、`deploy/systemd/*.timer` 到 `/etc/systemd/system/`,`deploy/nginx/*.conf*` 到 `/etc/nginx/`(依上方各節填好 TODO)。
+5. `systemctl daemon-reload`,`systemctl enable --now mpts-gunicorn.service mpts-process-matching-state.timer`。
+6. `nginx -t` 通過後 `systemctl reload nginx`。
+7. 用一組非正式人員帳號(見 `docs/VULNERABILITY_SCAN_IMPROVEMENTS.md` 第 8 節)實際跑過登入、Dashboard、排課、下載證明,確認整條路徑(Nginx → Gunicorn → PostgreSQL)正常。
+
+### 升級(部署新版本)
+
+1. 部署前先確認 `docs/PROGRESS.md`/`CLAUDE.md` 是否有需要人工介入的 migration 或資料調整(例如新增必填欄位的資料回填)。
+2. `git fetch` + `git checkout <目標版本>`(或直接 pull,依實際 branch 策略而定)。
+3. `pip install -r requirements.txt`(套件版本可能變動)。
+4. `python manage.py migrate`——**先在有正式資料副本的 staging 環境跑過一次**,確認沒有預期外的鎖表時間或資料遺失,再對正式環境執行。
+5. `python manage.py collectstatic --noinput`。
+6. `systemctl restart mpts-gunicorn.service`(Gunicorn 沒有做到 zero-downtime reload,重啟期間會有短暫無法回應;若之後要做到不中斷,需要改用多台 Gunicorn 輪替或加上 `--reload`/graceful worker 替換機制,目前規模與流量尚不需要這個複雜度)。
+7. 用第 7 步同一組測試帳號跑一次關鍵流程,確認新版本正常後再宣告升級完成。
+
+### 回滾
+
+1. `git checkout <上一個正式版本的 tag/commit>`。
+2. `pip install -r requirements.txt`(回滾到舊版套件)。
+3. **Migration 回滾是本專案目前最大的風險點**:多數 migration 是新增欄位/資料表,直接 `python manage.py migrate <app> <上一個 migration 編號>` 理論上可行,但務必先確認新版本上線期間沒有寫入依賴新欄位/新資料表的資料——若已經有正式資料寫入新增的欄位或資料表,回滾 migration 會遺失那些資料。沒有把握時,優先只回滾應用程式碼、保留資料庫在新的 schema(新程式碼通常還是能讀舊 schema,但反過來不一定成立),而不是連 migration 一起回滾。
+4. `systemctl restart mpts-gunicorn.service`。
+5. 回滾後一樣跑一次關鍵流程確認,並在事後檢討記錄回滾原因。
+
+### 備份與還原
+
+- PostgreSQL:建議 `pg_dump` 定期備份(頻率、保留週期待系辦/資訊中心確認,見「上線前仍待確認」);還原用 `pg_restore` 或直接 `psql < dump.sql`,依備份格式而定。
+- `media/`:內含口語能力證明、課堂紀錄附件、上課文件等私人檔案,備份時**不可**外洩到非授權存取的位置(例如不可上傳到公開雲端硬碟）;應與 PostgreSQL 備份有相同等級的存取控制。
+- **正式上線前至少完成一次「從備份還原到一個獨立測試環境」的演練**,包含資料庫還原與 `media/` 還原後應用程式仍能正常提供下載——只確認備份檔案有產生、從未實際還原過,不能視為備份機制已經可用。
+
+### 故障排除
+
+- `systemctl status mpts-gunicorn.service`、`journalctl -u mpts-gunicorn.service -n 200` 查看應用程式是否啟動失敗;常見原因是 `.env` 缺漏必要變數觸發 `config/settings.py` 的 fail-closed 檢查(批次2),錯誤訊息會直接說明缺少哪個變數。
+- `systemctl status mpts-process-matching-state.timer`、`journalctl -u mpts-process-matching-state.service` 確認排課狀態機是否確實每分鐘執行;長期沒有執行會導致配對/課程狀態(例如學期結束後自動解除配對)沒有即時更新。
+- Nginx 502/504:先確認 Gunicorn 是否存活(`systemctl status mpts-gunicorn.service`)、Unix socket 是否存在(`ls -la /run/mpts/`)——`RuntimeDirectory=mpts` 只在服務執行期間存在,服務沒啟動時 socket 目錄也不會在。
+- CSP 主控台出現非預期 violation:先確認是不是最近新增的頁面用了 inline `<script>`/`<style>` 或 event handler 屬性(批次6要求一律搬到 `static/`);修正後才考慮是否需要調整政策本身。
+- 私人檔案下載出現 403/404 但使用者反映應該有權限:依序檢查——帳號角色是否正確、是否為該堂課/該筆文件的相關人員、`ClassDocument`/`PartnerProgram` 的 `is_active`/`class_documents_enabled` 是否仍為啟用中,這些都是既有受保護下載 view(批次3)判斷可見性的依據。
