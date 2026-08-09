@@ -9,7 +9,6 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.views import LoginView
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -101,6 +100,7 @@ from .services import (
     roster_template_csv_bytes,
     roster_template_xlsx_bytes,
 )
+from .throttle import any_throttled, clear_throttles, register_failures
 
 
 def log_event(request, event_type, description, target_user=None, metadata=None):
@@ -133,7 +133,7 @@ def register(request):
         request.session.pop("registration_confirmed", None)
         if old_draft_id:
             RegistrationDraft.objects.filter(pk=old_draft_id).delete()
-    form = RegistrationLookupForm(request.POST or None)
+    form = RegistrationLookupForm(request.POST or None, request=request)
     if request.method == "POST" and form.is_valid():
         draft = form.save_draft()
         request.session["registration_draft_id"] = draft.pk
@@ -1202,19 +1202,25 @@ def recover_account(request):
     if request.method == "POST" and lookup_form.is_valid():
         student_id = lookup_form.cleaned_data["student_id"]
 
-        # One shared IP+student_id throttle covers both the lookup step (just viewing the
-        # question form) and the verify step (submitting answers) — 5 combined attempts
-        # per 15 minutes, checked and incremented before the real/fake account branch
-        # below, so probing many nonexistent IDs can't dodge the same rate limit a real
-        # attempt would hit.
-        throttle_key = f"recovery:{client_ip(request)}:{student_id}"
-        if cache.get(throttle_key, 0) >= 5:
+        # Two throttle layers (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5), both
+        # covering the lookup step (viewing the question form) and the verify step
+        # (submitting answers) together: an IP+student_id key (5/15min) catches repeated
+        # attempts from one source, and a student_id-only key (20/15min) catches a slow
+        # attack against one account spread across many IPs. Checked and incremented
+        # before the real/fake account branch below, so probing many nonexistent IDs
+        # can't dodge the same rate limit a real attempt would hit.
+        throttle_keys = [
+            (f"recovery:{client_ip(request)}:{student_id}", 5),
+            (f"recovery_id:{student_id}", 20),
+        ]
+        if any_throttled(throttle_keys):
             messages.error(request, "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.")
             return render(
                 request, "accounts/recover.html",
                 {"lookup_form": lookup_form, "answer_form": None, "student_id": student_id},
             )
-        cache.set(throttle_key, cache.get(throttle_key, 0) + 1, 900)
+        throttle_key_names = [key for key, _limit in throttle_keys]
+        register_failures(throttle_key_names)
 
         # username is already normalized to uppercase by RecoveryLookupForm.clean_student_id();
         # __iexact is defensive in depth in case a stored username were ever not uppercase.
@@ -1242,7 +1248,7 @@ def recover_account(request):
         if verified:
             request.session["recovery_user_id"] = user.pk
             request.session["recovery_verified_at"] = timezone.now().isoformat()
-            cache.delete(throttle_key)
+            clear_throttles(throttle_key_names)
             log_event(request, "RECOVERY_VERIFIED", "安全問題驗證成功 / Security questions verified", user)
             return redirect("accounts:set_recovered_password")
         log_event(request, "RECOVERY_FAILED", "帳號恢復驗證失敗 / Account recovery verification failed")

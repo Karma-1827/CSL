@@ -5,7 +5,7 @@ from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
-from django.core.cache import cache
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -20,11 +20,25 @@ from tutoring.models import (
 )
 
 from .models import EducationLevel, IdentityCategory, RegistrationDraft, Role, RosterEntry, SecurityQuestionAnswer, User
+from .throttle import any_throttled, clear_throttles, register_failures
 
 
 def client_ip(request):
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return (forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR")) or None
+    """The real client IP, honoring exactly `settings.TRUSTED_PROXY_COUNT` reverse-proxy
+    hops (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5). Defaults to 0 — trust nothing
+    in X-Forwarded-For and use the raw socket peer — so a bare dev server or a
+    misconfigured deployment can't have this spoofed by a client-supplied header. With
+    TRUSTED_PROXY_COUNT=1 (production, once deploy/nginx/mpts.conf.example is applied,
+    which OVERWRITES X-Forwarded-For with the real client IP rather than appending to it),
+    the single value nginx set is used.
+    """
+    trusted_hops = settings.TRUSTED_PROXY_COUNT
+    if trusted_hops > 0:
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        hops = [value.strip() for value in forwarded.split(",") if value.strip()]
+        if len(hops) >= trusted_hops:
+            return hops[-trusted_hops]
+    return request.META.get("REMOTE_ADDR") or None
 
 
 def add_form_classes(form):
@@ -62,25 +76,36 @@ class BilingualAuthenticationForm(AuthenticationForm):
             "學號或密碼不正確。 / The student ID or password is incorrect.", code="invalid_login"
         )
 
-    def _throttle_key(self, username):
-        return f"login:{client_ip(self.request)}:{username.strip().upper()}"
+    def _throttle_keys(self, username):
+        """Two layers (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5): an IP+username
+        key with a tight limit catches repeated guesses from one source, and a
+        username-only key with a looser limit catches a slow attack spread across many
+        IPs against the same account. Keeping the IP+username key means two different
+        accounts behind the same NAT/shared IP never lock each other out — each has its
+        own counter."""
+        normalized = username.strip().upper()
+        return [
+            (f"login:{client_ip(self.request)}:{normalized}", 5),
+            (f"login_id:{normalized}", 20),
+        ]
 
     def clean(self):
         username = self.cleaned_data.get("username")
         if not username:
             return super().clean()
-        throttle_key = self._throttle_key(username)
-        if cache.get(throttle_key, 0) >= 5:
+        keys = self._throttle_keys(username)
+        if any_throttled(keys):
             raise ValidationError(
                 "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.",
                 code="throttled",
             )
+        key_names = [key for key, _limit in keys]
         try:
             cleaned = super().clean()
         except ValidationError:
-            cache.set(throttle_key, cache.get(throttle_key, 0) + 1, 900)
+            register_failures(key_names)
             raise
-        cache.delete(throttle_key)
+        clear_throttles(key_names)
         return cleaned
 
 
@@ -95,25 +120,30 @@ class ThrottledAdminAuthenticationForm(AdminAuthenticationForm):
     can ever pass AdminAuthenticationForm.confirm_login_allowed().
     """
 
-    def _throttle_key(self, username):
-        return f"admin_login:{client_ip(self.request)}:{username.strip().upper()}"
+    def _throttle_keys(self, username):
+        normalized = username.strip().upper()
+        return [
+            (f"admin_login:{client_ip(self.request)}:{normalized}", 5),
+            (f"admin_login_id:{normalized}", 20),
+        ]
 
     def clean(self):
         username = self.cleaned_data.get("username")
         if not username:
             return super().clean()
-        throttle_key = self._throttle_key(username)
-        if cache.get(throttle_key, 0) >= 5:
+        keys = self._throttle_keys(username)
+        if any_throttled(keys):
             raise ValidationError(
                 "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.",
                 code="throttled",
             )
+        key_names = [key for key, _limit in keys]
         try:
             cleaned = super().clean()
         except ValidationError:
-            cache.set(throttle_key, cache.get(throttle_key, 0) + 1, 900)
+            register_failures(key_names)
             raise
-        cache.delete(throttle_key)
+        clear_throttles(key_names)
         return cleaned
 
 
@@ -264,22 +294,38 @@ class RegistrationLookupForm(forms.Form):
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
         super().__init__(*args, **kwargs)
         add_form_classes(self)
 
     def clean_student_id(self):
         student_id = self.cleaned_data["student_id"].strip().upper()
+        # Roster-lookup throttle (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5 item
+        # "名冊查詢限制"): keyed by IP only, not by the submitted ID — the risk here isn't
+        # repeated guesses against one account, it's enumerating many different student
+        # IDs to see which ones exist, so the limit has to apply across whatever ID is
+        # tried each time.
+        throttle_key = f"roster_lookup:{client_ip(self.request)}"
+        if any_throttled([(throttle_key, 10)]):
+            raise ValidationError(
+                "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.",
+                code="throttled",
+            )
         try:
             roster = RosterEntry.objects.get(student_id=student_id, is_enabled=True)
         except RosterEntry.DoesNotExist:
+            register_failures([throttle_key])
             raise ValidationError(
                 "找不到註冊學號，請聯絡系辦。\nStudent ID not found. Please contact the department office."
             )
         if roster.is_claimed or User.objects.filter(username=student_id).exists():
+            register_failures([throttle_key])
             raise ValidationError("此學號已完成註冊。 / This student ID has already been registered.")
         if roster.role not in {Role.TUTOR, Role.TUTEE}:
+            register_failures([throttle_key])
             raise ValidationError("此名冊身分無法公開註冊。 / This roster role cannot register here.")
+        clear_throttles([throttle_key])
         self.roster = roster
         return student_id
 

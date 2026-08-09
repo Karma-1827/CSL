@@ -10,11 +10,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import transaction
-from django.test import Client, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from tutoring.models import QualificationDocument, TuteeProfile, TutorProfile
+
+from .forms import client_ip
 
 from .models import (
     AccountStatus,
@@ -501,6 +503,167 @@ class AdminLoginThrottleTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(self.client.session.get("_auth_user_id"))
+
+
+class ClientIpTrustedProxyTests(TestCase):
+    """Batch 5 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): client_ip() must not trust a
+    client-supplied X-Forwarded-For unless the deployment explicitly says how many
+    reverse-proxy hops are in front of it."""
+
+    def make_request(self, remote_addr="203.0.113.5", forwarded_for=None):
+        request = RequestFactory().get("/", REMOTE_ADDR=remote_addr)
+        if forwarded_for is not None:
+            request.META["HTTP_X_FORWARDED_FOR"] = forwarded_for
+        return request
+
+    @override_settings(TRUSTED_PROXY_COUNT=0)
+    def test_default_ignores_x_forwarded_for_even_if_present(self):
+        request = self.make_request(forwarded_for="198.51.100.1")
+        self.assertEqual(client_ip(request), "203.0.113.5")
+
+    @override_settings(TRUSTED_PROXY_COUNT=1)
+    def test_trusts_the_single_hop_when_configured(self):
+        request = self.make_request(forwarded_for="198.51.100.1")
+        self.assertEqual(client_ip(request), "198.51.100.1")
+
+    @override_settings(TRUSTED_PROXY_COUNT=1)
+    def test_falls_back_to_remote_addr_when_header_missing(self):
+        request = self.make_request(forwarded_for=None)
+        self.assertEqual(client_ip(request), "203.0.113.5")
+
+    @override_settings(TRUSTED_PROXY_COUNT=1)
+    def test_takes_the_hop_the_trusted_proxy_would_have_set_not_a_spoofed_earlier_one(self):
+        # deploy/nginx/proxy_params_mpts.conf overwrites X-Forwarded-For outright, so in
+        # the real deployment there's only ever one value here — but if some other value
+        # is already present (e.g. Django reachable directly, bypassing nginx), taking
+        # the last position is what a single real trusted hop would produce.
+        request = self.make_request(forwarded_for="1.2.3.4, 203.0.113.5")
+        self.assertEqual(client_ip(request), "203.0.113.5")
+
+
+class CrossIpThrottleTests(TestCase):
+    """Batch 5: alongside the existing IP+identifier throttle, a wider identifier-only
+    counter should catch a slow attack spread across many source IPs, without making
+    different accounts behind the same shared IP/NAT lock each other out."""
+
+    def setUp(self):
+        cache.clear()
+        self.password = "Correct-password-2026"
+        self.user = User.objects.create_user(username="CROSS-IP-TEST", password=self.password, role=Role.TUTOR)
+
+    def test_login_failures_distributed_across_many_ips_eventually_lock_the_account(self):
+        for index in range(20):
+            self.client.post(
+                reverse("accounts:login"),
+                {"username": "CROSS-IP-TEST", "password": "wrong-password"},
+                REMOTE_ADDR=f"10.0.0.{index + 1}",
+            )
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "CROSS-IP-TEST", "password": self.password},
+            REMOTE_ADDR="10.0.0.255",
+        )
+        self.assertContains(response, "嘗試次數過多")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_different_accounts_behind_the_same_ip_do_not_lock_each_other(self):
+        User.objects.create_user(username="CROSS-IP-OTHER", password=self.password, role=Role.TUTOR)
+        for _ in range(5):
+            self.client.post(
+                reverse("accounts:login"),
+                {"username": "CROSS-IP-TEST", "password": "wrong-password"},
+                REMOTE_ADDR="10.1.1.1",
+            )
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "CROSS-IP-OTHER", "password": self.password},
+            REMOTE_ADDR="10.1.1.1",
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+
+    def test_recovery_failures_distributed_across_many_ips_eventually_lock_the_account(self):
+        # No SecurityQuestionAnswer set up for self.user on purpose: the throttle check
+        # happens before the view ever looks at whether the account has real security
+        # questions (accounts/views.py::recover_account falls back to
+        # _FakeSecurityQuestions either way), so this exercises the throttle in
+        # isolation from that lookup.
+        for index in range(20):
+            self.client.post(
+                reverse("accounts:recover"),
+                {"student_id": "CROSS-IP-TEST"},
+                REMOTE_ADDR=f"10.2.2.{index + 1}",
+            )
+        response = self.client.post(
+            reverse("accounts:recover"),
+            {"student_id": "CROSS-IP-TEST"},
+            REMOTE_ADDR="10.2.2.255",
+        )
+        self.assertContains(response, "嘗試次數過多")
+
+    def test_admin_login_failures_distributed_across_many_ips_eventually_lock_the_account(self):
+        User.objects.create_superuser(username="CROSS-IP-ADMIN", password=self.password)
+        for index in range(20):
+            self.client.post(
+                reverse("admin:login"),
+                {"username": "CROSS-IP-ADMIN", "password": "wrong-password"},
+                REMOTE_ADDR=f"10.5.5.{index + 1}",
+            )
+        response = self.client.post(
+            reverse("admin:login"),
+            {"username": "CROSS-IP-ADMIN", "password": self.password},
+            REMOTE_ADDR="10.5.5.255",
+        )
+        self.assertContains(response, "嘗試次數過多")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+
+class SharedCacheBackendTests(TestCase):
+    """Batch 5: the throttle cache must be backed by something shared across processes
+    (PostgreSQL here) rather than Django's default per-process LocMemCache, or different
+    Gunicorn workers would each keep their own attempt counts and effectively multiply the
+    real limit by the worker count."""
+
+    def test_default_cache_uses_the_shared_database_backend(self):
+        self.assertEqual(
+            settings.CACHES["default"]["BACKEND"],
+            "django.core.cache.backends.db.DatabaseCache",
+        )
+
+
+class RosterLookupThrottleTests(TestCase):
+    """Batch 5 item "名冊查詢限制": registration's roster lookup must not let one source
+    enumerate an unlimited number of student IDs."""
+
+    def setUp(self):
+        cache.clear()
+
+    def test_many_lookups_from_one_ip_get_throttled(self):
+        for index in range(10):
+            self.client.post(
+                reverse("accounts:register"),
+                {"student_id": f"NOSUCH-{index}", "password1": "irrelevant", "password2": "irrelevant"},
+                REMOTE_ADDR="10.3.3.3",
+            )
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "NOSUCH-999", "password1": "irrelevant", "password2": "irrelevant"},
+            REMOTE_ADDR="10.3.3.3",
+        )
+        self.assertContains(response, "嘗試次數過多")
+
+    def test_lookups_from_different_ips_are_not_throttled_together(self):
+        for index in range(10):
+            self.client.post(
+                reverse("accounts:register"),
+                {"student_id": f"NOSUCH-{index}", "password1": "irrelevant", "password2": "irrelevant"},
+                REMOTE_ADDR=f"10.4.4.{index + 1}",
+            )
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "NOSUCH-999", "password1": "irrelevant", "password2": "irrelevant"},
+            REMOTE_ADDR="10.4.4.255",
+        )
+        self.assertNotContains(response, "嘗試次數過多")
 
 
 class PrivateNoStoreMiddlewareTests(TestCase):

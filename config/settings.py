@@ -23,6 +23,15 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 
+# How many reverse-proxy hops in front of this app add their own trustworthy
+# X-Forwarded-For value (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5). Defaults to 0
+# ("don't trust X-Forwarded-For at all, use the real socket peer") so a bare local dev
+# server or a misconfigured deployment can't have its throttle/audit-log IPs spoofed by a
+# client-supplied header. Production sets this to 1 once deploy/nginx/mpts.conf.example is
+# in place, since that config overwrites (not appends to) X-Forwarded-For with the real
+# client IP as the single trusted hop. See accounts/forms.py::client_ip().
+TRUSTED_PROXY_COUNT = int(os.getenv("DJANGO_TRUSTED_PROXY_COUNT", "0"))
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -74,6 +83,20 @@ DATABASES = {
         "HOST": os.getenv("POSTGRES_HOST", ""),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
         "CONN_MAX_AGE": 60,
+    }
+}
+
+# PostgreSQL-backed cache (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5): Django's
+# LocMemCache default is per-process, so login/recovery/roster-lookup throttle counts
+# wouldn't be shared across Gunicorn workers and would reset on every worker restart —
+# exactly the gap the plan calls out. PostgreSQL is already the only supported database
+# (see CLAUDE.md), so reusing it here avoids standing up Redis for a single low-volume
+# use case. The backing table is created by accounts/migrations/0016_create_cache_table.py
+# via `createcachetable`, so a fresh `migrate` sets it up with no extra manual step.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache_table",
     }
 }
 
