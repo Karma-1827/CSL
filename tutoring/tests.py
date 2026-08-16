@@ -7,6 +7,7 @@ from unittest.mock import patch
 import openpyxl
 
 from django.contrib import admin as django_admin
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
@@ -463,6 +464,31 @@ class MatchingFixtureTestCase(TestCase):
 
 
 class MatchingTests(MatchingFixtureTestCase):
+    def test_find_students_uses_backend_program_name(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self.ntnu_program.name_zh)
+        self.assertContains(response, self.ntnu_program.name_en)
+
+        self.client.force_login(self.maryland_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self.maryland_program.name_zh)
+        self.assertContains(response, self.maryland_program.name_en)
+
+    def test_tutor_qualification_panel_is_full_width_and_reuses_upload_guidance(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'class="panel status-panel"', html=False)
+        self.assertNotContains(response, 'class="panel status-panel focused-panel"', html=False)
+        self.assertContains(response, "請擇一上傳以下文件")
+        self.assertContains(response, "Please upload one of the following documents")
+
+    def test_tutee_find_teacher_heading_stays_csl_teacher(self):
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "華語老師")
+        self.assertContains(response, "Chinese teachers")
+
     def test_anonymous_candidate_data_excludes_identity(self):
         candidate = anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)[0]
         self.assertNotIn("name_zh", candidate)
@@ -597,8 +623,8 @@ class MatchingTests(MatchingFixtureTestCase):
     def test_tutee_can_expand_anonymous_teacher_information_from_received_invitation(self):
         self.tutor.tutor_profile.teaching_notes = "重視生活會話與發音練習"
         self.tutor.tutor_profile.save(update_fields=["teaching_notes", "updated_at"])
-        self.tutor.nickname, self.tutor.email = "阿虎", "known.tutor@example.com"
-        self.tutor.save(update_fields=["nickname", "email"])
+        self.tutor.email = "known.tutor@example.com"
+        self.tutor.save(update_fields=["email"])
         send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
         self.client.force_login(self.tutee)
         response = self.client.get(reverse("accounts:dashboard"))
@@ -609,20 +635,15 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertNotContains(response, "知名小老師")
         self.assertNotContains(response, "Known Tutor")
         self.assertNotContains(response, "TUTOR100")
-        # Item 11: nickname/email are only disclosed after pairing, not in the pre-pairing
-        # anonymous invitation view.
-        self.assertNotContains(response, "阿虎")
+        # Email is only disclosed after pairing, not in the anonymous invitation view.
         self.assertNotContains(response, "known.tutor@example.com")
 
     def test_active_pair_can_open_each_others_full_profile(self):
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
-        # Nicknames deliberately don't overlap as substrings with any fixture's real name
-        # (e.g. "知名小老師"), so these assertions can't pass merely from the real name
-        # already being rendered elsewhere on the page.
-        self.tutee.nickname, self.tutee.email = "阿安", "known.tutee@example.com"
-        self.tutee.save(update_fields=["nickname", "email"])
-        self.tutor.nickname, self.tutor.email = "阿虎", "known.tutor@example.com"
-        self.tutor.save(update_fields=["nickname", "email"])
+        self.tutee.email = "known.tutee@example.com"
+        self.tutee.save(update_fields=["email"])
+        self.tutor.email = "known.tutor@example.com"
+        self.tutor.save(update_fields=["email"])
 
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:matched_profile", args=[self.tutee.pk]))
@@ -630,8 +651,7 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "知名外籍生")
         self.assertContains(response, "學習資料")
         self.assertContains(response, "希望加強日常會話")
-        # Item 11: nickname and email are shown once a pairing is active.
-        self.assertContains(response, "阿安")
+        # Email is shown once a pairing is active.
         self.assertContains(response, "known.tutee@example.com")
 
         self.client.force_login(self.tutee)
@@ -639,7 +659,6 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "知名小老師")
         self.assertContains(response, "教學資料")
-        self.assertContains(response, "阿虎")
         self.assertContains(response, "known.tutor@example.com")
 
     def test_unmatched_user_cannot_open_matched_profile(self):
@@ -1168,41 +1187,21 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get("/system-admin/tutoring/classrecord/?skill=WRITING")
         self.assertNotContains(response, "聽說練習")
 
-    def test_class_record_attachment_validates_type_and_size(self):
-        base_data = {
-            "location": "綜合大樓 / General Building", "topic": "課堂主題", "content": "課堂內容", "remarks": "",
-        }
-        valid_form = ClassRecordForm(
-            data=base_data,
-            files={"attachment": SimpleUploadedFile("outcome.pdf", minimal_pdf_bytes(), content_type="application/pdf")},
-        )
-        self.assertTrue(valid_form.is_valid(), valid_form.errors)
-
-        wrong_type_form = ClassRecordForm(
-            data=base_data,
-            files={"attachment": SimpleUploadedFile("outcome.txt", b"plain text", content_type="text/plain")},
-        )
-        self.assertFalse(wrong_type_form.is_valid())
-        self.assertIn("僅接受 PDF、JPG、PNG", str(wrong_type_form.errors["attachment"]))
-
-        oversized_form = ClassRecordForm(
-            data=base_data,
-            files={"attachment": SimpleUploadedFile("outcome.pdf", b"x" * 500_001, content_type="application/pdf")},
-        )
-        self.assertFalse(oversized_form.is_valid())
-        self.assertIn("500 KB", str(oversized_form.errors["attachment"]))
-
-    def test_class_record_content_and_remarks_enforce_2000_char_limit(self):
+    def test_class_record_content_and_remarks_enforce_500_char_limit(self):
         at_limit_data = {
             "location": "綜合大樓 / General Building", "topic": "課堂主題",
-            "content": "內" * 2000, "remarks": "備" * 2000,
+            "content": "內" * 500, "remarks": "備" * 500,
+            "evidence_links": ["https://example.com/evidence"],
         }
         at_limit_form = ClassRecordForm(data=at_limit_data)
         self.assertTrue(at_limit_form.is_valid(), at_limit_form.errors)
+        self.assertEqual(at_limit_form.fields["content"].widget.attrs["maxlength"], "500")
+        self.assertEqual(at_limit_form.fields["content"].widget.attrs["data-character-count"], "500")
 
         over_limit_data = {
             "location": "綜合大樓 / General Building", "topic": "課堂主題",
-            "content": "內" * 2001, "remarks": "",
+            "content": "內" * 501, "remarks": "",
+            "evidence_links": ["https://example.com/evidence"],
         }
         over_limit_form = ClassRecordForm(data=over_limit_data)
         self.assertFalse(over_limit_form.is_valid())
@@ -1210,7 +1209,8 @@ class ClassWorkflowTests(TestCase):
 
         over_limit_remarks_data = {
             "location": "綜合大樓 / General Building", "topic": "課堂主題",
-            "content": "課堂內容", "remarks": "備" * 2001,
+            "content": "課堂內容", "remarks": "備" * 501,
+            "evidence_links": ["https://example.com/evidence"],
         }
         over_limit_remarks_form = ClassRecordForm(data=over_limit_remarks_data)
         self.assertFalse(over_limit_remarks_form.is_valid())
@@ -1337,20 +1337,32 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get(reverse("tutoring:download_class_record_attachment", args=[record.pk]))
         self.assertEqual(response.status_code, 200)
 
-    def test_tutor_form_has_no_attachment_field_and_tutee_form_has_no_links_field(self):
-        """Item 14: only Tutors get the evidence-links field; Tutees keep the original
-        optional attachment and never see links."""
+    def test_both_participants_use_evidence_links_instead_of_attachments(self):
         tutor_form = ClassRecordForm(author=self.tutor)
         self.assertNotIn("attachment", tutor_form.fields)
         self.assertIn("evidence_links", tutor_form.fields)
+        self.assertIn("當次上課佐證連結", tutor_form.fields["evidence_links"].help_text)
+        self.assertIn("共用檢視權限", tutor_form.fields["evidence_links"].help_text)
+        self.assertIn("administrators", tutor_form.fields["evidence_links"].help_text)
+        self.assertIn('class="evidence-help-points"', tutor_form.fields["evidence_links"].help_text)
 
         tutee_form = ClassRecordForm(author=self.tutee)
-        self.assertIn("attachment", tutee_form.fields)
-        self.assertNotIn("evidence_links", tutee_form.fields)
+        self.assertNotIn("attachment", tutee_form.fields)
+        self.assertIn("evidence_links", tutee_form.fields)
+        self.assertEqual(
+            tutee_form.fields["evidence_links"].help_text,
+            tutor_form.fields["evidence_links"].help_text,
+        )
 
     def test_tutor_record_requires_at_least_one_evidence_link(self):
         data = self.record_data("佐證連結測試")
         form = ClassRecordForm(data=data, author=self.tutor)
+        self.assertFalse(form.is_valid())
+        self.assertIn("evidence_links", form.errors)
+
+    def test_tutee_record_requires_at_least_one_evidence_link(self):
+        data = self.record_data("學生佐證連結測試")
+        form = ClassRecordForm(data=data, author=self.tutee)
         self.assertFalse(form.is_valid())
         self.assertIn("evidence_links", form.errors)
 
@@ -1758,7 +1770,11 @@ class V2FeatureTests(TestCase):
         self.tutee.save(update_fields=["email"])
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("tutoring:pairing_messages", args=[self.pairing.pk]))
-        self.assertContains(response, "v2-tutee@example.com")
+        self.assertContains(response, "（v2-tutee@example.com）")
+        self.assertContains(response, '<small class="conversation-person-email">（v2-tutee@example.com）</small>', html=False)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, '<small class="conversation-person-email">（v2-tutee@example.com）</small>', html=False)
 
     def test_dashboard_shows_unread_badge_and_preview_then_clears_on_open(self):
         self.client.force_login(self.tutee)
@@ -1863,7 +1879,7 @@ class V2FeatureTests(TestCase):
         response = self.client.get(reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
         self.assertEqual(response.status_code, 404)
 
-    def test_admin_export_defaults_to_xlsx_and_can_filter_by_semester_and_selected_user(self):
+    def test_admin_export_defaults_to_xlsx_and_can_filter_by_program_semester_and_specific_user(self):
         session = ClassSession.objects.create(
             pairing=self.pairing,
             class_date=timezone.localdate(),
@@ -1872,7 +1888,8 @@ class V2FeatureTests(TestCase):
         admin = User.objects.create_superuser(username="EXPORT-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.post(reverse("tutoring:export_excel"), {
-            "scope": "selected",
+            "program_id": self.ntnu_program.pk,
+            "audience": "specific",
             "user_ids": [self.tutor.pk],
             "period_mode": "semester",
             "semester_id": self.semester.pk,
@@ -1886,6 +1903,90 @@ class V2FeatureTests(TestCase):
         rows = list(workbook.active.iter_rows(values_only=True))
         self.assertIn(str(session.class_date), rows[1])
 
+    def test_admin_export_program_filter_excludes_same_tutors_other_program_classes(self):
+        ntnu_session = ClassSession.objects.create(
+            pairing=self.pairing,
+            class_date=timezone.localdate(),
+            start_time=time(11, 0), duration=1, created_by=self.tutor,
+        )
+        maryland = PartnerProgram.objects.get(code="MARYLAND")
+        maryland_roster = RosterEntry.objects.create(
+            student_id="EXPORT-MARYLAND", name_zh="馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE,
+            identity_category=IdentityCategory.INTERNATIONAL, program=maryland,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="EXPORT-MARYLAND", password="Password-2026",
+            role=Role.TUTEE, roster_entry=maryland_roster,
+        )
+        maryland_pairing = Pairing.objects.create(
+            semester=self.semester, tutor=self.tutor, tutee=maryland_tutee,
+        )
+        ClassSession.objects.create(
+            pairing=maryland_pairing, class_date=timezone.localdate(),
+            start_time=time(12, 0), duration=1, created_by=self.tutor,
+        )
+        admin = User.objects.create_superuser(
+            username="EXPORT-PROGRAM-ADMIN", password="Admin-password-2026"
+        )
+        self.client.force_login(admin)
+
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "program_id": self.ntnu_program.pk,
+            "audience": "specific",
+            "user_ids": [self.tutor.pk],
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "file_format": "xlsx",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        rows = list(openpyxl.load_workbook(BytesIO(response.content)).active.iter_rows(values_only=True))
+        exported = " ".join(str(value) for row in rows for value in row if value is not None)
+        self.assertIn(str(ntnu_session.class_date), exported)
+        self.assertIn(self.tutee.username, exported)
+        self.assertNotIn(maryland_tutee.username, exported)
+
+    def test_admin_export_can_select_all_students_in_program(self):
+        ClassSession.objects.create(
+            pairing=self.pairing, class_date=timezone.localdate(),
+            start_time=time(11, 0), duration=1, created_by=self.tutor,
+        )
+        admin = User.objects.create_superuser(
+            username="EXPORT-TUTEES-ADMIN", password="Admin-password-2026"
+        )
+        self.client.force_login(admin)
+
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "program_id": self.ntnu_program.pk,
+            "audience": "tutees",
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "file_format": "xlsx",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        rows = list(openpyxl.load_workbook(BytesIO(response.content)).active.iter_rows(values_only=True))
+        self.assertEqual(rows[1][0], self.tutee.username)
+        self.assertNotEqual(rows[1][0], self.tutor.username)
+
+    def test_admin_export_rejects_specific_user_outside_selected_program(self):
+        maryland = PartnerProgram.objects.get(code="MARYLAND")
+        admin = User.objects.create_superuser(
+            username="EXPORT-WRONG-PROGRAM-ADMIN", password="Admin-password-2026"
+        )
+        self.client.force_login(admin)
+
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "program_id": maryland.pk,
+            "audience": "specific",
+            "user_ids": [self.tutee.pk],
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+        })
+
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#export")
+
     def test_admin_export_can_produce_real_xlsx(self):
         session = ClassSession.objects.create(
             pairing=self.pairing,
@@ -1895,7 +1996,8 @@ class V2FeatureTests(TestCase):
         admin = User.objects.create_superuser(username="EXPORT-XLSX-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.post(reverse("tutoring:export_excel"), {
-            "scope": "selected",
+            "program_id": self.ntnu_program.pk,
+            "audience": "specific",
             "user_ids": [self.tutor.pk],
             "period_mode": "semester",
             "semester_id": self.semester.pk,
@@ -1913,6 +2015,55 @@ class V2FeatureTests(TestCase):
         self.assertEqual(rows[0][0], "學號 Student ID")
         self.assertIn(str(session.class_date), rows[1])
 
+    def test_admin_export_can_select_output_fields(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing,
+            class_date=timezone.localdate(),
+            start_time=time(11, 0), duration=1, created_by=self.tutor,
+        )
+        admin = User.objects.create_superuser(username="EXPORT-FIELDS-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "選擇計畫")
+        self.assertContains(dashboard, 'name="audience" value="tutors" checked', html=False)
+        self.assertContains(dashboard, 'name="audience" value="tutees"', html=False)
+        self.assertContains(dashboard, 'name="audience" value="specific"', html=False)
+        self.assertContains(dashboard, "特定使用者")
+        self.assertContains(dashboard, 'data-role="TUTOR"', html=False)
+        self.assertContains(dashboard, 'data-role="TUTEE"', html=False)
+        self.assertContains(dashboard, "選擇欄位")
+        self.assertContains(dashboard, 'name="export_fields" value="date" checked', html=False)
+
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "program_id": self.ntnu_program.pk,
+            "audience": "specific",
+            "user_ids": [self.tutor.pk],
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "field_selection_present": "1",
+            "export_fields": ["date", "hours"],
+            "file_format": "xlsx",
+        })
+        self.assertEqual(response.status_code, 200)
+        workbook = openpyxl.load_workbook(BytesIO(response.content))
+        rows = list(workbook.active.iter_rows(values_only=True))
+        self.assertEqual(rows[0], ("日期 Date", "時數 Hours"))
+        self.assertEqual(rows[1], (str(session.class_date), "1.0"))
+
+    def test_admin_export_requires_at_least_one_selected_field(self):
+        admin = User.objects.create_superuser(username="EXPORT-NO-FIELDS-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:export_excel"), {
+            "program_id": self.ntnu_program.pk,
+            "audience": "tutors",
+            "period_mode": "semester",
+            "semester_id": self.semester.pk,
+            "field_selection_present": "1",
+            "file_format": "xlsx",
+        })
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#export")
+
     def test_admin_export_can_produce_csv(self):
         session = ClassSession.objects.create(
             pairing=self.pairing,
@@ -1922,7 +2073,8 @@ class V2FeatureTests(TestCase):
         admin = User.objects.create_superuser(username="EXPORT-CSV-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.post(reverse("tutoring:export_excel"), {
-            "scope": "selected",
+            "program_id": self.ntnu_program.pk,
+            "audience": "specific",
             "user_ids": [self.tutor.pk],
             "period_mode": "semester",
             "semester_id": self.semester.pk,
@@ -1944,7 +2096,8 @@ class V2FeatureTests(TestCase):
         admin = User.objects.create_superuser(username="EXPORT-PDF-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.post(reverse("tutoring:export_excel"), {
-            "scope": "selected",
+            "program_id": self.ntnu_program.pk,
+            "audience": "specific",
             "user_ids": [self.tutor.pk],
             "period_mode": "semester",
             "semester_id": self.semester.pk,
@@ -1969,7 +2122,7 @@ class V2FeatureTests(TestCase):
         admin = User.objects.create_superuser(username="EXPORT-RANGE-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.post(reverse("tutoring:export_excel"), {
-            "scope": "all", "period_mode": "range",
+            "program_id": self.ntnu_program.pk, "audience": "tutors", "period_mode": "range",
             "starts_on": "2026-08-01", "ends_on": "2026-07-01",
         })
         self.assertRedirects(response, f"{reverse('accounts:dashboard')}#export")
@@ -2093,6 +2246,16 @@ class PartnerProgramCertificateTests(TestCase):
         self.assertEqual(tutor_form.fields["program"].label, "實習計劃 / Practicum program")
         self.assertNotIn("program", HoursDownloadForm(user=self.tutee).fields)
 
+    def test_certificate_language_uses_select_menu(self):
+        field = HoursDownloadForm(user=self.tutor).fields["language"]
+        self.assertEqual(field.widget.__class__.__name__, "Select")
+        self.assertEqual(list(field.choices), [("zh", "中文版 / Chinese"), ("en", "英文版 / English")])
+
+    def test_download_hours_get_returns_to_hours_panel_after_login(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:download_hours"))
+        self.assertRedirects(response, f"{reverse('accounts:dashboard')}#hours")
+
     def test_download_hours_requires_program_for_tutor(self):
         self.client.force_login(self.tutor)
         today = timezone.localdate()
@@ -2169,8 +2332,8 @@ class PartnerProgramCertificateTests(TestCase):
         compact_text = extracted.replace(" ", "")
         self.assertIn("民國115年7月", compact_text)
         self.assertNotIn("7月-7月", compact_text)
-        self.assertIn("學號PP-TUTOR，\n", compact_text)
-        self.assertNotIn("PP-TUTOR\n，", compact_text)
+        self.assertIn("PP-TUTOR（學號：PP-TUTOR）\n", compact_text)
+        self.assertNotIn("學號：PP-TUTOR\n）", compact_text)
 
     def test_tutor_can_download_maryland_certificate_now_that_template_is_shared(self):
         from pypdf import PdfReader
@@ -2349,6 +2512,64 @@ class PartnerProgramCertificateTests(TestCase):
         self.assertNotIn("實習證明", text)
         self.assertNotIn("民國", text)
 
+    def test_certificate_issue_date_uses_taiwan_local_date(self):
+        from pypdf import PdfReader
+
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 7, 1), "ends_on": date(2026, 8, 31),
+            "sections": [], "total": 2,
+            # 16:30 UTC is already the following calendar day in Taiwan.
+            "generated_at": datetime.fromisoformat("2026-08-10T16:30:00+00:00"),
+        }
+        content = build_hours_pdf(data, version="summary", program=self.ntnu_program, language="zh")
+        compact_text = PdfReader(BytesIO(content)).pages[0].extract_text().replace(" ", "").replace("\n", "")
+        self.assertIn("中華民國115年8月11日", compact_text)
+
+    def test_detailed_certificate_reserves_footer_after_six_rows(self):
+        from pypdf import PdfReader
+
+        session = ClassSession.objects.filter(pairing=self.pairing).first()
+        detail_row = {
+            "session": session,
+            "counterpart": self.tutee,
+            "topic": "會話練習",
+            "student_nationality": "美國 / United States",
+            "student_level": "TOCFL B1",
+        }
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 7, 1), "ends_on": date(2026, 8, 31),
+            "sections": [{"semester": self.semester, "rows": [detail_row] * 7, "subtotal": 7}],
+            "total": 7, "generated_at": timezone.now(),
+        }
+        content = build_hours_pdf(
+            data, version="detailed", detail_fields=("date", "nationality", "level", "hours"),
+            program=self.ntnu_program, language="zh",
+        )
+        self.assertEqual(len(PdfReader(BytesIO(content)).pages), 2)
+
+    def test_private_certificate_assets_are_embedded_when_provisioned(self):
+        from pypdf import PdfReader
+
+        data = {
+            "user": self.tutor, "starts_on": date(2026, 7, 1), "ends_on": date(2026, 8, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        content = build_hours_pdf(data, version="summary", program=self.ntnu_program, language="zh")
+        reader = PdfReader(BytesIO(content))
+        page = reader.pages[0]
+        font_names = {str(font.get_object().get("/BaseFont")) for font in page["/Resources"]["/Font"].values()}
+        private_font_dir = Path(settings.BASE_DIR) / "assets/fonts"
+        if (private_font_dir / "DFLiSongStd-W3.ttf").exists():
+            self.assertTrue(any("DFLiSongStd-W3" in name for name in font_names))
+        if (private_font_dir / "Helvetica Neue Condensed Bold.ttf").exists():
+            self.assertTrue(any("HelveticaNeue-CondensedBold" in name for name in font_names))
+        stamp_path = Path(settings.BASE_DIR) / "assets/certificates/CSL stamp.png"
+        if stamp_path.exists():
+            template_reader = PdfReader(
+                Path(settings.BASE_DIR) / "tutoring/resources/certificate_templates/csl_template.pdf"
+            )
+            self.assertEqual(len(page.images), len(template_reader.pages[0].images) + 1)
+
     def test_certificate_shows_bilingual_name_when_both_names_present_in_both_languages(self):
         """Regression test: <b>陳安然</b> alone (no explicit font) renders blank inside an
         English-default Paragraph, because ReportLab resolves <b> through the paragraph's
@@ -2367,6 +2588,67 @@ class PartnerProgramCertificateTests(TestCase):
             text = PdfReader(BytesIO(content)).pages[0].extract_text()
             self.assertIn("陳安然", text)
             self.assertIn("Jamie Chen", text)
+
+    def test_all_certificate_variants_put_opening_name_and_body_on_separate_lines(self):
+        """Summary/detail and Chinese/English certificates share the same three-part lead:
+        opening line, name plus student ID line, then the remaining certificate body."""
+        from pypdf import PdfReader
+
+        self.tutor.name_zh, self.tutor.name_en = "王小華", "Alex Wang"
+        self.tutor.save()
+        self.tutee.name_zh, self.tutee.name_en = "林安娜", "Anna Lin"
+        self.tutee.save()
+        base_data = {
+            "starts_on": date(2026, 2, 1), "ends_on": date(2026, 7, 31),
+            "sections": [], "total": 2, "generated_at": timezone.now(),
+        }
+        cases = (
+            (self.tutor, "zh", "本系碩士班學生"),
+            (self.tutor, "en", "This certifies that graduate (Master's) student"),
+            (self.tutee, "zh", "茲證明"),
+            (self.tutee, "en", "This is to certify that"),
+        )
+        for user, language, opening in cases:
+            for version in ("summary", "detailed"):
+                data = {**base_data, "user": user}
+                content = build_hours_pdf(
+                    data,
+                    version=version,
+                    detail_fields=("date", "hours"),
+                    program=self.ntnu_program,
+                    language=language,
+                )
+                lines = [line.strip() for line in PdfReader(BytesIO(content)).pages[0].extract_text().splitlines()]
+                opening_index = lines.index(opening)
+                self.assertIn(user.username, lines[opening_index + 1])
+                self.assertNotIn(user.username, lines[opening_index])
+                self.assertNotIn(user.username, lines[opening_index + 2])
+
+    def test_generic_chinese_period_has_no_indent_and_mentions_roc_only_once(self):
+        from pypdf import PdfReader
+
+        data = {
+            "user": self.tutee,
+            "starts_on": date(2026, 7, 1),
+            "ends_on": date(2026, 8, 31),
+            "sections": [],
+            "total": 2,
+            "generated_at": timezone.now(),
+        }
+        for version in ("summary", "detailed"):
+            content = build_hours_pdf(
+                data,
+                version=version,
+                detail_fields=("date", "hours"),
+                program=self.ntnu_program,
+                language="zh",
+            )
+            text = PdfReader(BytesIO(content)).pages[0].extract_text()
+            compact = text.replace(" ", "").replace("\n", "")
+            self.assertIn("於民國115年7月1日至8月31日期間", compact)
+            self.assertNotIn("日至民國", compact)
+            body_line = next(line for line in text.splitlines() if "於民國" in line.replace(" ", ""))
+            self.assertTrue(body_line.startswith("於"))
 
     def test_certificate_single_name_shows_no_dangling_slash_in_both_languages(self):
         from pypdf import PdfReader
@@ -2773,4 +3055,3 @@ class UploadContentValidationTests(TestCase):
         header = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
         upload = self.upload("real.doc", header + b"\x00" * 100, "application/octet-stream")
         validate_class_document_file(upload)
-

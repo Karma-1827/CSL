@@ -7,6 +7,18 @@
 
 ## 已完成
 
+### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
+
+- 安全問題三題必須互不相同:註冊表單會在每個重複題目欄位顯示雙語錯誤,資料庫另以 `three_distinct_security_questions` check constraint 防止繞過表單寫入重複題目。
+- 身份別新增「港澳生 / Hong Kong and Macao student」(`IdentityCategory.HONG_KONG_MACAO`),Tutor/Tutee 註冊下拉選單與 model choices 已同步。
+- 暱稱功能全面移除:刪除 `User.nickname`、註冊與 Profile 編輯欄位、個人資料/Admin/配對後畫面顯示及相關測試；Email 仍為必填聯絡資料。對應 migration 為 `accounts/0017_remove_user_nickname_and_more.py`。
+- Tutor 與 Tutee 的課堂紀錄統一使用 1–5 個必填 `https://` 佐證連結;雙方目前表單都不再顯示附件上傳。既有 `ClassRecord.attachment` 僅保留歷史資料相容與受保護下載,未刪除舊檔案。
+- `ClassRecord.content`/`.remarks` 上限由 2000 改為 500 字元,model、表單 `maxlength` 與伺服器端驗證一致；課程詳情頁新增即時 `0/500` 字元計數(`static/js/character-count.js`)。對應 migration 為 `tutoring/0023_alter_classrecord_content_and_more.py`。
+- Admin 資料匯出改為五步:選擇合作計畫、選擇老師/學生/特定使用者、選擇隨計畫更新的學期或日期、選擇欄位、選擇輸出格式。選老師或學生時,下方名單只顯示對應身分且整類納入匯出;特定使用者可在所選計畫內跨身分勾選一位或多位。名單與學期選項會在前端隨計畫篩選,後端仍會驗證計畫資格並在報表查詢再次限制課程計畫,避免跨計畫資料混入。
+- 證明 PDF 套用新版共用模板與本機私有素材:中文內文使用華康儷宋 W3、粗體/標題使用 W7,英文使用 Helvetica Neue Condensed Bold；日期依台灣時區計算並在底部置中、加寬字距,右下角系戳放大為 110pt 並向左、向上調整。摘要版加大左右留白,詳細版每頁最多 6 筆,避免表格碰到底部日期與放大後的系戳。私有字型與系戳不進版控,缺少時使用原有開源字型且略過系戳。已重新產生中文摘要、中文詳細跨頁及英文摘要預覽,以 Poppler 逐頁檢查無遮擋。
+
+下方提到「新增暱稱」、「只有 Tutor 使用佐證連結／Tutee 使用附件」或「課堂紀錄 2000 字」的段落,是當時版本的實作歷史,已被本節取代,不可當作現行需求。
+
 - V0:名冊式兩階段註冊、三角色、登入/登出、三安全問題恢復、Profile、資格文件、Admin 基礎管理、雙語響應式 UI、安全設定。
 - V1/V1.1:匿名候選資料、資格門檻、雙向邀請、五日逾期、名額限制、接受/拒絕/取消、配對後完整 Profile、解除配對與三日自動解除、個人資料/手冊、私訊入口。
 - V2:學期管理、24 小時/五分鐘排課、每週重複、額度限制、取消/改期、雙方簽到、雙方紀錄、互認、補登與 Admin 審核、課堂通報、Admin 課程總覽、老師個人課表、時數歷史、PDF 證明、Admin `.xls` 匯出、pairing 私訊。
@@ -26,7 +38,7 @@
   - Admin 學期時間設定新增「編輯」與「刪除」:後端 `save_semester`/`update_semester` 其實早就支援編輯,只是前端從沒接上,這次補上——UI 改成卡片右上角一顆編輯筆 icon(`<details>`/`<summary>`,無 JS),點擊展開編輯表單;另新增 `delete_semester`(真刪除,僅限尚無 `Pairing` 的學期,靠 DB `PROTECT` 約束防呆)區別於原本只給已結束學期用的「封存」(`archive_semester`)。編輯日期是回溯性的,UI 已加警告文字但無強制檢查,細節見 `CLAUDE.md` 4.2 節。過程中順手修掉一個既有 bug:`SemesterSettingsForm`/`SemesterCreateForm` 的日期 widget 沒設定 `format="%Y-%m-%d"`,編輯既有學期時日期欄位會顯示空白。**這項功能已用 Playwright 實際開瀏覽器登入點擊測試過**(建立臨時 Admin 帳號測試、測完刪除),是本專案目前少數真人瀏覽器驗證過的功能。
   - 名冊匯入卡片化 + 註冊改由使用者填寫姓名/學制/身份別:起因是系辦實務上一次只會拿到「純學號」清單,且是**分開的**、每種身分一份檔案(華語系學生、師大外籍生、馬里蘭大學…)。改動四項,彼此連動:
     ① `RosterEntry.student_id` 全面正規化為大寫,註冊第一階段學號查找也改為大小寫不敏感,與登入行為一致(`RosterEntry.clean()`)。
-    ② 註冊第二階段新增使用者自填欄位:中文姓名(必填)、英文姓名(選填)、身份別(本地生/僑生/外籍生,必填),Tutor 另外新增學制下拉選單(大學部/碩士班/博士班);`RosterEntry.name_zh`/`identity_category`/`education_level` 因此改為 `blank=True`(migration `accounts/0007`),送出表單時寫回 `RosterEntry` 並建立 `User`。
+    ② 註冊第二階段新增使用者自填欄位:中文姓名(必填)、英文姓名(選填)、身份別(本地生/僑生/港澳生/外籍生,必填),Tutor 另外新增學制下拉選單(大學部/碩士班/博士班);`RosterEntry.name_zh`/`identity_category`/`education_level` 因此改為 `blank=True`(migration `accounts/0007`),送出註冊表單時寫回 `RosterEntry` 並建立 `User`。
     ③ Admin dashboard「名冊匯入」頁籤新增**分類卡片式快速匯入**(`accounts:roster_import_quick`,新 service `import_roster_ids()`/`_read_single_column_values()`):固定「華語系學生」卡片(Tutor)+ 每個啟用中 `PartnerProgram` 各一張卡片(對應 Tutee 該計畫)+ 一張連到 Django Admin 新增計畫的卡片;只吃單欄學號清單,容忍標題列/中文表頭列等雜訊,角色與計畫完全由「上傳到哪張卡片」決定,不看檔案內容或任何 role 欄位。舊版完整欄位 CSV/Excel 匯入保留為同頁籤內的「進階匯入」摺疊區塊。
     ④ 兩種匯入路徑的重複學號處理都改為:學號已存在就靜默略過、保留系統內既有資料,只匯入真正新的學號(不再是「有重複就整批擋下」)。
     新增 `accounts/tests.py::QuickRosterImportTests`(8 個測試,含模擬使用者實際檔案結構的雜訊 xlsx 測試)並更新 5 個既有測試以符合新的必填欄位與略過邏輯。
@@ -124,6 +136,7 @@
     - 系統不串接 Google Drive/YouTube API,不做連結有效性、權限或失效偵測;沿用既有雙方互相確認流程作為查核機制。
     - 新增 6 個測試(`ClassWorkflowTests`):Tutor/Tutee 表單欄位組成互斥、缺連結擋下、超過 5 個擋下、非 https 網址擋下、任意網域的合法 https 網址皆接受(不限 Drive/YouTube)、透過真實 view 送出後 `evidence_links` 依輸入順序存入且 Tutee 端能看到帶正確 `rel`/`target` 屬性的連結。其中最後一個 view 層級測試踩到一個時區陷阱:一開始直接用 `real_now.hour`/`real_now.minute`(UTC 時間)組出上課時間,但 `schedule_classes()` 是用 `Asia/Taipei` 本地時間解讀,導致算出的上課時間其實是「未來」判斷失敗;修正為先 `timezone.localtime(real_now)` 轉成本地時間再取 hour/minute。另外用 curl 對 dev server 做過端到端驗證:Tutor 畫面正確拿掉附件、換上連結欄位與新增按鈕;Tutee 畫面附件欄位不受影響;Tutor 送出 2 個連結後,Tutee 端正確看到兩個都帶 `target="_blank" rel="noopener noreferrer"` 的可點連結;Tutor 送出 0 個連結被正確擋下並顯示必填錯誤。
 - **2026-08-08 名冊匯入卡片改為「以合作計畫為單位」**(20 項需求之外,使用者事後追加的 UI 調整):`templates/dashboard/admin_v2_panels.html` 的快速匯入卡片從「固定 Tutor 卡片 + 每計畫兩張卡片(Tutee、Tutor 修課名單各一張)」改成「每個啟用中 `PartnerProgram` 一張卡片,卡片內同時有 Tutor 名單與學生名單兩個上傳區塊」,對應系辦實際的心智模型(NTNU = 華語系碩班 Tutor + 師大外籍生 Tutee;MARYLAND = 限定大學部 Tutor + 馬里蘭 Tutee)。純模板/CSS 改動,`accounts:roster_import_quick` view 與 `import_roster_ids()` 完全未變:NTNU 卡片的 Tutor 區塊沿用既有的 `category_code="TUTOR"`(即 `RosterEntry.program=None`,對應 `tutor_can_serve_program()` 把無計畫 Tutor 隱含視為服務 NTNU 的既有規則),其餘計畫沿用既有的 `category_code="TUTOR:<程式碼>"`;新增計畫的流程不變,仍是先在 Django Admin 新增 `PartnerProgram`。已用真實 HTTP 流程(登入 Admin、對 NTNU/MARYLAND 兩個計畫各自的 Tutor/Tutee 兩個上傳區塊各匯入一筆測試學號)驗證四種組合都正確寫入對應的 `role`/`program`。
+- **2026-08-11 快速名冊匯入支援「學號＋身分別」**:依系辦實際 `ST101總名單1150805-給華語系.xlsx` 格式,`accounts/services.py::import_roster_ids()` 改讀前兩欄,接受「入學身份」中的僑生、港澳生、陸生、外國學生等值並轉為系統身分代碼;新增 `IdentityCategory.MAINLAND`(陸生 / Mainland Chinese student,migration `accounts/0018`)。舊單欄檔仍相容。重新匯入只會補既有空白身分別,不覆蓋非空白值;未知值略過並提示。實際比對 2,371 個唯一學號後,已補齊 2,370 筆空白身分,1 筆原本即相同,無衝突、無新增學號。新增測試涵蓋兩欄解析、五種身分映射、空白回填、不覆蓋及未知身分略過。
 - migrations:`accounts` 14 個、`tutoring` 21 個(第 3、7、11 項皆純屬邏輯/模板變更,無 model 異動;第 14 項新增 1 個 model 欄位;名冊匯入卡片改版無 model 異動)。
 - tests:**每次開發前建議重新執行 `python manage.py test` 確認實際數字**,不同 session 間可能因外部改動而變化,不在此維護容易過期的固定數字。
 - ~~已知不穩定測試~~:**2026-08-08 已修正**(弱掃整改批次 0,見下方新段落)。`test_schedule_reserves_weekly_quota_and_dashboard_shows_class` 原本用「今天+1 天、今天+2 天」推算兩堂課日期,週六執行時兩者會跨到不同的週一至週日區間,導致每週 2 小時上限的 `ValidationError` 沒被觸發而失敗。已改為錨定在未來某週固定的週二/週三,不論執行當天是星期幾都同週且必為未來日期,已用 7 種星期模擬驗證。
@@ -152,10 +165,11 @@
   - `tutoring/models.py::_validate_upload()` 擴充真實內容驗證:JPG/PNG 用 Pillow `Image.open()`/`verify()` 並限制最大解析尺寸(`MAX_IMAGE_DIMENSION_PX = 6000`,避免解壓縮炸彈);PDF 檢查檔頭與結構並限制頁數(`MAX_PDF_PAGES = 500`);Office 檔案檢查 ZIP 結構與實際格式;皆不再只信任副檔名或瀏覽器回報的 `Content-Type`。
   - 新增 `tutoring/reporting.py::_spreadsheet_safe_value()`/`_spreadsheet_safe_rows()`,對以 `=`/`+`/`-`/`@` 開頭的使用者可控制匯出文字(學號、中英文姓名等)加前置單引號轉義,`build_excel_xlsx()`/`build_export_csv()` 皆套用同一套規則,防止 CSV/XLSX 公式注入。
   - 新增 `accounts/middleware.py::PrivateNoStoreMiddleware`,為 Dashboard、Profile、matched profile、課堂、私訊、Admin、私人附件、PDF/Excel/CSV 匯出等敏感回應統一加上 `Cache-Control: private, no-store`,避免登出後瀏覽器上一頁重新顯示可操作的敏感頁面快取。
-  - 新增 `accounts/middleware.py::ContentSecurityPolicyMiddleware`,以 `Content-Security-Policy-Report-Only` 先行部署嚴格政策(無 `unsafe-inline`),同時移除 `templates/accounts/register_confirm.html` 的 inline style、`templates/accounts/admin_tutor_schedule.html` 的 inline `onchange`、`templates/dashboard/admin_v2_panels.html` 的 inline `onsubmit`,改為外部 CSS class 與 `addEventListener` 綁定,為之後切換成正式強制 CSP 做準備(尚未切換,仍是 Report-Only)。
+  - 新增 `accounts/middleware.py::ContentSecurityPolicyMiddleware`,移除 `templates/accounts/register_confirm.html` 的 inline style、`templates/accounts/admin_tutor_schedule.html` 的 inline `onchange`、`templates/dashboard/admin_v2_panels.html` 的 inline `onsubmit`,改為外部 CSS class 與 `addEventListener` 綁定。2026-08-10 複核模板與靜態資源後,已由 Report-Only 切換為正式強制 CSP(無 `unsafe-inline`),並加上 `Permissions-Policy`。
   - 新增測試涵蓋:公式注入字串在 CSV/XLSX 皆被正確轉義且一般中英文姓名/學號不受影響、假造內容(HTML 改名 `.pdf`、超大尺寸圖片、損壞圖片、內容與副檔名不符)皆被拒絕而合法檔案仍可上傳、敏感頁面回應皆帶有 `Cache-Control: private, no-store`、CSP header 存在且政策內容正確。
 - **批次 8(VM 前置部署準備文件,不需實際 VM 的部分)已完成**:新增 `deploy/` 目錄,含 `gunicorn.conf.py`、`nginx/mpts.conf.example`、`nginx/proxy_params_mpts.conf`、`systemd/mpts-gunicorn.service`、`systemd/mpts-process-matching-state.service`+`.timer`、`.env.production.example`;`requirements.txt` 新增 `gunicorn==26.0.0`;`docs/DEPLOY.md` 補齊完整的部署、升級、回滾、備份與故障排除說明(runbook)。取得實際 VM/DNS/正式網段後才能完成的項目(DNS、TLS 憑證、`CSRF_TRUSTED_ORIGINS` 實值、防火牆、SSH 來源限制、PostgreSQL localhost 限制、NFS 備份、監控、還原演練、壓力測試)仍是待辦,見下方「已知缺口」。
 - **批次 7(註冊本人驗證)仍暫停**,等待使用者向系辦確認一次性註冊碼、Admin 核准或其他驗證方案,不阻擋其他批次;批次 9(送弱掃前的正式環境收尾)尚未開始,需等批次 7 定案與實際 VM 到位後才能執行。
+- **2026-08-10 弱掃前再複核補強**:`PrivateNoStoreMiddleware` 擴充到未登入的登入/註冊/帳號恢復/設定新密碼流程;CSP 正式強制並加入 `Permissions-Policy`;Nginx 範本加入 `server_tokens off`、TLS 1.2/1.3、TLS 1.2 cipher allowlist、請求/連線限制與 client/proxy timeout。完整 273 項測試全數通過。實際 VM 的 DNS、憑證、網段、防火牆、NFS、監控、X-Accel-Redirect、備份還原與正式 AppScan 仍列在批次 9。
 - migrations(本輪弱掃整改新增):`accounts` 新增 `0015`(身分類別 choices 文字調整,無資料影響)、`0016`(建立共享 cache 資料表,`RunPython` 呼叫 `createcachetable`);`tutoring` 無新增(批次 0-8 皆為邏輯/設定/模板變更)。累計 `accounts` 16 個、`tutoring` 22 個 migration。
 - **2026-08-10 已將本輪弱掃整改(批次 0-6、8,共 9 個 commit)push 至 `origin/main`**;push 前發現遠端多了一個本機沒有的 merge commit(`c79c898`,GitHub PR UI 上合併已在本機以 fast-forward 整合過的分支),經 `git merge-base`/`git diff --stat` 確認內容完全相同後以一般 `git merge`(非 rebase/force-push)整合,零內容差異,合併後重跑完整測試套件(272 項全數通過)、`ruff check .`、`makemigrations --check --dry-run` 皆乾淨才 push。
 
@@ -165,7 +179,7 @@
 
 V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在校方 VM 上對外服務」,以及收尾少數還沒做完的功能缺口:
 
-1. **學校資安檢核與 VM production artifacts(V4 核心,程式碼可做的部分已開始)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**(取代這裡原本籠統的條列),初估安全等級為「中」。已補做其中可以直接改程式碼的幾項:登入失敗鎖定(目前是初版,正式環境共享儲存與可信 proxy IP 尚未完成)、session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)、換掉有授權疑慮的證明 PDF 字型(見下方「已完成」)。過程中發現並修正一個既有 bug:登入頁不論實際錯誤原因一律顯示寫死的「學號或密碼不正確」,導致新的鎖定訊息(以及既有的「帳號已停用」訊息)永遠不會顯示給使用者,已改成顯示表單實際錯誤內容。截至 2026-07-31 逐列核對,62 項控制措施中 21 項符合、14 項部分符合、23 項未實施、4 項不適用,詳見該文件。實際部署 checklist(WSGI/ASGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`,兩份文件互補:`docs/DEPLOY.md` 是「怎麼上線」,`docs/SECURITY_CHECKLIST.md` 是「上線前後要符合哪些資安控制」。VM 規格與 DNS 主機名稱都還在申請/確認階段。
+1. **學校資安檢核與 VM production artifacts(V4 核心,本機可完成項目已完成)**:取得師大資訊中心的「資通系統防護基準檢核表」等文件後,已逐條對照 CSL 現況整理成獨立的 **`docs/SECURITY_CHECKLIST.md`**。登入/名冊/帳號恢復/Django Admin 節流已改用 PostgreSQL 共享儲存,並完成可信 proxy 判定與 Nginx 覆寫 X-Forwarded-For 範本;另已完成 session 閒置登出、私人附件權限、上傳真實內容驗證、CSV/XLSX 公式防護、敏感頁禁止快取、強制 CSP/Permissions-Policy、依賴稽核及正式環境 fail-closed。實際部署 checklist(WSGI server、Nginx、HTTPS/TLS、systemd、備份、監控)仍在 `docs/DEPLOY.md`;VM 規格、DNS、憑證、正式網段與弱點掃描尚待學校 VM 到位後完成。註冊本人驗證方式另待系辦決策。
 2. **密碼效期與密碼歷程(檢核表第 33、34 項)**:實作方式已想清楚(見下方說明),但**開發前務必先跟系辦確認全校是否已有密碼政策**,避免系統自己訂一套跟校方规定衝突或重複的規則。若確認要做:
    - 效期:`User` 新增 `password_changed_at` 欄位,註冊/改密碼時更新;比照 `django.contrib.auth.middleware` 的模式寫一個輕量 middleware,登入後若 `now - password_changed_at` 超過政策天數(例如 90 天),強制導向改密碼頁面才能繼續使用系統。
    - 歷程:新增 `PasswordHistory` model(user、password_hash、created_at),改密碼時把新密碼分別跟最近 3 筆歷史雜湊比對(用 `django.contrib.auth.hashers.check_password`,不能明文比對),相同就擋下;成功變更後把最舊的一筆歷史紀錄清掉,只保留最近 3 筆。

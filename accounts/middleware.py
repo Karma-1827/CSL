@@ -2,36 +2,42 @@ from django.conf import settings
 
 
 class PrivateNoStoreMiddleware:
-    """Batch 6 item 3 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): every response to a
-    logged-in request carries Cache-Control: private, no-store, so pressing the browser's
-    back button after logout (or on a shared/kiosk machine) can't replay a cached snapshot
-    of a dashboard, profile, class record, private attachment, or export. This covers all
-    of those pages uniformly (including Django Admin, since /system-admin/ users are also
-    authenticated Django users) without having to remember to add the header to every view
-    individually. Static assets are exempt since they aren't user/session-specific and
-    losing their cache would hurt perceived performance for no security benefit.
+    """Prevent browsers and shared proxies from retaining sensitive pages.
+
+    Authenticated responses are always private. Registration and account-recovery pages
+    receive the same protection even before login because they can display student IDs,
+    roster information, and security questions. Static assets remain cacheable.
     """
+
+    PUBLIC_SENSITIVE_VIEWS = {
+        "accounts:login",
+        "accounts:register",
+        "accounts:register_confirm",
+        "accounts:register_tutor",
+        "accounts:register_tutee",
+        "accounts:recover",
+        "accounts:set_recovered_password",
+    }
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         response = self.get_response(request)
-        if request.user.is_authenticated and not request.path.startswith(settings.STATIC_URL):
+        view_name = request.resolver_match.view_name if request.resolver_match else ""
+        is_sensitive = request.user.is_authenticated or view_name in self.PUBLIC_SENSITIVE_VIEWS
+        if is_sensitive and not request.path.startswith(settings.STATIC_URL):
             response["Cache-Control"] = "private, no-store"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
         return response
 
 
 class ContentSecurityPolicyMiddleware:
-    """Batch 6 item 5 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): ship
-    Content-Security-Policy-Report-Only first so the policy can be checked against every
-    real page/flow via the browser console without breaking anything, then switch the
-    header name to the enforcing Content-Security-Policy once that check is done. The
-    policy is deliberately strict (no 'unsafe-inline' anywhere) because this codebase
-    already has no inline <script>/<style> blocks or event-handler attributes, and no
-    external CDN scripts/fonts/styles (CLAUDE.md: vanilla JS + a single local
-    static/css/app.css) — loosening the policy to work around a violation would be
-    treating a symptom instead of moving the offending inline code into a static file.
+    """Apply the enforcing browser policy used by every application response.
+
+    The codebase has no inline scripts/styles, event-handler attributes, or external CDN
+    resources, so the policy intentionally contains no ``unsafe-inline`` fallback.
     """
 
     POLICY = (
@@ -53,5 +59,8 @@ class ContentSecurityPolicyMiddleware:
 
     def __call__(self, request):
         response = self.get_response(request)
-        response["Content-Security-Policy-Report-Only"] = self.POLICY
+        response["Content-Security-Policy"] = self.POLICY
+        response["Permissions-Policy"] = (
+            "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+        )
         return response

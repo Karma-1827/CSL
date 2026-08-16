@@ -57,7 +57,18 @@ class CSLUserAdmin(UserAdmin):
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
-    list_display = ("student_id", "name_zh", "name_en", "role", "education_level", "program", "is_enabled", "claimed_at", "profile_link")
+    list_display = (
+        "student_id",
+        "name_zh",
+        "name_en",
+        "role",
+        "identity_category",
+        "education_level",
+        "program",
+        "is_enabled",
+        "claimed_at",
+        "profile_link",
+    )
     list_filter = ("role", "education_level", "identity_category", "program", "is_enabled")
     search_fields = ("student_id", "name_zh", "name_en")
     readonly_fields = ("claimed_at", "created_at", "updated_at")
@@ -108,4 +119,3 @@ class SecurityQuestionAnswerAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
-

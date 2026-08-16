@@ -2,7 +2,7 @@
 
 本文件供 Claude Code 與其他 AI coding agent 在專案啟動時快速取得正確脈絡。除非使用者明確改變需求,請以**目前程式碼、資料庫約束與測試**為準,不要只依 README 或歷史對話推測功能。
 
-> 最後盤點日期:2026-08-08(V3/V3.1 完成,V4 進行中;系辦會議後 20 項需求已全數完成,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 與 `docs/PROGRESS.md`;本次另更新名冊匯入卡片改為以合作計畫為單位,見第 2 節)
+> 最後盤點日期:2026-08-10(V3/V3.1 完成,V4 進行中;最新調整包含港澳生、移除暱稱、雙方佐證連結及課堂紀錄 500 字限制,見 `docs/PROGRESS.md`)
 > 專案路徑:`/Users/Qiangqiang/Desktop/CSL`
 > 版本控制狀態:此目錄已是 **Git repository**,remote 為 `https://github.com/Karma-1827/CSL.git`(private),且已建立多次 commit history。精確數量請以 `git log`/`git rev-list --count HEAD` 為準,不要在文件內維護容易過期的固定數字;理解專案時仍應以目前程式碼、migration、測試及本文件為準。
 >
@@ -31,9 +31,9 @@
 - 不可由公開學生名冊註冊;用 `createsuperuser` 或 Django Admin 建立。
 - 後台入口:`/system-admin/`。
 - 管理學生名冊、帳號、帳號狀態、口語能力證明與稽核紀錄。
-- 自訂 Admin dashboard「名冊匯入」頁籤預設是**分類卡片式快速匯入**(`accounts:roster_import_quick`):**2026-08 起改為以合作計畫為單位的卡片**——每個啟用中 `PartnerProgram` 一張卡片,卡片內含該計畫的「Tutor 名單」與「學生名單」兩個上傳區塊,不再拆成獨立的卡片。`category_code` 的判斷規則不變(仍是 `accounts:roster_import_quick` 這個 view 原本的邏輯,只是模板呈現方式改了):Tutee 名單用計畫代碼本身(如 `NTNU`、`MARYLAND`);Tutor 名單則依計畫而定——`NTNU` 卡片的 Tutor 區塊用 `category_code="TUTOR"`(即無計畫的一般華語系 Tutor 名單,對應 `RosterEntry.program=None`,`tutor_can_serve_program()` 把這批人隱含視為服務 NTNU);其餘計畫(如 `MARYLAND`)的 Tutor 區塊用 `category_code="TUTOR:<程式碼>"`(該計畫專屬修課名單)。這個「NTNU 特殊處理」在模板裡用 `{% if program.code == "NTNU" %}` 判斷,不是新的資料庫欄位或設定項——因為 `tutor_can_serve_program()` 本來就把 `program is None or program.code == "NTNU"` 寫死當作預設情況(見第 4.3 節),模板只是把這個既有的業務規則視覺化,让「一般 Tutor 名單」自然歸屬在 NTNU 卡片下,不再是一張獨立於任何計畫的卡片。卡片清單最後仍有一張連到 Django Admin 新增計畫的「新增合作計畫」卡片,行為不變。每張卡片的上傳區塊只接受**單欄學號清單**(容忍標題列、中文表頭列等雜訊,`accounts/services.py::_read_single_column_values()`/`import_roster_ids()`),角色與計畫完全由**上傳到哪個區塊**決定,不看檔案內容,對應系辦「每種身分分開一份學號檔案」的實際流程。姓名、學制、身份別等欄位不在此匯入,由使用者註冊時自行填寫(見第 4.1 節)。目前(2026-08)系辦實際只有兩個計畫:`NTNU`(師大外籍生輔導,華語系碩班 Tutor + 師大外籍生 Tutee)與 `MARYLAND`(馬里蘭大學語言學伴,限定大學部 Tutor 名單 + 馬里蘭 Tutee)。
+- 自訂 Admin dashboard「名冊匯入」頁籤預設是**分類卡片式快速匯入**(`accounts:roster_import_quick`):**2026-08 起改為以合作計畫為單位的卡片**——每個啟用中 `PartnerProgram` 一張卡片,卡片內含該計畫的「Tutor 名單」與「學生名單」兩個上傳區塊,不再拆成獨立的卡片。`category_code` 的判斷規則不變:Tutee 名單用計畫代碼本身(如 `NTNU`、`MARYLAND`);Tutor 名單則依計畫而定——`NTNU` 卡片的 Tutor 區塊用 `category_code="TUTOR"`,其餘計畫用 `category_code="TUTOR:<程式碼>"`。快速匯入接受 Excel/CSV 前兩欄「學號＋身分別」,第二欄可使用本地生、僑生、港澳生、陸生、外國學生/外籍生等中英文別名;舊的單欄學號清單仍相容。角色與計畫由上傳區塊決定,身分別由第二欄寫入。重新匯入時可補上既有空白身分別,但不覆蓋既有非空白值;未知身分別的資料列會略過並提示。姓名與學制仍由使用者註冊時填寫。實作位於 `accounts/services.py::_read_quick_roster_rows()`/`import_roster_ids()`。目前(2026-08)系辦實際只有兩個計畫:`NTNU`(師大外籍生輔導)與 `MARYLAND`(馬里蘭大學語言學伴)。
 - 舊版「完整欄位」CSV/Excel(.xlsx)匯入(含姓名、學制、身份別、計畫代碼等欄位)保留在同頁籤的「進階匯入」摺疊區塊(`accounts:roster_import`),仍提供範本下載。
-- 兩種匯入方式**皆改為**:只新增不覆蓋既有學號,學號已存在(或檔案內重複)則靜默略過(保留系統內既有資料),只匯入真正新的學號。快速匯入本來就只有「學號格式是否合法」一種檢查,不合法的列略過並提示警告,不擋下整批。進階完整欄位匯入仍對**逐列必填/合法性驗證**(姓名、role、學制、身份別、計畫代碼等)維持 all-or-nothing:只要有任一列驗證失敗,整批都不寫入;只有「學號重複/已存在」這件事從「整批擋下」改成「該列靜默略過」。
+- 進階完整欄位匯入仍是 only-new；快速匯入則是「新增學號，或只補既有空白身分別」。兩者都不覆蓋既有非空白資料。快速匯入遇到不合法學號或未知身分別時略過該列並提示，不擋下其他合法列；進階完整欄位匯入仍對逐列必填/合法性驗證維持 all-or-nothing。
 - 自訂 Admin dashboard 顯示名冊/註冊/角色/配對/邀請統計。
 - 審核 Tutor 口語能力證明。
 - 設定學期、修改學期、手動封存學期。
@@ -43,13 +43,13 @@
 - 查看課堂通報與異常回報,可標記為「已紀錄」並留備註(見第 4.7 節)。
 - 查看課程雙方的簽到、紀錄、確認與補登詳情。
 - 逐筆核准或拒絕補簽到/補課堂紀錄。
-- 依全體或指定使用者、學期或自訂日期範圍匯出資料,可選 `.xlsx`(建議)、`.csv` 或 `.pdf`(2026-08 移除舊版 Excel 2003 XML `.xls`,新增 `.pdf` 行政報表格式,見第 4.9 節)。
+- Admin 資料匯出依序選擇「合作計畫 → 老師/學生/特定使用者 → 該計畫學期或自訂日期 → 欄位 → 格式」,可選 `.xlsx`(建議)、`.csv` 或 `.pdf`。選老師或學生時,下方名單只顯示該身分且整類納入匯出;選特定使用者時則可在計畫內跨身分勾選一位或多位使用者(2026-08 移除舊版 Excel 2003 XML `.xls`,新增 `.pdf` 行政報表格式,見第 4.9 節)。
 - 可透過 Django Admin 手動修改密碼;目前沒有客製化 Admin 密碼重設頁。
 - 可透過 Django Admin 新增「行政更正」紀錄(`HourAdjustment`),補登系統紀錄以外的時數或更正資料;只能加不能扣,且只影響證明 PDF 總時數、不逐筆列出明細(見第 4.9 節)。只能單筆新增(2026-08 移除批次 Excel 匯入入口,不再用於補登系統上線前的舊紙本時數,見第 4.9 節)。
 
 ### Tutor(老師;華語系學生)
 
-- 一個學號只能建立一個角色;學制(大學部/碩士班/博士班)與身分類別(本地生/僑生/外籍生)由 Tutor 本人於註冊第二階段選擇,不是名冊匯入時預先設定(見第 4.1 節)。
+- 一個學號只能建立一個角色;學制(大學部/碩士班/博士班)由 Tutor 本人於註冊第二階段選擇。身分類別(本地生/僑生/港澳生/陸生/外籍生)由 Admin 名冊第二欄預先設定,使用者在註冊第一階段選擇相符身分以驗證,第二階段只能查看且不可覆寫;需更正時聯絡系辦。
 - 兩階段註冊後建立教學 Profile,包含中英文姓名、身份別、學制、性別、母語、國籍、系所、聽說讀寫 1–5、簡介、時段及安全問題。
 - 上傳口語能力證明(PDF/JPG/JPEG/PNG,最大 1 MB);註冊時可先略過,但**口語能力狀態必須為 APPROVED 才能配對**。
 - 瀏覽匿名學生資料並發邀請;配對前看不到姓名、學號、電話或 Email。
@@ -64,7 +64,7 @@
 
 共用能力:
 
-- 名冊核對後註冊;第二階段填寫中英文姓名、身份別(本地生/僑生/外籍生)、華語程度、學習時間、聽說讀寫、加強項目、需求與可上課時段(所屬計畫仍由名冊預先指定,不是自選)。
+- 名冊核對後註冊;第二階段填寫中英文姓名、華語程度、學習時間、聽說讀寫、加強項目、需求與可上課時段。身分別與所屬計畫皆由名冊預先指定,不是使用者自選。
 - 接收 Tutor 邀請並查看匿名 Tutor 資料;配對後查看完整資料與私訊。
 - 查看 Tutor 安排的課程;目前由 Tutor 與本人線下協調,Tutee 不需在系統中接受排課。
 - 每堂課與 Tutor 採相同機制:都要簽到、填寫自己的課堂紀錄、確認對方內容。
@@ -79,7 +79,7 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 - `tutee_certificate_filename`/`tutee_certificate_title_zh`/`tutee_certificate_title_en`/`tutee_certificate_plan_name`/`tutee_certificate_activity_text`:Tutee 版證明的模板檔名、標題(中英)與內文文案。
 - `tutor_certificate_filename`/`tutor_certificate_title_zh`/`tutor_certificate_title_en`/`tutor_certificate_plan_name`/`tutor_certificate_activity_text`:Tutor 版證明的模板檔名、標題與內文文案(Tutor 下載時依所選計畫套用,見第 4.9 節)。
 
-**證明底圖是共用的**:`tutoring/resources/certificate_templates/csl_template.pdf` 只印有師大院徽、系所頭銜(中英)、浮水印與 logo,**沒有印標題或任何內文**;標題(標楷體+Times New Roman,粗體,兩行置中)與內文段落都是 `tutoring/reporting.py::build_hours_pdf()` 用 ReportLab 動態疊上去的,座標寫死在函式裡(標題約在 y=612–635,內文由 y=540 往下排列)。因此新增計畫預設**都指向同一份 `csl_template.pdf`**,只要在 Admin 填標題與文案文字就能生出一張新的證明,不需要美編另外設計底圖;`tutor_certificate_filename`/`tutee_certificate_filename` 欄位保留是為了極少數需要「真的不同底圖」的計畫留一個例外設定的空間,平常不需要動它。
+**證明底圖是共用的**:`tutoring/resources/certificate_templates/csl_template.pdf` 只印有師大院徽、系所頭銜(中英)、浮水印與底部 logo,**沒有印動態標題或內文**;標題、內文、表格、下方日期與右下系戳都是 `tutoring/reporting.py::build_hours_pdf()` 用 ReportLab 動態疊上去。2026-08-11 起,部署環境若有提供本機私有素材,中文使用華康儷宋 W3/W7、英文使用 Helvetica Neue Condensed Bold,並疊加 `assets/certificates/CSL stamp.png`;這些素材因授權與內部圖章性質由 `.gitignore` 排除,缺少時會回退到 `TW-Kai.ttf`/Liberation Serif 且不顯示系戳。詳細版每頁最多 6 筆,為底部日期、logo 與放大後的系戳保留空間。因此新增計畫預設**都指向同一份 `csl_template.pdf`**,只要在 Admin 填標題與文案文字就能生出一張新的證明,不需要美編另外設計底圖;`tutor_certificate_filename`/`tutee_certificate_filename` 欄位保留是為了極少數需要「真的不同底圖」的計畫留一個例外設定的空間,平常不需要動它。
 
 目前(以資料遷移 `accounts/migrations/0005_...`、`0006_...` 建立)已設定三筆,Tutor/Tutee 兩種角色都已配好文案:
 
@@ -107,7 +107,7 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 - 不要求達到 100 小時才下載證明;證明按有效紀錄的實際時數產生。
 - 不限制上課在 09:00–19:00;可排 24 小時內任意時間,但分鐘須為 5 的倍數。
 - 目前無 native mobile app;只做響應式 Web UI。
-- 尚未完成學校 SSO、正式 VM 反向代理、Gunicorn/uWSGI、systemd、Nginx、備份/監控設定(見 `docs/DEPLOY.md`)。
+- 不串接學校 SSO；Gunicorn、systemd、Nginx 與 production env 範本已完成，但尚未在學校正式 VM 套用與驗證，DNS、TLS、防火牆、備份/監控及還原演練仍待 VM 到位後處理(見 `docs/DEPLOY.md`)。
 
 ### 舊版系統的參考原則
 
@@ -126,15 +126,15 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 - 第一階段建立 `RegistrationDraft`,只保存 Django 密碼雜湊,30 分鐘到期。
 - **2026-08 新增「確認學號」中間步驟**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 7 項):第一階段成功後不會直接進入第二階段個人檔案表單,而是先導向 `/register/confirm/`(`accounts:register_confirm`),清楚列出學號並要求按「確認學號正確」才會被導向 `/register/tutor/`/`/register/tutee/`;按「返回修改」則回到第一階段。確認狀態只是 session 裡的一個布林旗標(`registration_confirmed`),完全不會動到 `RegistrationDraft.expires_at`,所以原本 30 分鐘的時效不受影響。直接用網址列開啟第二階段網址、或重新整理/返回確認頁都不會建立帳號:第二階段 view(`_role_registration()`)會先檢查這個旗標,沒確認就導回確認頁;任何時候重新整理或用瀏覽器返回鍵回到第一階段的 `/register/`(GET)都會清掉目前的草稿與確認旗標(既有的「GET 時清掉舊草稿」邏輯,`register()`),確保「返回」永遠是乾淨重來,不會意外殘留一個已確認但使用者其實想改的草稿。
 - 第二階段依名冊角色進入 `/register/tutor/` 或 `/register/tutee/`;完整 Profile、安全問題與同意欄位成功後才建立正式 `User`,並設定 `claimed_at`。
-- 中文姓名、英文姓名(選填)、身份別(本地生/僑生/外籍生)由**使用者於第二階段註冊時自行填寫**,不再要求系辦於名冊匯入時預先提供;Tutor 另外還要在註冊時自行選擇學制(大學部/碩士班/博士班)下拉選單。`RosterEntry.name_zh`/`identity_category`/`education_level` 因此在匯入時允許留空(`blank=True`),送出註冊表單時才寫回 `RosterEntry` 並鎖定,之後只能透過 `/profile/` 以外的管道(聯絡系辦)修改,見下方唯讀規則。中英文姓名欄位下方顯示提示,說明資料將顯示於時數證明,請填寫正式姓名。
-- 第二階段另新增暱稱(`User.nickname`,選填)與 Email(`AbstractUser.email`,必填,僅檢查基本格式,不寄驗證信)兩欄位。
-- 安全問題題庫(`accounts.models.SecurityQuestionAnswer`)分成兩份清單:`QUESTION_CHOICES` 含全部題目(含已停用題目,回復密碼流程用,確保舊帳號的安全問題 key 與文字都還能正確顯示與比對)、`ACTIVE_QUESTION_CHOICES` 排除已停用題目(新註冊表單只從這份清單選)。2026-08 停用 3 題(自訂秘密短語、第一位導師姓氏、童年最喜歡的遊戲)、改了 2 題文字移除「童年」字樣、新增 1 題(最喜歡的一首歌)。
+- 中文姓名與英文姓名由使用者於第二階段註冊時填寫;Tutor 另選學制。身分別改由快速名冊第二欄預先匯入,註冊第一階段必須以「學號＋身分別」核對。第二階段顯示名冊身分但欄位為 disabled,使用者不可覆寫,需要更正時聯絡系辦。馬里蘭學生仍由名冊所屬計畫判定。`RosterEntry.name_zh`/`education_level` 在匯入時可留空,姓名送出註冊表單時寫回並鎖定。
+- 第二階段要求 Email(`AbstractUser.email`,必填,僅檢查基本格式,不寄驗證信)。2026-08-10 已全面移除暱稱欄位及 `User.nickname` model 欄位(`accounts/0017`),畫面與配對資料均不再使用暱稱。
+- 安全問題題庫(`accounts.models.SecurityQuestionAnswer`)分成兩份清單:`QUESTION_CHOICES` 含全部題目(含已停用題目,回復密碼流程用,確保舊帳號的安全問題 key 與文字都還能正確顯示與比對)、`ACTIVE_QUESTION_CHOICES` 排除已停用題目(新註冊表單只從這份清單選)。2026-08 停用 3 題(自訂秘密短語、第一位導師姓氏、童年最喜歡的遊戲)、改了 2 題文字移除「童年」字樣、新增 1 題(最喜歡的一首歌)。三題必須互不相同:表單會逐欄顯示錯誤,資料庫另有 `three_distinct_security_questions` check constraint 防止繞過表單寫入重複題目。
 - 預覽頁 `/preview/tutor/`、`/preview/tutee/` 只在 `DEBUG=True` 開放,不寫入資料庫。
 - 密碼至少 10 字元,套用 Django similarity/common/numeric validators。
 - 忘記密碼採「學號＋原本選定的三題＋三個答案」;答案正規化後只存 hash。
 - 恢復驗證同 IP＋學號 15 分鐘最多 5 次;驗證成功後 10 分鐘內必須完成新密碼設定。
 - `User.account_status=SUSPENDED` 時禁止登入。
-- `/profile/` 可自行編輯:電話、暱稱、Email、性別、母語、國籍、系所、聽說讀寫程度、簡介/需求備註、可上課星期與時段(Tutee 另含整體程度、學習時間、加強項目),修改立即生效,不需 Admin 審核,寫入 `PROFILE_UPDATED` AuditLog。
+- `/profile/` 可自行編輯:電話、Email、性別、母語、國籍、系所、聽說讀寫程度、簡介/需求備註、可上課星期與時段(Tutee 另含整體程度、學習時間、加強項目),修改立即生效,不需 Admin 審核,寫入 `PROFILE_UPDATED` AuditLog。
 - 姓名(`name_zh`/`name_en`)、學號(`User.username`/`RosterEntry.student_id`)、安全問題答案不開放使用者自行修改,有問題須聯絡系辦。
 - 口語能力證明狀態不受 Profile 編輯影響,重新上傳沿用既有 `/qualification/upload/` 流程。
 - Profile 欄位(尤其聽說讀寫程度、可上課時段)是配對候選卡片即時讀取的來源;配對成立後仍可編輯,對方看到的資料會跟著即時變動,系統目前沒有配對當下的快照機制。
@@ -157,12 +157,12 @@ Tutee 的所屬計畫不再是寫死的 enum,而是獨立資料表 `PartnerProgr
 
 ### 4.3 匿名資料與邀請
 
-配對前不得顯示姓名、英文名、完整學號、電話、Email、暱稱。程式目前匿名欄位如下:
+配對前不得顯示姓名、英文名、完整學號、電話或 Email。程式目前匿名欄位如下:
 
 - Tutee:性別、母語、國籍、整體華語程度、加強項目、學習時間、需求備註、可上課星期/時段。
 - Tutor:性別、母語、國籍、四項教學能力、教學簡介、可上課星期/時段。
 
-**配對成立後才顯示雙方正式姓名、暱稱、學號及 Email**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 11 項):`accounts:matched_profile`(配對後完整個人資料頁)與私訊頁(`templates/tutoring/messages.html`,對方名稱區下方)都會顯示對方的 `nickname`/`email`,兩者皆是直接讀 `User` model 欄位、無另外的權限判斷,因為這兩個頁面本身已經是「先確認雙方有過配對才能開啟,否則 404」的存取範圍(`matched_profile()` 只認 `ACTIVE` 配對,查無則 `Http404`;私訊頁只要曾經配對過就能開啟,`ACTIVE` 可發送、`ENDED` 唯讀,見第 4.8 節),Admin 則另有 `accounts:admin_user_profile` 可看,不受配對狀態限制。**兩個頁面的收回時機不同**:`matched_profile` 在配對結束(`ENDED`)後即整頁 404,連同暱稱/Email 一併收回;私訊頁本來就允許 `ENDED` 配對讀取歷史訊息與對方的真實姓名(既有行為,見第 4.8 節「使用者可隨時重新開啟唯讀歷史」),暱稱/Email 比照真實姓名的既有精神,同樣不會因配對結束而從歷史對話頁面消失——這不是疏漏,是刻意讓「歷史對話裡認得出是跟誰聊過」的既有行為維持一致,不特別為 Email 這個欄位另外做只在歷史頁隱藏的特例。Email 純粹作為聯絡資訊顯示,系統不寄信、不整合 Gmail、Google 登入或校內 SSO。
+**配對成立後才顯示雙方正式姓名、學號及 Email**:`accounts:matched_profile`(配對後完整個人資料頁)與私訊頁(`templates/tutoring/messages.html`,對方名稱區)會顯示對方 Email。這些頁面本身已有配對存取控制:`matched_profile()` 只認 `ACTIVE` 配對,查無則 `Http404`;私訊頁允許曾經配對過的雙方開啟,`ACTIVE` 可發送、`ENDED` 唯讀(見第 4.8 節)。因此配對結束後完整 Profile 會收回,歷史對話仍保留當時雙方的正式姓名與 Email。Email 只作聯絡資訊顯示,系統不寄信、不整合 Gmail、Google 登入或校內 SSO。
 
 Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、加強項目、星期、時段做複合篩選(`tutoring/services.py::anonymous_tutee_candidates()` 的 `filters` 參數;UI 見 `templates/dashboard/index.html` 的 `find-tutee` 分頁,GET 表單提交回 `accounts:dashboard`)。篩選邏輯:性別/華語程度/母語皆為精準比對(母語欄位是下拉選單,選項與註冊表單共用同一份 `static/js/profile-options.js` 產生的語言清單,值為 `Intl.DisplayNames` 產生的雙語字串,不是自由關鍵字);加強項目為「已選項目須全部命中」(AND);星期與時段各自為「命中任一已選值即算符合」(OR),兩者之間再取交集。篩選只是在既有候選清單上做子集過濾,不會新增可見欄位,也不做排序或推薦。篩選卡片預設收合,面板標題右上角的「搜尋條件 / Search filters」是 `<details>/<summary>` 原生收合元件(`.candidate-filter-disclosure`/`.candidate-filter-toggle`,無 JS),點擊才展開,取代原本常駐的「配對前不顯示姓名與學號」提示(該提示仍保留在側邊欄 `sidebar-note`)。Tutee(Maryland)瀏覽 Tutor 一側也已比照補上同一套機制(`anonymous_tutor_candidates()` 的 `filters` 參數,UI 見 `find-tutor` 分頁);差異是 Tutor 沒有對應「華語程度」與「加強項目」的欄位,所以只提供性別、母語、星期、時段四項,其餘篩選邏輯(精準比對/OR/收合式 UI)完全相同。
 
@@ -214,19 +214,20 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 
 1. 雙方各自簽到。
-2. 雙方各自填寫自己的課堂紀錄(地點、主題、內容、授課類型、備註;Tutor 另填 1–5 個佐證連結,Tutee 則可選填附件)。
+2. 雙方各自填寫自己的課堂紀錄(地點、主題、內容、授課類型、備註及 1–5 個佐證連結)。
 3. 每人確認對方的簽到與課堂紀錄;可確認、要求修改或回報問題。
 4. 一般課程滿足條件後自動成為有效時數;Admin 不逐筆核准一般課。
 
 細節:
 
 - `ClassRecord.skills_practiced` 是選填的多選標籤(聽力/口說/閱讀/寫作,沿用 `accounts/forms.py::SKILL_CHOICES` 同一套分類,與 Tutor 教學能力、Tutee 加強項目共用同一詞彙),比照舊版「輔導類型」概念補回,方便 Admin 統計教學方式。不影響 `class_is_valid()` 的有效時數判定,單純是資料標籤。課程詳情頁(`class_detail.html`/`admin_record_card.html`)以標籤呈現;Django Admin 的 `ClassRecord` 清單另加 `SkillsPracticedFilter`(`tutoring/admin.py`),用 JSONField `contains` 查詢讓 Admin 依單一類型篩選/計數,沒有另外做自訂統計面板。
-- `ClassRecord.attachment` 是 Tutee 課堂紀錄的選填附件(比照舊版概念,已於系辦確認後加入),限 PDF/JPG/PNG、最大 500 KB(`validate_class_record_attachment()`,與口語能力證明的 `validate_qualification_file()` 共用同一個 `_validate_upload()` 驗證邏輯,只有大小上限不同:口語能力證明 1 MB、課堂紀錄附件 500 KB)。不影響 `class_is_valid()` 的有效時數判定。表單用一般 `FileInput`(不是 `ClearableFileInput`),所以**沒有「清除附件」的介面**——重新提交但不選新檔案時會保留原本的附件,要移除只能換上傳新檔案覆蓋,或請 Admin 從 Django Admin 處理。
-- **2026-08 起 Tutor 課堂紀錄改用必填的外部佐證連結,不再有附件上傳**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 14 項;僅針對 Tutor,Tutee 不受影響、仍是上面的選填附件)。新增 `ClassRecord.evidence_links` JSONField(`list[str]`,`default=list`),`tutoring/forms.py::ClassRecordForm` 依 `author` 角色動態決定欄位組成:Tutor 拿掉 `attachment`、換上必填的 `evidence_links`(自訂 `EvidenceLinksField`/`EvidenceLinksWidget`);Tutee(或未指定 `author` 的呼叫端,視為 Tutee 形狀以維持既有測試相容)拿掉 `evidence_links`、保留 `attachment`。
+- `ClassRecord.attachment` 是 2026-08-10 前課堂紀錄附件的歷史相容欄位;目前 Tutor/Tutee 表單都不再提供附件上傳,但舊資料仍可透過受保護下載 view 查看,不得直接移除 model 欄位或刪除既有檔案。
+- **2026-08-10 起 Tutor 與 Tutee 課堂紀錄都使用必填的外部佐證連結,不再使用附件上傳**。`ClassRecord.evidence_links` 是 JSONField(`list[str]`,`default=list`),`tutoring/forms.py::ClassRecordForm` 對雙方都提供同一個必填 `EvidenceLinksField`/`EvidenceLinksWidget`。
   - 驗證規則:最少 1 個、最多 5 個,且每個都必須是合法的 `https://` 網址(`URLValidator(schemes=["https"])`),不限制網域(Google Drive、YouTube 只是範例,不是白名單)。「至少 1 個」沿用 Django `Field.required` 的標準空值檢查(空列表屬於 `empty_values`),超過 5 個與網址格式錯誤才是自訂錯誤訊息。
   - 顯示順序與 Tutor 輸入順序一致,可逐筆新增/刪除欄位:`EvidenceLinksWidget` 讓每個連結各自是一個 `name="evidence_links"` 的 `<input type="url">`,靠共用 name 讓 `value_from_datadict()` 用 `QueryDict.getlist()`(或一般 dict 時的 list 直接處理)收集回一個 list,與 Django 內建 `CheckboxSelectMultiple` 的原理相同。新增/刪除按鈕由 `static/js/class-record-links.js`(原生 DOM API + `data-*` hooks,無框架)在前端 clone/remove `.evidence-link-row`,最多到 5 筆;伺服器端驗證才是真正把關,前端只是操作便利性。
   - 課程詳情頁(`class_detail.html`)與 Admin 課程詳情卡(`admin_record_card.html`)顯示對方紀錄時,改用「**資料存在與否**」而非「作者角色」決定顯示連結還是附件(`{% if counterpart_record.evidence_links %}...{% else %}附件...{% endif %}`):這是刻意的設計,為了讓 2026-08 前既有的 Tutor 附件紀錄(合法的歷史資料,`evidence_links` 會是空列表)仍然可以被看到,不會因為作者是 Tutor 就被新邏輯強制隱藏。連結一律以 `target="_blank" rel="noopener noreferrer"` 開新分頁。
-  - 系統不串接 Google Drive/YouTube API,不做連結有效性、權限或失效偵測;現有雙方互相確認流程本身就是查核機制(Tutee 點開發現打不開,可要求 Tutor 修改或回報問題),Admin 仍可人工抽查。
+  - 系統不串接 Google Drive/YouTube API,不做連結有效性、權限或失效偵測;現有雙方互相確認流程本身就是查核機制(任何一方點開發現打不開,可要求對方修改或回報問題),Admin 仍可人工抽查。
+- `ClassRecord.content` 與 `ClassRecord.remarks` 上限為 500 字元(model、表單 `maxlength` 與後端驗證一致);課程詳情頁載入 `static/js/character-count.js`,即時顯示 `0/500` 形式的字元計數。不能只依賴瀏覽器計數,伺服器端仍是最終把關。
 - 舊 model 上還有一個 `reflection`(學習成果與回饋)欄位,但 `ClassRecordForm` 沒有把它列進 `Meta.fields`,提交流程完全不會用到,等同已棄用的欄位;修改課堂紀錄相關程式時不要誤以為它是現行必填欄位。
 - 簽到於上課前 10 分鐘開放。
 - 上課結束 30 分鐘後才簽到,視為補簽,必填原因。
@@ -279,7 +280,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 可選整學期或自訂日期;自訂範圍不可涵蓋任何尚未開放下載的學期。
 - PDF 有摘要版與詳細版;詳細版欄位可選日期、學生國籍、學生程度、時數,輸出順序固定,每頁最多 8 筆並重複證明內文。
 - 下載區「選擇資料範圍」卡片新增「證明語言」單選(`HoursDownloadForm.language`,`zh`/`en`,預設中文),`build_hours_pdf()` 依此參數只呈現**單一語言**的標題、內文、表格表頭與日期格式(中文用民國紀年、英文用西元 `February 19, 2026` 格式),不會像 2026-08 前的舊版同時把中英文疊在同一張證明上;標題單行置中(y=623)。缺少所選語言文案(見下方 `PartnerProgram` 英文欄位)時擋下並顯示「請洽系辦設定」錯誤,不產生中英夾雜或壞掉的 PDF。姓名顯示是唯一不受證明語言影響的例外:兩個姓名都有一律顯示「中文姓名 / English Name」,只有一個就只顯示該一個且不留斜線(`display_name_markup()`),NTNU Tutor 特例分支也套用同一規則。檔名與 `AuditLog` metadata 都會記錄所選語言。
-  - 實作這條規則時踩過一個 ReportLab 陷阱:Paragraph markup 的 `<b>` 標籤是透過該段落**預設字型**的 `registerFontFamily()` 對應表找粗體字型,不是「维持原字型只是加粗」。英文證明段落預設字型是 `CertificateSerif`(Liberation Serif,無中文字符),若中文姓名只包在 `<b>...</b>` 裡而不明確指定字型,會被解析成西文粗體字型、中文字符整個消失不畫出來。因此姓名與任何「中西文混排且需要粗體」的文字一律要用明確的 `<font name="CertificateKai-Bold">`/`<font name="CertificateSerif-Bold">` 分別包住中/英文片段,不能依賴 `<b>` 自動解析。
+  - 實作這條規則時踩過一個 ReportLab 陷阱:Paragraph markup 的 `<b>` 標籤是透過該段落**預設字型**的 `registerFontFamily()` 對應表找粗體字型,不是「維持原字型只是加粗」。若英文證明段落中的中文姓名只包在 `<b>...</b>` 裡,會被解析成不含中文字符的西文字型,導致中文字符消失。因此姓名與任何「中西文混排且需要粗體」的文字一律要用明確的 `<font name="CertificateLiSong-Bold">`/`<font name="CertificateHelveticaNeue-Bold">` 分別包住中/英文片段,不能依賴 `<b>` 自動解析。
 - Tutor 版證明底圖與英文文案:`PartnerProgram` 除既有中文的 `tutee_certificate_plan_name`/`tutee_certificate_activity_text`(及 Tutor 版對應欄位,皆隱含中文,未改名加 `_zh` 後綴以降低遷移風險)外,另有 `tutee_certificate_plan_name_en`/`tutee_certificate_activity_text_en`/`tutor_certificate_plan_name_en`/`tutor_certificate_activity_text_en` 四個英文對應欄位,新增合作計畫時中英文案都要填,只填中文會導致該計畫無法產生英文證明。
 - PDF 底圖:`tutoring/resources/certificate_templates/`;字型:`assets/fonts/`;模板檔名、計畫名稱、活動描述文字皆從對應 `PartnerProgram` 欄位讀取,不再寫死於程式碼。
 - 若某計畫缺少對應角色(Tutor/Tutee)的證明模板檔名,下載時會擋下並顯示錯誤,而非產生壞掉的 PDF(`build_hours_pdf()` 開頭檢查)。同一道檢查也涵蓋標題與內文文案本身:`build_hours_pdf()` 會依「是否為 `is_ntnu_tutor` 特例分支」精準比對驗證欄位與實際渲染欄位——`is_ntnu_tutor` 分支的內文完全寫死、從不讀取 `plan_name`/`activity_text`,因此只驗證所選語言的標題;其餘一般分支(Tutee 版與非 NTNU 的 Tutor 版)實際內文會套用 `plan_name`/`activity_text`,因此標題、`plan_name`、`activity_text` 三者在所選語言下都必須非空,任一缺漏都擋下並顯示「請洽系辦設定」,不會產生內文帶著空白子句(如中文版「「」」)的證明。**兩者不可對調**:曾經的實作錯誤是不論分支一律要求英文 `plan_name_en`/`activity_text_en` 非空、卻完全不驗證中文 `plan_name`/`activity_text`——這會讓「有標題但漏填內文」在中文證明上悄悄產生空白子句,同時讓 `is_ntnu_tutor` 分支被英文欄位擋下時其實那兩個欄位根本不會被用到。
@@ -287,7 +288,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - PDF 產製位於 `tutoring/reporting.py`,使用 ReportLab 疊字後以 pypdf 合併底圖。
 - **2026-08 起所有本模組產生的 PDF(時數證明與 Admin 匯出 PDF)都套用「盡力防護」的複製/選取限制**(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 3 項,`reporting._restrict_copy_and_selection()`,`build_hours_pdf()`/`build_export_pdf()` 回傳前都會呼叫):用 `pypdf.PdfWriter.encrypt()` 只授予 `PRINT`/`PRINT_TO_REPRESENTATION` 權限(禁止 `EXTRACT`/`MODIFY` 等其餘權限),`user_password=""` 代表**不需要密碼即可開啟**,`owner_password` 是每次產生時隨機產生、用完即丟(系統不需要也不會再解除限制)。**這是純粹依賴 PDF 閱讀器配合的權限旗標,不是真正的 DRM**:無法阻止螢幕截圖、OCR、重新輸入或使用忽略權限旗標的工具開啟,對外文案與說明不得宣稱為絕對防拷貝。刻意不指定 `algorithm=`(維持 pypdf 預設的 RC4-128),因為這裡的目的是「相容性優先的權限限制」而非「機密性」,比起 AES-256 在少數舊版閱讀器上有更廣泛的支援度。
 - 下載區同時提供「預覽」與「下載」兩個按鈕,共用同一份表單與驗證邏輯,靠 submit button 的 `name="intent"`(`preview`/`download`)區分:預覽回應 `Content-Disposition: inline` 並用 `formtarget="_blank"` 開新分頁,由瀏覽器內建 PDF 檢視器顯示;下載回應 `attachment`,強制下載。
-- Admin 匯出(`tutoring:export_excel`)可選三種格式(`tutoring/reporting.py`):`.xlsx`(`build_excel_xlsx()`,用專案既有依賴 `openpyxl`,UI 預設勾選)、`.csv`(`build_export_csv()`,標準庫 `csv`,寫入 UTF-8 BOM 避免 Windows Excel 開啟中文表頭亂碼)、`.pdf`(`build_export_pdf()`,用 ReportLab `platypus.SimpleDocTemplate` 自動分頁,橫向 A4、每頁重複表頭列;是行政報表不是個人證明,共用同一套已註冊字型但版面完全不同)。2026-08 移除舊版 Excel 2003 XML `.xls`(`build_excel_xml()`)格式。三種格式的欄位與資料來源共用同一個 `_export_rows()`,只有輸出容器不同;選用格式會一併寫進 `ADMIN_EXCEL_EXPORTED` 的 `AuditLog.metadata`。
+- Admin 匯出(`tutoring:export_excel`)是五步流程:①必選 `PartnerProgram`;②選該計畫的全部 Tutor、全部 Tutee 或單一符合計畫資格的使用者;③選該計畫專屬/舊版共用學期,或自訂日期;④選欄位;⑤選格式。後端會再次驗證使用者與學期都屬於所選計畫,`_export_rows(program=...)` 也依 `pairing__tutee__roster_entry__program` 過濾課程,避免跨計畫 Tutor 的其他課程混入。三種格式為:`.xlsx`(`build_excel_xlsx()`,用 `openpyxl`,UI 預設勾選)、`.csv`(`build_export_csv()`,標準庫 `csv`,寫入 UTF-8 BOM)、`.pdf`(`build_export_pdf()`,ReportLab 橫向 A4 自動分頁)。三種格式共用欄位與 `_export_rows()`,選用計畫、對象、期間、欄位及格式都寫進 `ADMIN_EXCEL_EXPORTED` AuditLog metadata。
 - 所有下載與匯出都寫入 `AuditLog`;預覽寫入 `HOURS_PDF_PREVIEWED`,下載寫入 `HOURS_PDF_DOWNLOADED`,事件分開方便區分「看過」與「實際下載」。
 - `tutoring.models.HourAdjustment`(行政更正紀錄,2026-08 前文案稱「時數調整紀錄」)用於補登系統紀錄以外的時數或更正資料,比照舊版概念但**刻意不沿用舊版建立無 Tutee 假課程的作法**——沒有假 `ClassSession`/`Pairing`,是獨立 model:使用者、學期、合作計畫、時數、原因、建立者(Admin)、時間戳記。設計上的關鍵限制(已與使用者確認):
   - **只能為正數**,只能加不能扣;若某筆時數算錯需要往下修正,必須用其他方式處理(例如取消對應課程),不透過這個功能扣時數。

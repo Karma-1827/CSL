@@ -2,7 +2,7 @@
 
 > 盤點日期：2026-07-30  
 > 目的：提供後續 AI coding agent／工程師接手整改使用。  
-> 狀態：本文件只記錄問題、建議與驗收方式，**尚未代表已完成修改**。
+> 狀態：**歷史盤點文件，已併入 `docs/VULNERABILITY_SCAN_IMPROVEMENTS.md` 與 `docs/PROGRESS.md`。** 本文件保留原始發現與設計理由，不再作為目前完成狀態的判斷依據；附件權限、production fail-closed、共享節流、可信 proxy、上傳驗證、Admin 業務資料唯讀等項目均已完成。最新弱掃狀態以 `docs/VULNERABILITY_SCAN_IMPROVEMENTS.md` 為準。
 
 ## 1. 執行原則
 
@@ -23,9 +23,9 @@
 
 6. 涉及業務規則但尚未定案的項目，不可自行假設，應先詢問使用者或系辦。
 
-## 2. 目前品質基準
+## 2. 歷史品質基準
 
-本次盤點結果：
+以下是 2026-07-30 整改前的盤點結果，不代表目前狀態；2026-08-10 最新基準為 Django 273 項測試、Ruff、migration、`check --deploy`、`pip check`、`pip-audit` 全數通過。
 
 - Django 測試：134 項全數通過。
 - `manage.py check`：通過。
@@ -510,4 +510,3 @@ Ignoring wrong pointing object ...
 - 手機與桌面主要流程完成實際瀏覽器驗證。
 - `CLAUDE.md`、`docs/PROGRESS.md`、`docs/SECURITY_CHECKLIST.md`、`docs/DEPLOY.md` 中受影響的內容同步更新。
 - 不引入真實個資、附件、`.env` 或測試密碼至 Git。
-

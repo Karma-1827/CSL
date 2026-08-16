@@ -14,3 +14,10 @@
 - 授權:SIL Open Font License 1.1(OFL 1.1),完整授權條文見同一份 release 內的 `LICENSE` 檔案。
 - 與 Times New Roman **度量相容**(metric-compatible):字元寬高與 Times New Roman 一致,取代後不會讓既有 PDF 排版跑掉。
 - 下載日期:2026-07-26。
+
+## 本機私有證明素材（不進版控）
+
+- `DFLiSongStd-W3/W5/W7.otf` 為華康儷宋體；其內嵌授權聲明限制安裝與轉交，不屬於本專案可公開散布的開源素材。
+- `DFLiSongStd-W3/W5/W7.ttf` 是為 ReportLab 相容性在本機由上述 OTF 轉換的副本，沿用相同授權限制。
+- `Helvetica Neue Condensed Bold.ttf` 為本機提供的 Helvetica Neue 字型，同樣不隨原始碼散布。
+- 上述檔案與 `assets/certificates/` 內的系戳均由 `.gitignore` 排除。正式 VM 必須由有權使用這些素材的管理者另行放置；未放置時程式會使用開源字型，且不顯示系戳。

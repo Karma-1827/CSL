@@ -1,0 +1,14 @@
+{% extends "accounts/auth_base.html" %}
+
+{% block title %}頁面已過期 / Page expired{% endblock %}
+
+{% block auth_content %}
+<div class="section-kicker">SECURITY CHECK</div>
+<h2>頁面已過期</h2>
+<div class="message message-error">
+  此頁面的安全驗證資訊已失效，常見原因是重新登入後仍使用舊分頁。您的操作尚未送出。<br>
+  <span>The security token on this page has expired, usually because an older tab remained open after signing in again. Nothing was submitted.</span>
+</div>
+<p>請關閉其他舊分頁，回到系統後重新整理頁面再操作一次。<br>Please close older tabs, return to the system, and refresh the page before trying again.</p>
+<a class="button button-primary button-full" href="{% url 'accounts:dashboard' %}">返回系統並重新整理 <span>Return and refresh</span></a>
+{% endblock %}

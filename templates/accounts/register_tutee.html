@@ -4,8 +4,7 @@
 {% block role_kicker %}STUDENT REGISTRATION · STEP 2 OF 2{% endblock %}
 {% block role_title %}建立個人檔案 <span>Create your profile</span>{% endblock %}
 {% block role_intro %}請完善以下資訊，讓本系華語小老師了解您的學習需求與可配合時段，並提供合適的輔導協助。<br>Complete your profile so CSL teachers can understand your learning needs and availability and provide suitable support.{% endblock %}
-{% block roster_detail_label %}所屬計畫 / Program{% endblock %}
-{% block roster_detail %}{{ roster.program.name_zh }} / {{ roster.program.name_en }}{% endblock %}
+{% block roster_detail_row %}{% endblock %}
 
 {% block role_fields %}
 <section class="form-section">
@@ -13,15 +12,14 @@
   <div class="two-column-fields">
     {% include "components/form_field.html" with field=form.name_zh %}
     {% include "components/form_field.html" with field=form.name_en %}
-    <p class="form-note bilingual-note">請填寫正式的中文及英文姓名，資料將顯示於時數證明。<br>Please enter your official Chinese and English names as they will appear on certificates.</p>
-    {% include "components/form_field.html" with field=form.nickname %}
+    <p class="form-note bilingual-note">請填寫正式英文姓名；若有中文姓名也請一併填寫，資料將顯示於時數證明上。<br>Please enter your official English name. If you have a Chinese name, please provide it as well. These names will appear on certificates.</p>
     {% include "components/form_field.html" with field=form.identity_category %}
-    {% include "components/form_field.html" with field=form.phone %}
-    {% include "components/form_field.html" with field=form.email %}
     {% include "components/form_field.html" with field=form.gender %}
     {% include "components/form_field.html" with field=form.native_language %}
     {% include "components/form_field.html" with field=form.nationality %}
     {% include "components/form_field.html" with field=form.department %}
+    {% include "components/form_field.html" with field=form.email %}
+    {% include "components/form_field.html" with field=form.phone %}
   </div>
   {% include "accounts/registration_security_questions.html" %}
 </section>
@@ -56,7 +54,7 @@
   <p class="timezone-note">台灣時間 · Taiwan time (UTC/GMT+8)</p>
   <div class="schedule-card">
     <div class="choice-field{% if form.preferred_days.errors %} has-error{% endif %}"><label>1. {{ form.preferred_days.label }}<span class="required-mark"> *</span></label>{{ form.preferred_days }}{% for error in form.preferred_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
-    <div class="choice-field{% if form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ form.preferred_time_slots }}{% for error in form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<p class="form-note bilingual-note">其他時間：配對後請與老師討論實際上課時間。<br>Other times: discuss the actual class time with your teacher after matching.</p></div>
+    <div class="choice-field{% if form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ form.preferred_time_slots }}{% for error in form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<br><p class="form-note bilingual-note">其他時間：配對後請與老師討論實際上課時間。<br>Other times: discuss the actual class time with your teacher after matching.</p></div>
   </div>
 </section>
 {% endblock %}

@@ -25,6 +25,8 @@ class EducationLevel(models.TextChoices):
 class IdentityCategory(models.TextChoices):
     LOCAL = "LOCAL", "本地生 / Domestic student"
     OVERSEAS = "OVERSEAS", "僑生 / Overseas Chinese student"
+    HONG_KONG_MACAO = "HONG_KONG_MACAO", "港澳生 / Hong Kong and Macao student"
+    MAINLAND = "MAINLAND", "陸生 / Mainland Chinese student"
     INTERNATIONAL = "INTERNATIONAL", "外籍生 / International student"
 
 
@@ -202,7 +204,6 @@ class User(AbstractUser):
     )
     name_zh = models.CharField("中文姓名 / Chinese name", max_length=100, blank=True)
     name_en = models.CharField("英文姓名 / English name", max_length=150, blank=True)
-    nickname = models.CharField("暱稱 / Nickname", max_length=50, blank=True)
     phone = models.CharField("電話 / Phone", max_length=30, blank=True)
 
     class Meta:
@@ -261,6 +262,16 @@ class SecurityQuestionAnswer(models.Model):
     class Meta:
         verbose_name = "安全問題 / Security questions"
         verbose_name_plural = "安全問題 / Security questions"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(question_1=models.F("question_2"))
+                    & ~models.Q(question_1=models.F("question_3"))
+                    & ~models.Q(question_2=models.F("question_3"))
+                ),
+                name="three_distinct_security_questions",
+            )
+        ]
 
     @staticmethod
     def normalize_answer(value):

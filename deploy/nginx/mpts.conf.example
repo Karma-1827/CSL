@@ -15,6 +15,15 @@
 # outright (invalid CIDR syntax, nonexistent cert paths) rather than silently loading
 # with a nonsensical-but-valid config — deliberate, not a typo.
 
+# sites-enabled files are normally included from nginx.conf's http block, so these
+# shared zones belong here. Keep the general rate high enough for normal dashboard and
+# static-asset bursts; Django's shared login/recovery throttles remain the account-level
+# protection. Move these directives to the http block if the VM uses another include
+# layout, then verify the final configuration with `nginx -t`.
+server_tokens off;
+limit_req_zone $binary_remote_addr zone=mpts_requests:10m rate=20r/s;
+limit_conn_zone $binary_remote_addr zone=mpts_connections:10m;
+
 upstream mpts_app {
     server unix:/run/mpts/gunicorn.sock fail_timeout=0;
 }
@@ -33,8 +42,27 @@ server {
     listen [::]:443 ssl http2;
     server_name TODO-mpts.example.ntnu.edu.tw;
 
+    client_header_timeout 15s;
+    client_body_timeout 30s;
+    keepalive_timeout 30s;
+    send_timeout 120s;
+
+    limit_req zone=mpts_requests burst=40 nodelay;
+    limit_req_status 429;
+    limit_conn mpts_connections 40;
+    limit_conn_status 429;
+
     ssl_certificate     TODO/etc/ssl/mpts/fullchain.pem;
     ssl_certificate_key TODO/etc/ssl/mpts/privkey.pem;
+
+    # Reject legacy TLS. The cipher list applies to TLS 1.2; TLS 1.3 suites follow the
+    # installed OpenSSL/Nginx defaults and must be checked again on the actual VM.
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305';
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:MPTS_SSL:10m;
+    ssl_session_tickets off;
 
     # Largest single upload today is a class document at 10 MB (tutoring/models.py
     # validate_class_document_file); a little headroom above that for request overhead.

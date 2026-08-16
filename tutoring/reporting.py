@@ -96,10 +96,10 @@ def hour_report_data(user, starts_on, ends_on, program=None):
     }
 
 
-_CERTIFICATE_FONT_NAME = "CertificateKai"
-_CERTIFICATE_BOLD_FONT_NAME = "CertificateKai-Bold"
-_CERTIFICATE_ENGLISH_FONT_NAME = "CertificateSerif"
-_CERTIFICATE_ENGLISH_BOLD_FONT_NAME = "CertificateSerif-Bold"
+_CERTIFICATE_FONT_NAME = "CertificateLiSong"
+_CERTIFICATE_BOLD_FONT_NAME = "CertificateLiSong-Bold"
+_CERTIFICATE_ENGLISH_FONT_NAME = "CertificateHelveticaNeue"
+_CERTIFICATE_ENGLISH_BOLD_FONT_NAME = "CertificateHelveticaNeue-Bold"
 
 
 def _register_certificate_fonts():
@@ -114,14 +114,32 @@ def _register_certificate_fonts():
     bold_font_name = _CERTIFICATE_BOLD_FONT_NAME
     english_font_name = _CERTIFICATE_ENGLISH_FONT_NAME
     english_bold_font_name = _CERTIFICATE_ENGLISH_BOLD_FONT_NAME
+    font_dir = settings.BASE_DIR / "assets/fonts"
+    chinese_regular = font_dir / "DFLiSongStd-W3.ttf"
+    chinese_bold = font_dir / "DFLiSongStd-W7.ttf"
+    english_font = font_dir / "Helvetica Neue Condensed Bold.ttf"
+    # ReportLab cannot embed the CFF/PostScript outlines in the department's
+    # original OTF files. The private deployment therefore provides converted
+    # TrueType copies beside them. Open-licensed fallbacks keep source-only
+    # installations and CI functional when those private assets are absent.
+    if not chinese_regular.exists():
+        chinese_regular = font_dir / "TW-Kai.ttf"
+    if not chinese_bold.exists():
+        chinese_bold = chinese_regular
+    if english_font.exists():
+        english_regular = english_font
+        english_bold = english_font
+    else:
+        english_regular = font_dir / "LiberationSerif-Regular.ttf"
+        english_bold = font_dir / "LiberationSerif-Bold.ttf"
     if font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(font_name, settings.BASE_DIR / "assets/fonts/TW-Kai.ttf"))
+        pdfmetrics.registerFont(TTFont(font_name, chinese_regular))
     if bold_font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(bold_font_name, settings.BASE_DIR / "assets/fonts/TW-Kai.ttf"))
+        pdfmetrics.registerFont(TTFont(bold_font_name, chinese_bold))
     if english_font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(english_font_name, settings.BASE_DIR / "assets/fonts/LiberationSerif-Regular.ttf"))
+        pdfmetrics.registerFont(TTFont(english_font_name, english_regular))
     if english_bold_font_name not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont(english_bold_font_name, settings.BASE_DIR / "assets/fonts/LiberationSerif-Bold.ttf"))
+        pdfmetrics.registerFont(TTFont(english_bold_font_name, english_bold))
     pdfmetrics.registerFontFamily(
         font_name,
         normal=font_name,
@@ -180,7 +198,7 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.pdfbase import pdfmetrics
+    from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
     from reportlab.platypus import Paragraph, Table, TableStyle
 
@@ -249,12 +267,19 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
 
     def period_markup():
         start, end = data["starts_on"], data["ends_on"]
-        return (
-            f"民國 <font name=\"{english_bold_font_name}\">{start.year - 1911}</font> 年 "
-            f"{start.month} 月 {start.day} 日至民國 "
-            f"<font name=\"{english_bold_font_name}\">{end.year - 1911}</font> 年 "
-            f"{end.month} 月 {end.day} 日"
+        bold_number = lambda value: f'<font name="{english_bold_font_name}">{value}</font>'
+        start_text = (
+            f"民國{bold_number(start.year - 1911)}年"
+            f"{bold_number(start.month)}月{bold_number(start.day)}日"
         )
+        if start.year == end.year:
+            end_text = f"{bold_number(end.month)}月{bold_number(end.day)}日"
+        else:
+            end_text = (
+                f"{bold_number(end.year - 1911)}年"
+                f"{bold_number(end.month)}月{bold_number(end.day)}日"
+            )
+        return f"{start_text}至{end_text}"
 
     def period_markup_en():
         start, end = data["starts_on"], data["ends_on"]
@@ -291,12 +316,12 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
     latin_run_pattern = re.compile(r"[A-Za-z0-9][A-Za-z0-9 .,/():+\-]*")
 
     def mixed_font_markup(value, *, bold=False):
-        """Use Times New Roman for Latin text while retaining Kaiti for Chinese.
+        """Use Helvetica Neue for Latin text while retaining LiSong for Chinese.
 
         Every run (Latin and CJK alike) gets an explicit <font name="..."> tag rather
         than relying on the surrounding Paragraph's default font or on <b> resolving
         through registerFontFamily(): the English certificate paragraphs default to
-        CertificateSerif, whose registered "bold" face is Latin-only, so a bare <b>
+        the English certificate family, whose registered "bold" face is Latin-only, so a bare <b>
         around Chinese text there silently drops the glyphs instead of rendering them.
         """
         value = str(value)
@@ -343,8 +368,11 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
         }
         if is_zh:
             level_label = education_level_labels_zh.get(roster.education_level, "") if roster else ""
-            certificate_lead = f"本系{level_label}學生 {display_name_markup()}，學號" \
-                f'<font name="{english_bold_font_name}">{escape(user.username)}</font>，'
+            certificate_lead = (
+                f"本系{level_label}學生<br/>"
+                f"{display_name_markup()}（學號："
+                f'<font name="{english_bold_font_name}">{escape(user.username)}</font>）'
+            )
             certificate_paragraph = (
                 f"於{month_period_markup()}，"
                 f"於本校擔任國際生華語輔導老師，總計授課 "
@@ -354,9 +382,9 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
         else:
             level_label = education_level_labels_en.get(roster.education_level, "") if roster else ""
             certificate_lead = (
-                f'<font name="{english_font_name}">This certifies that {level_label} student</font> '
-                f"{display_name_markup()}"
-                f'<font name="{english_font_name}">, Student ID {escape(user.username)},</font>'
+                f'<font name="{english_font_name}">This certifies that {level_label} student</font><br/>'
+                f"{display_name_markup()} "
+                f'<font name="{english_font_name}">(Student ID: {escape(user.username)})</font>'
             )
             certificate_paragraph = (
                 f'<font name="{english_font_name}">served as a Chinese tutor for international '
@@ -373,18 +401,24 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
     else:
         display_name = display_name_markup()
         if is_zh:
+            certificate_lead = (
+                f"茲證明<br/>{display_name} 同學（學號："
+                f'<font name="{english_bold_font_name}">{escape(user.username)}</font>）'
+            )
             certificate_paragraph = (
-                f"茲證明 {display_name} 同學（學號："
-                f'<font name="{english_bold_font_name}">{escape(user.username)}</font>），'
-                f"於 <b>{period_markup()}</b> 期間，參與國立臺灣師範大學華語文教學系"
+                f"於<b>{period_markup()}</b>期間，參與國立臺灣師範大學華語文教學系"
                 f"「<b>{plan_name}</b>」，{activity}共計 "
                 f'<font name="{english_bold_font_name}">{hours_text(data["total"])}</font>'
                 f"<b> 小時</b>，特此證明。"
             )
         else:
+            certificate_lead = (
+                f'<font name="{english_font_name}">This is to certify that</font><br/>'
+                f'{display_name} <font name="{english_font_name}">'
+                f'(Student ID: {escape(user.username)})</font>'
+            )
             certificate_paragraph = (
-                f'<font name="{english_font_name}">This is to certify that</font> {display_name} '
-                f'<font name="{english_font_name}">(Student ID: {escape(user.username)}) participated in the '
+                f'<font name="{english_font_name}">participated in the '
                 f'&#8220;<b>{escape(plan_name_en)}</b>&#8221; of the Department of Chinese as a Second '
                 f"Language, National Taiwan Normal University, during <b>{period_markup_en()}</b>, "
                 f'{escape(activity_en)}, completing a total of '
@@ -394,25 +428,26 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
         summary_paragraph_style = ParagraphStyle(
             "CertificateSummaryBody", fontName=font_name if is_zh else english_font_name,
             fontSize=15 if is_zh else 12.5, leading=34 if is_zh else 24,
-            alignment=TA_JUSTIFY, firstLineIndent=30 if is_zh else 0,
+            alignment=TA_JUSTIFY, firstLineIndent=0,
             textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
         )
     detail_paragraph_style = ParagraphStyle(
         "CertificateDetailBody", fontName=font_name if is_zh else english_font_name,
         fontSize=(15.5 if is_ntnu_tutor else 14) if is_zh else 12,
         leading=(34 if is_ntnu_tutor else 31) if is_zh else 22,
-        alignment=TA_JUSTIFY, firstLineIndent=(0 if is_ntnu_tutor else 28) if is_zh else 0,
+        alignment=TA_JUSTIFY, firstLineIndent=0,
         textColor=colors.HexColor("#151515"),
         wordWrap="CJK" if is_zh else None,
     )
     summary_lead_style = ParagraphStyle(
         "CertificateSummaryLead", fontName=font_name if is_zh else english_font_name,
-        fontSize=21 if is_zh else 15, leading=28 if is_zh else 20,
+        fontSize=(21 if is_ntnu_tutor else 18) if is_zh else (15 if is_ntnu_tutor else 13),
+        leading=(34 if is_ntnu_tutor else 29) if is_zh else (20 if is_ntnu_tutor else 18),
         alignment=0, textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
     )
     detail_lead_style = ParagraphStyle(
         "CertificateDetailLead", fontName=font_name if is_zh else english_font_name,
-        fontSize=17 if is_zh else 13, leading=23 if is_zh else 18,
+        fontSize=17 if is_zh else 13, leading=29 if is_zh else 18,
         alignment=0, textColor=colors.HexColor("#151515"), wordWrap="CJK" if is_zh else None,
     )
     small_style = ParagraphStyle(
@@ -447,7 +482,10 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
             }
             detail_rows.append([values[key] for key in ordered_fields])
 
-    rows_per_page = 8
+    # The revised template reserves the lower area for the formal issue date,
+    # department logo, and seal. Six detail rows keep the table clear of the
+    # enlarged, raised seal on every page, including continuation pages.
+    rows_per_page = 6
     chunks = [detail_rows[index:index + rows_per_page] for index in range(0, len(detail_rows), rows_per_page)]
     if not chunks:
         chunks = [[]]
@@ -460,38 +498,32 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
     total_pages = len(chunks)
     for page_index, chunk in enumerate(chunks, start=1):
         if is_zh:
-            # DFKai-SB has no separate bold face. Fill-and-stroke preserves the
-            # requested Kaiti typeface while giving the title a visible bold weight.
-            pdf_canvas.saveState()
             pdf_canvas.setFillColor(colors.HexColor("#151515"))
-            pdf_canvas.setStrokeColor(colors.HexColor("#151515"))
-            pdf_canvas.setLineWidth(.22)
-            title_text = pdf_canvas.beginText(
-                (page_width - pdfmetrics.stringWidth(title, bold_font_name, 22)) / 2,
-                623,
-            )
-            title_text.setFont(bold_font_name, 22)
-            title_text.setTextRenderMode(2)
-            title_text.textLine(title)
-            pdf_canvas.drawText(title_text)
-            pdf_canvas.restoreState()
+            pdf_canvas.setFont(bold_font_name, 22)
+            pdf_canvas.drawCentredString(page_width / 2, 650, title)
         else:
             # A single English title stands alone (no Chinese title above it), so it gets a
             # larger size than the old secondary-line English title did.
             pdf_canvas.setFillColor(colors.HexColor("#151515"))
             pdf_canvas.setFont(english_bold_font_name, 18)
-            pdf_canvas.drawCentredString(page_width / 2, 623, title)
+            pdf_canvas.drawCentredString(page_width / 2, 650, title)
 
         is_summary = version == "summary"
         paragraph_style = summary_paragraph_style if is_summary else detail_paragraph_style
-        paragraph_width = 465
+        # Summary certificates read more formally with a narrower text block and
+        # wider left/right margins. Detailed certificates keep the wider block so
+        # the four-column table remains legible.
+        paragraph_width = 425 if is_summary else 465
         paragraph_x = (page_width - paragraph_width) / 2
-        paragraph_top = 540
+        paragraph_top = 600 if is_summary else 620
         if certificate_lead:
             lead_style = summary_lead_style if is_summary else detail_lead_style
             lead = Paragraph(certificate_lead, lead_style)
-            lead_width = 490 if is_summary else paragraph_width
-            lead_x = paragraph_x
+            # Generic certificate names may include two names plus a longer partner-program
+            # ID. Give only this lead line the detailed-page width so the intentionally
+            # grouped name/ID line does not wrap; the summary body keeps its wider margins.
+            lead_width = 465 if is_summary and not is_ntnu_tutor else paragraph_width
+            lead_x = (page_width - lead_width) / 2
             _, lead_height = lead.wrap(lead_width, 40)
             lead_y = paragraph_top - lead_height
             lead.drawOn(pdf_canvas, lead_x, lead_y)
@@ -508,7 +540,7 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
                 label = "Hours Detail" if page_index == 1 else "Hours Detail (continued)"
             pdf_canvas.setFillColor(colors.HexColor("#392E26"))
             pdf_canvas.setFont(bold_font_name if is_zh else english_bold_font_name, 11.5)
-            pdf_canvas.drawString(72, 419, label)
+            pdf_canvas.drawString(72, 450, label)
             page_number_style = ParagraphStyle(
                 "CertificatePageNumber", fontName=bold_font_name, fontSize=11.5, leading=14,
                 alignment=TA_RIGHT, textColor=colors.HexColor("#392E26"),
@@ -524,7 +556,7 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
                 )
             page_number = Paragraph(page_number_text, page_number_style)
             page_number.wrap(280, 16)
-            page_number.drawOn(pdf_canvas, page_width - 352, 416)
+            page_number.drawOn(pdf_canvas, page_width - 352, 447)
 
             headers = [Paragraph(field_config[key][0], small_style) for key in ordered_fields]
             if chunk:
@@ -552,22 +584,45 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
                 table_style.append(("SPAN", (0, 1), (-1, 1)))
             table.setStyle(TableStyle(table_style))
             _, table_height = table.wrap(465, 330)
-            table.drawOn(pdf_canvas, 65, 402 - table_height)
+            table.drawOn(pdf_canvas, 65, 433 - table_height)
 
         pdf_canvas.saveState()
         pdf_canvas.setFillColor(colors.HexColor("#171310"))
-        pdf_canvas.setStrokeColor(colors.HexColor("#171310"))
-        pdf_canvas.setLineWidth(.3)
-        issue_date = pdf_canvas.beginText(62, 65.5)
+        generated_at = data["generated_at"]
+        generated_date = (
+            timezone.localtime(generated_at).date()
+            if timezone.is_aware(generated_at)
+            else generated_at.date()
+        )
+        date_text = roc_date(generated_date) if is_zh else gregorian_date(generated_date)
+        date_font = bold_font_name if is_zh else english_bold_font_name
+        date_font_size = 18 if is_zh else 15
+        date_character_spacing = 4.2 if is_zh else 2.4
+        date_width = pdf_canvas.stringWidth(date_text, date_font, date_font_size)
+        date_width += date_character_spacing * max(len(date_text) - 1, 0)
+        issue_date = pdf_canvas.beginText((page_width - date_width) / 2, 132)
+        issue_date.setFont(date_font, date_font_size)
+        issue_date.setCharSpace(date_character_spacing)
         if is_zh:
-            issue_date.setFont(font_name, 22)
-            issue_date.setTextRenderMode(2)
-            issue_date.textLine(roc_date(data["generated_at"].date()))
+            issue_date.textLine(date_text)
         else:
-            issue_date.setFont(english_bold_font_name, 18)
-            issue_date.textLine(gregorian_date(data["generated_at"].date()))
+            issue_date.textLine(date_text)
         pdf_canvas.drawText(issue_date)
         pdf_canvas.restoreState()
+
+        stamp_path = settings.BASE_DIR / "assets/certificates/CSL stamp.png"
+        if stamp_path.exists():
+            stamp_width = 110
+            stamp_height = stamp_width * 344 / 398
+            pdf_canvas.drawImage(
+                ImageReader(stamp_path),
+                page_width - 70 - stamp_width,
+                100,
+                width=stamp_width,
+                height=stamp_height,
+                preserveAspectRatio=True,
+                mask="auto",
+            )
         pdf_canvas.showPage()
     pdf_canvas.save()
 
@@ -583,7 +638,21 @@ def build_hours_pdf(data, *, version="summary", detail_fields=(), program=None, 
     return _restrict_copy_and_selection(output.getvalue())
 
 
-EXPORT_HEADERS = ["學號 Student ID", "中文姓名", "英文姓名", "身分 Role", "學期 Semester", "日期 Date", "時間 Time", "時數 Hours", "對方學號", "輔導對象", "狀態 Status"]
+EXPORT_COLUMNS = (
+    ("student_id", "學號 Student ID", 13),
+    ("name_zh", "中文姓名", 13),
+    ("name_en", "英文姓名", 16),
+    ("role", "身分 Role", 14),
+    ("semester", "學期 Semester", 14),
+    ("date", "日期 Date", 12),
+    ("time", "時間 Time", 9),
+    ("hours", "時數 Hours", 9),
+    ("counterpart_id", "對方學號", 12),
+    ("counterpart", "輔導對象", 18),
+    ("status", "狀態 Status", 15),
+)
+EXPORT_FIELD_KEYS = tuple(key for key, _header, _width in EXPORT_COLUMNS)
+EXPORT_HEADERS = [header for _key, header, _width in EXPORT_COLUMNS]
 
 _SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -609,41 +678,79 @@ def _spreadsheet_safe_rows(rows):
     return [[_spreadsheet_safe_value(value) for value in row] for row in rows]
 
 
-def _export_rows(users, *, starts_on=None, ends_on=None):
+def normalize_export_fields(fields=None):
+    """Return valid export field keys in the system-defined column order."""
+    if fields is None:
+        return list(EXPORT_FIELD_KEYS)
+    requested = set(fields)
+    return [key for key in EXPORT_FIELD_KEYS if key in requested]
+
+
+def _export_schema(fields=None):
+    selected = normalize_export_fields(fields)
+    return [(key, header, width) for key, header, width in EXPORT_COLUMNS if key in selected]
+
+
+def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=None):
+    selected_fields = normalize_export_fields(fields)
     rows = []
     for user in users:
         participant = Q(pairing__tutor=user) if user.role == Role.TUTOR else Q(pairing__tutee=user)
         sessions = ClassSession.objects.filter(participant).select_related(
-            "pairing__semester", "pairing__tutor", "pairing__tutee"
+            "pairing__semester", "pairing__tutor", "pairing__tutee",
+            "pairing__tutee__roster_entry__program",
         ).prefetch_related("attendances", "class_records", "confirmations", "makeup_review")
+        if program is not None:
+            sessions = sessions.filter(pairing__tutee__roster_entry__program=program)
         if starts_on:
             sessions = sessions.filter(class_date__gte=starts_on)
         if ends_on:
             sessions = sessions.filter(class_date__lte=ends_on)
         for session in sessions:
             counterpart = session.pairing.tutee if user.role == Role.TUTOR else session.pairing.tutor
-            rows.append([
-                user.username, user.name_zh, user.name_en, user.get_role_display(),
-                session.pairing.semester.name_zh, str(session.class_date), session.start_time.strftime("%H:%M"),
-                str(session.duration), counterpart.username, counterpart.bilingual_name,
-                "有效 / Verified" if class_is_valid(session) else "未成立 / Incomplete",
-            ])
+            values = {
+                "student_id": user.username,
+                "name_zh": user.name_zh,
+                "name_en": user.name_en,
+                "role": user.get_role_display(),
+                "semester": session.pairing.semester.name_zh,
+                "date": str(session.class_date),
+                "time": session.start_time.strftime("%H:%M"),
+                "hours": str(session.duration),
+                "counterpart_id": counterpart.username,
+                "counterpart": counterpart.bilingual_name,
+                "status": "有效 / Verified" if class_is_valid(session) else "未成立 / Incomplete",
+            }
+            rows.append([values[key] for key in selected_fields])
         if not sessions.exists():
-            rows.append([user.username, user.name_zh, user.name_en, user.get_role_display(), "", "", "", "", "", "", "尚無課程 / No classes"])
+            values = {key: "" for key in EXPORT_FIELD_KEYS}
+            values.update({
+                "student_id": user.username,
+                "name_zh": user.name_zh,
+                "name_en": user.name_en,
+                "role": user.get_role_display(),
+                "status": "尚無課程 / No classes",
+            })
+            rows.append([values[key] for key in selected_fields])
     return rows
 
 
-def build_excel_xlsx(users, *, starts_on=None, ends_on=None):
+def build_excel_xlsx(users, *, starts_on=None, ends_on=None, fields=None, program=None):
     """Create a real .xlsx workbook (openpyxl) with the same columns as build_excel_xml()."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
-    rows = _export_rows(users, starts_on=starts_on, ends_on=ends_on)
+    schema = _export_schema(fields)
+    headers = [header for _key, header, _width in schema]
+    rows = _export_rows(
+        users, starts_on=starts_on, ends_on=ends_on,
+        fields=[key for key, _header, _width in schema], program=program,
+    )
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "輔導資料"
-    worksheet.append(EXPORT_HEADERS)
+    worksheet.append(headers)
     for row in _spreadsheet_safe_rows(rows):
         worksheet.append(row)
     header_fill = PatternFill(start_color="0F4C75", end_color="0F4C75", fill_type="solid")
@@ -656,7 +763,7 @@ def build_excel_xlsx(users, *, starts_on=None, ends_on=None):
     for row_cells in worksheet.iter_rows(min_row=2):
         for data_cell in row_cells:
             data_cell.alignment = Alignment(vertical="top", wrap_text=True)
-    for index, width in enumerate([13, 13, 16, 14, 14, 12, 9, 9, 12, 18, 15], start=1):
+    for index, (_key, _header, width) in enumerate(schema, start=1):
         worksheet.column_dimensions[get_column_letter(index)].width = width
     worksheet.freeze_panes = "A2"
     buffer = BytesIO()
@@ -664,7 +771,7 @@ def build_excel_xlsx(users, *, starts_on=None, ends_on=None):
     return buffer.getvalue()
 
 
-def build_export_csv(users, *, starts_on=None, ends_on=None):
+def build_export_csv(users, *, starts_on=None, ends_on=None, fields=None, program=None):
     """Create a CSV export with the same columns as build_excel_xlsx().
 
     Written with a UTF-8 BOM so Excel on Windows opens the Chinese headers/content correctly.
@@ -672,15 +779,20 @@ def build_export_csv(users, *, starts_on=None, ends_on=None):
     import codecs
     import csv as csv_module
 
-    rows = _export_rows(users, starts_on=starts_on, ends_on=ends_on)
+    schema = _export_schema(fields)
+    headers = [header for _key, header, _width in schema]
+    rows = _export_rows(
+        users, starts_on=starts_on, ends_on=ends_on,
+        fields=[key for key, _header, _width in schema], program=program,
+    )
     buffer = StringIO()
     writer = csv_module.writer(buffer)
-    writer.writerow(EXPORT_HEADERS)
+    writer.writerow(headers)
     writer.writerows(_spreadsheet_safe_rows(rows))
     return codecs.BOM_UTF8 + buffer.getvalue().encode("utf-8")
 
 
-def build_export_pdf(users, *, starts_on=None, ends_on=None):
+def build_export_pdf(users, *, starts_on=None, ends_on=None, fields=None, program=None):
     """Administrative report with the same columns as build_excel_xlsx()/build_export_csv().
 
     This is a plain data table for internal review, not a personal certificate — it reuses the
@@ -696,17 +808,22 @@ def build_export_pdf(users, *, starts_on=None, ends_on=None):
 
     font_name, _bold_font_name, _english_font_name, _english_bold_font_name = _register_certificate_fonts()
 
-    rows = _export_rows(users, starts_on=starts_on, ends_on=ends_on)
+    schema = _export_schema(fields)
+    headers = [header for _key, header, _width in schema]
+    rows = _export_rows(
+        users, starts_on=starts_on, ends_on=ends_on,
+        fields=[key for key, _header, _width in schema], program=program,
+    )
     header_style = ParagraphStyle("ExportHeader", fontName=font_name, fontSize=8.5, leading=11, textColor=colors.white)
     cell_style = ParagraphStyle("ExportCell", fontName=font_name, fontSize=8, leading=10)
     title_style = ParagraphStyle("ExportTitle", fontName=font_name, fontSize=14, leading=18)
 
-    header_row = [Paragraph(header, header_style) for header in EXPORT_HEADERS]
+    header_row = [Paragraph(header, header_style) for header in headers]
     if rows:
         body_rows = [[Paragraph(str(value), cell_style) for value in row] for row in rows]
     else:
         body_rows = [
-            [Paragraph("沒有符合條件的資料 / No matching data", cell_style)] + [""] * (len(EXPORT_HEADERS) - 1)
+            [Paragraph("沒有符合條件的資料 / No matching data", cell_style)] + [""] * (len(headers) - 1)
         ]
     table = Table([header_row] + body_rows, repeatRows=1)
     table_style = [

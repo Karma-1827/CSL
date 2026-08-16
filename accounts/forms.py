@@ -19,7 +19,15 @@ from tutoring.models import (
     validate_qualification_file,
 )
 
-from .models import EducationLevel, IdentityCategory, RegistrationDraft, Role, RosterEntry, SecurityQuestionAnswer, User
+from .models import (
+    EducationLevel,
+    IdentityCategory,
+    RegistrationDraft,
+    Role,
+    RosterEntry,
+    SecurityQuestionAnswer,
+    User,
+)
 from .throttle import any_throttled, clear_throttles, register_failures
 
 
@@ -65,6 +73,16 @@ class BilingualAuthenticationForm(AuthenticationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         add_form_classes(self)
+
+    def clean_username(self):
+        submitted = self.cleaned_data["username"].strip()
+        canonical = (
+            User.objects.filter(username__iexact=submitted)
+            .order_by("pk")
+            .values_list("username", flat=True)
+            .first()
+        )
+        return canonical or submitted
 
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
@@ -273,7 +291,25 @@ OVERALL_LEVEL_CHOICES = [
     ("B2", "TOCFL B2"),
     ("C1", "TOCFL C1"),
     ("C2", "TOCFL C2"),
+    *[(f"HSK{level}", f"HSK {level}") for level in range(1, 10)],
 ]
+
+
+REGISTRATION_IDENTITY_CHOICES = [
+    ("", "請選擇身分別 / Select identity"),
+    (IdentityCategory.LOCAL, "本地生 / Domestic student"),
+    (IdentityCategory.OVERSEAS, "僑生 / Overseas Chinese student"),
+    (IdentityCategory.HONG_KONG_MACAO, "港澳生 / Hong Kong and Macao student"),
+    (IdentityCategory.MAINLAND, "陸生 / Mainland Chinese student"),
+    (IdentityCategory.INTERNATIONAL, "外籍生 / International student"),
+    ("MARYLAND", "馬里蘭學生 / Maryland student"),
+]
+
+
+def roster_registration_identity(roster):
+    if roster.role == Role.TUTEE and roster.program_id and roster.program.code == "MARYLAND":
+        return "MARYLAND"
+    return roster.identity_category
 
 
 class RegistrationLookupForm(forms.Form):
@@ -281,6 +317,10 @@ class RegistrationLookupForm(forms.Form):
         label="學號 / Student ID",
         max_length=24,
         widget=forms.TextInput(attrs={"autocomplete": "username", "placeholder": "例如 / Example: 612840001"}),
+    )
+    registration_identity = forms.ChoiceField(
+        label="身分別 / Identity",
+        choices=REGISTRATION_IDENTITY_CHOICES,
     )
     password1 = forms.CharField(
         label="設定密碼 / Create password",
@@ -299,6 +339,9 @@ class RegistrationLookupForm(forms.Form):
         super().__init__(*args, **kwargs)
         add_form_classes(self)
 
+    def _throttle_key(self):
+        return f"roster_lookup:{client_ip(self.request)}"
+
     def clean_student_id(self):
         student_id = self.cleaned_data["student_id"].strip().upper()
         # Roster-lookup throttle (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5 item
@@ -306,7 +349,7 @@ class RegistrationLookupForm(forms.Form):
         # repeated guesses against one account, it's enumerating many different student
         # IDs to see which ones exist, so the limit has to apply across whatever ID is
         # tried each time.
-        throttle_key = f"roster_lookup:{client_ip(self.request)}"
+        throttle_key = self._throttle_key()
         if any_throttled([(throttle_key, 10)]):
             raise ValidationError(
                 "嘗試次數過多，請 15 分鐘後再試。 / Too many attempts. Please try again in 15 minutes.",
@@ -325,12 +368,23 @@ class RegistrationLookupForm(forms.Form):
         if roster.role not in {Role.TUTOR, Role.TUTEE}:
             register_failures([throttle_key])
             raise ValidationError("此名冊身分無法公開註冊。 / This roster role cannot register here.")
-        clear_throttles([throttle_key])
         self.roster = roster
         return student_id
 
     def clean(self):
         cleaned = super().clean()
+        roster = getattr(self, "roster", None)
+        selected_identity = cleaned.get("registration_identity")
+        if roster and selected_identity:
+            if selected_identity != roster_registration_identity(roster):
+                register_failures([self._throttle_key()])
+                self.add_error(
+                    "registration_identity",
+                    "學號與身分別不符，請重新確認或聯絡系辦。\n"
+                    "The student ID and identity do not match. Please check again or contact the department office.",
+                )
+            else:
+                clear_throttles([self._throttle_key()])
         password1 = cleaned.get("password1")
         password2 = cleaned.get("password2")
         if password1 and password2:
@@ -357,8 +411,7 @@ class RegistrationLookupForm(forms.Form):
 
 class BaseRoleRegistrationForm(forms.Form):
     name_zh = forms.CharField(label="中文姓名 / Chinese name", max_length=100)
-    name_en = forms.CharField(label="英文姓名（選填） / English name (optional)", max_length=150, required=False)
-    nickname = forms.CharField(label="暱稱（選填） / Nickname (optional)", max_length=50, required=False)
+    name_en = forms.CharField(label="英文姓名 / English name", max_length=150, required=False)
     identity_category = forms.ChoiceField(label="身份別 / Identity category", choices=IdentityCategory.choices)
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
     email = forms.EmailField(label="Email", max_length=254)
@@ -405,6 +458,13 @@ class BaseRoleRegistrationForm(forms.Form):
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
         add_form_classes(self)
+        if roster.identity_category:
+            self.fields["identity_category"].disabled = True
+            self.fields["identity_category"].help_text = (
+                "身分別已由系辦名冊確認，如需更正請聯絡系辦。\n"
+                "Your identity has been verified from the department roster. "
+                "Contact the department office if it needs correction."
+            )
         if self.is_bound:
             self.fields["native_language"].widget.attrs["data-current-value"] = self.data.get("native_language", "")
             self.fields["nationality"].widget.attrs["data-current-value"] = self.data.get("nationality", "")
@@ -416,9 +476,17 @@ class BaseRoleRegistrationForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        questions = [cleaned.get(f"question_{index}") for index in range(1, 4)]
-        if all(questions) and len(set(questions)) != 3:
-            self.add_error("question_3", "三題不可重複。 / Please choose three different questions.")
+        seen_questions = set()
+        for index in range(1, 4):
+            field_name = f"question_{index}"
+            question = cleaned.get(field_name)
+            if question and question in seen_questions:
+                self.add_error(
+                    field_name,
+                    "安全問題不可重複，請選擇不同題目。 / Security questions must be different.",
+                )
+            elif question:
+                seen_questions.add(question)
         return cleaned
 
     def create_user(self):
@@ -441,7 +509,6 @@ class BaseRoleRegistrationForm(forms.Form):
             roster_entry=roster,
             name_zh=roster.name_zh,
             name_en=roster.name_en,
-            nickname=self.cleaned_data.get("nickname", ""),
             phone=self.cleaned_data["phone"],
             email=self.cleaned_data["email"],
         )
@@ -461,6 +528,7 @@ class BaseRoleRegistrationForm(forms.Form):
 
 class TutorRegistrationForm(BaseRoleRegistrationForm):
     expected_role = Role.TUTOR
+    name_en = forms.CharField(label="英文姓名 / English name", max_length=150)
     education_level = forms.ChoiceField(
         label="學制 / Degree level",
         choices=[choice for choice in EducationLevel.choices if choice[0] != EducationLevel.NOT_APPLICABLE],
@@ -483,7 +551,7 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
         required=False,
         validators=[validate_qualification_file],
         widget=forms.ClearableFileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
-        help_text="目前可先略過；PDF、JPG、PNG，最大 1 MB。\nOptional for now; PDF, JPG, or PNG, up to 1 MB.",
+        help_text="PDF、JPG、PNG，最大 1 MB。\nPDF, JPG, or PNG, up to 1 MB.",
     )
 
     def __init__(self, *args, **kwargs):
@@ -522,6 +590,10 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
 
 class TuteeRegistrationForm(BaseRoleRegistrationForm):
     expected_role = Role.TUTEE
+    name_zh = forms.CharField(
+        label="中文姓名（選填） / Chinese name (optional)", max_length=100, required=False
+    )
+    name_en = forms.CharField(label="英文姓名 / English name", max_length=150)
     overall_level = forms.ChoiceField(
         label="整體華語程度 / Overall Chinese level",
         choices=OVERALL_LEVEL_CHOICES,
@@ -632,7 +704,6 @@ class QualificationUploadForm(forms.ModelForm):
 
 class TutorProfileEditForm(forms.Form):
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
-    nickname = forms.CharField(label="暱稱（選填） / Nickname (optional)", max_length=50, required=False)
     email = forms.EmailField(label="Email", max_length=254)
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
@@ -679,7 +750,6 @@ class TutorProfileEditForm(forms.Form):
             "initial",
             {
                 "phone": user.phone,
-                "nickname": user.nickname,
                 "email": user.email,
                 **{name: getattr(profile, name) for name in self.profile_fields},
             },
@@ -694,7 +764,7 @@ class TutorProfileEditForm(forms.Form):
     def save(self):
         changed = []
         user_fields = []
-        for field_name in ("phone", "nickname", "email"):
+        for field_name in ("phone", "email"):
             if getattr(self.user, field_name) != self.cleaned_data[field_name]:
                 changed.append(field_name)
                 user_fields.append(field_name)
@@ -713,7 +783,6 @@ class TutorProfileEditForm(forms.Form):
 
 class TuteeProfileEditForm(forms.Form):
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
-    nickname = forms.CharField(label="暱稱（選填） / Nickname (optional)", max_length=50, required=False)
     email = forms.EmailField(label="Email", max_length=254)
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
@@ -779,7 +848,6 @@ class TuteeProfileEditForm(forms.Form):
             "initial",
             {
                 "phone": user.phone,
-                "nickname": user.nickname,
                 "email": user.email,
                 **{name: getattr(profile, name) for name in self.profile_fields},
             },
@@ -794,7 +862,7 @@ class TuteeProfileEditForm(forms.Form):
     def save(self):
         changed = []
         user_fields = []
-        for field_name in ("phone", "nickname", "email"):
+        for field_name in ("phone", "email"):
             if getattr(self.user, field_name) != self.cleaned_data[field_name]:
                 changed.append(field_name)
                 user_fields.append(field_name)

@@ -8,9 +8,12 @@
 <h2>帳號註冊</h2>
 <form method="post" class="stack-form" novalidate>
   {% csrf_token %}
-  {% include "components/form_field.html" with field=form.student_id %}
-  {% include "components/form_field.html" with field=form.password1 hide_help=True %}
-  {% include "components/form_field.html" with field=form.password2 %}
+  <div class="registration-fields-grid">
+    {% include "components/form_field.html" with field=form.student_id %}
+    {% include "components/form_field.html" with field=form.registration_identity %}
+    {% include "components/form_field.html" with field=form.password1 hide_help=True %}
+    {% include "components/form_field.html" with field=form.password2 %}
+  </div>
   <p class="help-text register-password-help">{{ form.password1.help_text }}</p>
   <button class="button button-primary button-full" type="submit">註冊並填寫個人資料 <span>Register and continue</span></button>
 </form>

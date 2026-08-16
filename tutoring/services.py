@@ -59,6 +59,7 @@ LEVEL_LABELS = {
     "B2": "TOCFL B2",
     "C1": "TOCFL C1",
     "C2": "TOCFL C2",
+    **{f"HSK{level}": f"HSK {level}" for level in range(1, 10)},
 }
 LEARNING_DURATION_LABELS = {
     "LT_3_MONTHS": "3 個月以下 / Less than 3 months",
@@ -139,6 +140,30 @@ def tutor_can_serve_program(tutor, program):
     if roster_program.code == "MARYLAND" and tutor.roster_entry.education_level != EducationLevel.BACHELOR:
         return False
     return True
+
+
+def export_users_for_program(program, role=None):
+    """Users available to the Admin export for one partner program.
+
+    Tutees belong to the program through their roster entry. Tutors use the same eligibility
+    rule as matching, so an ordinary Tutor appears under NTNU while a program-specific Tutor
+    appears only under that program. Returning a queryset keeps the export builders and audit
+    count queries lazy and composable.
+    """
+    users = User.objects.exclude(role=Role.ADMIN).select_related(
+        "roster_entry", "roster_entry__program"
+    ).order_by("username")
+    if role == Role.TUTEE:
+        return users.filter(role=Role.TUTEE, roster_entry__program=program)
+
+    tutors = users.filter(role=Role.TUTOR)
+    tutor_ids = [tutor.pk for tutor in tutors if tutor_can_serve_program(tutor, program)]
+    if role == Role.TUTOR:
+        return users.filter(pk__in=tutor_ids)
+
+    return users.filter(
+        Q(pk__in=tutor_ids) | Q(role=Role.TUTEE, roster_entry__program=program)
+    ).distinct()
 
 
 def visible_class_document_programs(user):
@@ -1059,5 +1084,3 @@ def resolve_incident_report(*, report_id, admin, note=""):
     report.resolution_note = note.strip()
     report.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_note"])
     return report
-
-

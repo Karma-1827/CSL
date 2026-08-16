@@ -1,6 +1,6 @@
 <article class="candidate-card">
   <div class="candidate-card-head">
-    <span class="anonymous-badge">外籍學生 / International student</span>
+    <span class="anonymous-badge">{% if tutee_matching_program %}{{ tutee_matching_program.name_zh }} / {{ tutee_matching_program.name_en }}{% else %}學生 / Student{% endif %}</span>
     <strong>{{ candidate.overall_level }}</strong>
   </div>
   <dl class="candidate-facts">

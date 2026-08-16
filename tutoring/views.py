@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from accounts.models import AuditLog, Role, User
+from accounts.models import AuditLog, PartnerProgram, Role
 
 from .forms import (
     AdminPairingForm, ClassAlertForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm, PairingMessageForm,
@@ -27,6 +27,7 @@ from .reporting import (
     build_export_pdf,
     build_hours_pdf,
     hour_report_data,
+    normalize_export_fields,
     user_has_hour_records,
 )
 from .services import (
@@ -38,6 +39,7 @@ from .services import (
     class_is_valid,
     confirm_counterpart,
     create_admin_pairing,
+    export_users_for_program,
     respond_to_invitation,
     reschedule_class,
     report_class_alert,
@@ -168,8 +170,13 @@ def pairing_messages(request, pk):
 
 
 @login_required
-@require_POST
+@require_http_methods(["GET", "POST"])
 def download_hours(request):
+    # A signed-out user may submit the download form and then be redirected back
+    # here with GET after login. Return them to the form instead of exposing a
+    # confusing HTTP 405; actual PDF generation remains POST-only below.
+    if request.method == "GET":
+        return redirect(f"{reverse('accounts:dashboard')}#hours")
     if not user_has_hour_records(request.user):
         raise Http404
     form = HoursDownloadForm(request.POST, user=request.user)
@@ -219,19 +226,35 @@ def download_hours(request):
 def export_excel(request):
     if request.user.role != Role.ADMIN:
         raise Http404
-    scope = request.POST.get("scope", "all")
-    users = User.objects.exclude(role=Role.ADMIN).select_related("roster_entry").order_by("username")
-    if scope == "selected":
-        ids = request.POST.getlist("user_ids")
-        if not ids:
-            messages.error(request, "請至少選擇一位使用者。 / Select at least one user.")
+    program = PartnerProgram.objects.filter(pk=request.POST.get("program_id")).first()
+    if not program:
+        messages.error(request, "請選擇合作計畫。 / Select a partner program.")
+        return redirect(f"{reverse('accounts:dashboard')}#export")
+
+    audience = request.POST.get("audience", "tutors")
+    if audience == "tutors":
+        users = export_users_for_program(program, Role.TUTOR)
+    elif audience == "tutees":
+        users = export_users_for_program(program, Role.TUTEE)
+    elif audience == "specific":
+        user_ids = request.POST.getlist("user_ids")
+        users = export_users_for_program(program).filter(pk__in=user_ids)
+        if not user_ids or not users.exists():
+            messages.error(
+                request,
+                "請至少選擇一位屬於此計畫的使用者。 / Select at least one user in this program.",
+            )
             return redirect(f"{reverse('accounts:dashboard')}#export")
-        users = users.filter(pk__in=ids)
+    else:
+        messages.error(request, "請選擇匯出對象。 / Select an export audience.")
+        return redirect(f"{reverse('accounts:dashboard')}#export")
     period_mode = request.POST.get("period_mode", "semester")
     starts_on = ends_on = None
     semester = None
     if period_mode == "semester":
-        semester = Semester.objects.filter(pk=request.POST.get("semester_id")).first()
+        semester = Semester.objects.filter(pk=request.POST.get("semester_id")).filter(
+            Q(program=program) | Q(program__isnull=True)
+        ).first()
         if not semester:
             messages.error(request, "請選擇學期。 / Select a semester.")
             return redirect(f"{reverse('accounts:dashboard')}#export")
@@ -249,25 +272,40 @@ def export_excel(request):
     else:
         messages.error(request, "請選擇匯出期間。 / Select an export period.")
         return redirect(f"{reverse('accounts:dashboard')}#export")
+    fields_were_submitted = request.POST.get("field_selection_present") == "1"
+    export_fields = normalize_export_fields(
+        request.POST.getlist("export_fields") if fields_were_submitted else None
+    )
+    if fields_were_submitted and not export_fields:
+        messages.error(request, "請至少選擇一個匯出欄位。 / Select at least one export field.")
+        return redirect(f"{reverse('accounts:dashboard')}#export")
     file_format = request.POST.get("file_format", "xlsx")
     if file_format == "csv":
-        content = build_export_csv(users, starts_on=starts_on, ends_on=ends_on)
+        content = build_export_csv(
+            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program
+        )
         content_type = "text/csv"
     elif file_format == "pdf":
-        content = build_export_pdf(users, starts_on=starts_on, ends_on=ends_on)
+        content = build_export_pdf(
+            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program
+        )
         content_type = "application/pdf"
     else:
         file_format = "xlsx"
-        content = build_excel_xlsx(users, starts_on=starts_on, ends_on=ends_on)
+        content = build_excel_xlsx(
+            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program
+        )
         content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     response = HttpResponse(content, content_type=content_type)
     response["Content-Disposition"] = f'attachment; filename="MPTS-export-{timezone.localdate()}.{file_format}"'
     AuditLog.record(
         actor=request.user, event_type="ADMIN_EXCEL_EXPORTED",
         description="匯出輔導資料 / Tutoring data exported", metadata={
-            "scope": scope, "users": users.count(), "period_mode": period_mode,
+            "program_id": program.pk, "program_code": program.code,
+            "audience": audience, "users": users.count(), "period_mode": period_mode,
             "semester_id": semester.pk if semester else None,
             "starts_on": str(starts_on), "ends_on": str(ends_on), "file_format": file_format,
+            "fields": export_fields,
         },
     )
     return response

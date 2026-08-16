@@ -59,6 +59,7 @@ from tutoring.services import (
     class_is_valid,
     active_semester,
     semester_applies_to_user,
+    export_users_for_program,
     user_program,
     visible_class_document_programs,
     visible_class_documents,
@@ -101,6 +102,15 @@ from .services import (
     roster_template_xlsx_bytes,
 )
 from .throttle import any_throttled, clear_throttles, register_failures
+
+
+def csrf_failure(request, reason=""):
+    """Keep CSRF protection fail-closed while giving stale tabs a useful recovery path.
+
+    The low-level failure reason is intentionally not rendered because it is only useful
+    in server logs and can expose implementation details to an unauthenticated visitor.
+    """
+    return render(request, "accounts/csrf_failure.html", status=403)
 
 
 def log_event(request, event_type, description, target_user=None, metadata=None):
@@ -362,6 +372,19 @@ def dashboard(request):
         tutor_page = Paginator(tutor_rows, 20).get_page(request.GET.get("class_page"))
         active_overview_classes = [row for row in all_classes if row.status != ClassSessionStatus.CANCELLED]
         incomplete_classes = [row for row in all_classes if row.is_incomplete]
+        export_programs = list(PartnerProgram.objects.order_by("-is_active", "name_zh"))
+        export_user_rows = []
+        export_program_ids_by_user = {}
+        for program in export_programs:
+            for user_id in export_users_for_program(program).values_list("pk", flat=True):
+                export_program_ids_by_user.setdefault(user_id, []).append(str(program.pk))
+        for user in User.objects.exclude(role=Role.ADMIN).select_related(
+            "roster_entry", "roster_entry__program"
+        ).order_by("username"):
+            export_user_rows.append(
+                {"user": user, "program_ids": " ".join(export_program_ids_by_user.get(user.pk, []))}
+            )
+
         context.update(
             {
                 "roster_total": RosterEntry.objects.count(),
@@ -404,13 +427,17 @@ def dashboard(request):
                     "exceptions": len(incomplete_classes),
                 },
                 "anomaly_class_sessions": incomplete_classes[:5],
-                "export_users": User.objects.exclude(role=Role.ADMIN).order_by("username"),
+                "export_programs": export_programs,
+                "export_user_rows": export_user_rows,
                 "export_semesters": overview_semesters,
                 "roster_import_form": RosterImportForm(),
                 "quick_import_programs": PartnerProgram.objects.filter(is_active=True).order_by("name_zh"),
             }
         )
     elif request.user.role == Role.TUTOR:
+        tutee_matching_program = user_program(request.user)
+        if tutee_matching_program is None:
+            tutee_matching_program = PartnerProgram.objects.filter(code="NTNU").first()
         qualification = QualificationDocument.objects.filter(tutor=request.user).first()
         pairings = Pairing.objects.filter(
             semester=current_semester, tutor=request.user, status=PairingStatus.ACTIVE
@@ -451,6 +478,7 @@ def dashboard(request):
                 "active_pairing_count": pairings.count(),
                 "can_match": can_match,
                 "tutee_candidates": candidates,
+                "tutee_matching_program": tutee_matching_program,
                 "tutee_candidate_filters": candidate_filters,
                 "tutee_gender_choices": [choice for choice in GENDER_CHOICES if choice[0]],
                 "tutee_level_choices": OVERALL_LEVEL_CHOICES,
@@ -1120,12 +1148,19 @@ def roster_import_quick(request, category_code):
             "category": category_code,
             "created_count": result.created_count,
             "student_ids": result.created_ids,
+            "updated_count": result.updated_count,
+            "updated_student_ids": result.updated_ids,
             "skipped_existing_count": len(result.skipped_existing_ids),
             "skipped_invalid_count": len(result.skipped_invalid),
             "filename": uploaded_file.name,
         },
     )
     success_text = f"「{category_label}」已新增 {result.created_count} 筆學號。 / Added {result.created_count} student ID(s) to {category_label}."
+    if result.updated_count:
+        success_text += (
+            f" 已補上 {result.updated_count} 筆既有名冊的身分別。 / "
+            f"Filled identity categories for {result.updated_count} existing roster record(s)."
+        )
     if result.skipped_existing_ids:
         success_text += f" 略過 {len(result.skipped_existing_ids)} 筆已存在的學號。 / Skipped {len(result.skipped_existing_ids)} existing ID(s)."
     messages.success(request, success_text)

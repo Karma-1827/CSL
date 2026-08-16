@@ -67,7 +67,6 @@
           <div class="panel-heading"><div><span class="eyebrow">MY RECORD</span><h2>我的課堂紀錄 <small>My class record</small></h2></div></div>
           <form method="post" class="stack-form" enctype="multipart/form-data">
             {% csrf_token %}
-            {% if request.user.role == 'TUTEE' and own_record.attachment %}<p class="current-attachment-note">目前附件 / Current attachment：<a href="{% url 'tutoring:download_class_record_attachment' own_record.pk %}" target="_blank" rel="noopener">{{ own_record.attachment_filename }}</a></p>{% endif %}
             {{ record_form.as_p }}
             {% if record_requires_makeup_reason %}<label class="makeup-reason-field">逾時補登原因 / Makeup reason<em class="required-chip">補登必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補登必填。 / Required for a late makeup record."></textarea></label>{% endif %}
             <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% else %}送出紀錄 / Submit record{% endif %}</button>
@@ -118,5 +117,6 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
-<script src="{% static 'js/class-record-links.js' %}?v=20260807-1" defer></script>
+<script src="{% static 'js/class-record-links.js' %}?v=20260810-1" defer></script>
+<script src="{% static 'js/character-count.js' %}?v=20260810-1" defer></script>
 {% endblock %}

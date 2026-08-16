@@ -65,23 +65,45 @@
 <section class="dashboard-view" data-dashboard-panel="export">
   <div class="view-heading"><span>DATA EXPORT</span><h2>資料匯出 <small>Data export</small></h2></div>
   <form class="data-export-form" action="{% url 'tutoring:export_excel' %}" method="post">{% csrf_token %}
+    <section class="panel export-config-card export-program-card">
+      <div class="export-card-heading"><span>1</span><div><h2>選擇計畫 <small>Select program</small></h2><p>先選擇要匯出的合作計畫，後續名單與期間會自動更新。</p></div></div>
+      <div class="export-program-select"><label>合作計畫 / Partner program<select name="program_id" required data-export-program>{% for program in export_programs %}<option value="{{ program.pk }}"{% if overview_semester.program_id == program.pk %} selected{% endif %}>{{ program.name_zh }} / {{ program.name_en }}{% if not program.is_active %}（已停用 / Inactive）{% endif %}</option>{% endfor %}</select></label></div>
+    </section>
     <section class="panel export-config-card export-audience-card">
-      <div class="export-card-heading"><span>1</span><div><h2>選擇對象 <small>Select users</small></h2><p>選擇全體，或展開名單挑選特定使用者。</p></div></div>
-      <div class="export-choice-row"><label><input type="radio" name="scope" value="all" checked> <span><strong>全體使用者</strong><small>All users</small></span></label><label><input type="radio" name="scope" value="selected"> <span><strong>選取使用者</strong><small>Selected users</small></span></label></div>
-      <details class="export-user-picker" data-export-user-picker>
-        <summary><span><strong>展開使用者名單</strong><small>Open user list</small></span><em data-selected-user-count>0 位已選取 / selected</em></summary>
+      <div class="export-card-heading"><span>2</span><div><h2>選擇對象 <small>Select audience</small></h2><p>匯出計畫內的全部老師、全部學生，或自行勾選特定使用者。</p></div></div>
+      <div class="export-choice-row export-audience-choice-row"><label><input type="radio" name="audience" value="tutors" checked> <span><strong>老師</strong><small>Teachers</small></span></label><label><input type="radio" name="audience" value="tutees"> <span><strong>學生</strong><small>Students</small></span></label><label><input type="radio" name="audience" value="specific"> <span><strong>特定使用者</strong><small>Specific users</small></span></label></div>
+      <details class="export-user-picker" data-export-user-picker open>
+        <summary><span><strong>使用者名單</strong><small>User list</small></span><em data-selected-user-count>0 位已選取 / selected</em></summary>
         <div class="export-user-tools"><label>搜尋 / Search<input type="search" placeholder="姓名或學號 / Name or student ID" data-export-user-search></label><div><button type="button" class="button button-secondary button-small" data-select-visible-users>選取顯示名單 / Select visible</button><button type="button" class="button button-ghost button-small" data-clear-export-users>清除 / Clear</button></div></div>
-        <div class="export-user-grid">{% for user in export_users %}<label data-export-user-row data-search-text="{{ user.bilingual_name }} {{ user.username }} {{ user.get_role_display }}"><input type="checkbox" name="user_ids" value="{{ user.pk }}"><span><strong>{{ user.bilingual_name }}</strong><small>{{ user.username }} · {{ user.get_role_display }}</small></span></label>{% endfor %}</div>
+        <div class="export-user-grid">{% for row in export_user_rows %}{% with user=row.user %}<label data-export-user-row data-program-ids="{{ row.program_ids }}" data-role="{{ user.role }}" data-search-text="{{ user.bilingual_name }} {{ user.username }} {{ user.get_role_display }}"><input type="checkbox" name="user_ids" value="{{ user.pk }}"><span><strong>{{ user.bilingual_name }}</strong><small>{{ user.username }} · {{ user.get_role_display }}</small></span></label>{% endwith %}{% endfor %}</div>
       </details>
     </section>
     <section class="panel export-config-card export-period-card">
-      <div class="export-card-heading"><span>2</span><div><h2>選擇期間 <small>Select period</small></h2><p>依學期或自訂日期範圍匯出課程資料。</p></div></div>
+      <div class="export-card-heading"><span>3</span><div><h2>選擇時間 <small>Select period</small></h2><p>學期選單會依所選計畫更新，也可改用自訂日期範圍。</p></div></div>
       <div class="export-choice-row"><label><input type="radio" name="period_mode" value="semester" checked> <span><strong>選擇學期</strong><small>Semester</small></span></label><label><input type="radio" name="period_mode" value="range"> <span><strong>自訂時間段</strong><small>Date range</small></span></label></div>
-      <div class="export-period-panel" data-export-period-panel="semester"><label>學期 / Semester<select name="semester_id">{% for semester in export_semesters %}<option value="{{ semester.pk }}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></div>
+      <div class="export-period-panel" data-export-period-panel="semester"><label>學期 / Semester<select name="semester_id" data-export-semester>{% for semester in export_semesters %}<option value="{{ semester.pk }}" data-program-id="{% if semester.program_id %}{{ semester.program_id }}{% else %}shared{% endif %}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}{% if not semester.program_id %}（共用 / Shared）{% endif %}</option>{% endfor %}</select><small data-export-semester-empty hidden>此計畫尚未設定可用期間。 / No period is configured for this program.</small></label></div>
       <div class="export-period-panel" data-export-period-panel="range" hidden><label>開始日期 / Start date<input type="date" name="starts_on"></label><span aria-hidden="true">→</span><label>結束日期 / End date<input type="date" name="ends_on"></label></div>
     </section>
+    <section class="panel export-config-card export-fields-card">
+      <div class="export-card-heading"><span>4</span><div><h2>選擇欄位 <small>Select fields</small></h2><p>勾選要顯示在匯出檔案中的使用者與課程資料。</p></div></div>
+      <input type="hidden" name="field_selection_present" value="1">
+      <div class="export-field-toolbar"><strong data-selected-field-count>11 / 11 欄已選取</strong><div><button class="button button-secondary button-small" type="button" data-select-all-export-fields>全選 / Select all</button><button class="button button-ghost button-small" type="button" data-clear-export-fields>清除 / Clear</button></div></div>
+      <div class="export-field-grid">
+        <label><input type="checkbox" name="export_fields" value="student_id" checked><span><strong>學號</strong><small>Student ID</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="name_zh" checked><span><strong>中文姓名</strong><small>Chinese name</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="name_en" checked><span><strong>英文姓名</strong><small>English name</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="role" checked><span><strong>身分</strong><small>Role</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="semester" checked><span><strong>學期</strong><small>Semester</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="date" checked><span><strong>日期</strong><small>Date</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="time" checked><span><strong>時間</strong><small>Time</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="hours" checked><span><strong>時數</strong><small>Hours</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="counterpart_id" checked><span><strong>對方學號</strong><small>Counterpart ID</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="counterpart" checked><span><strong>輔導對象</strong><small>Tutoring counterpart</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="status" checked><span><strong>狀態</strong><small>Status</small></span></label>
+      </div>
+    </section>
     <section class="panel export-config-card export-format-card">
-      <div class="export-card-heading"><span>3</span><div><h2>選擇格式 <small>Select format</small></h2><p>建議使用 .xlsx；.csv 適合匯入其他系統；.pdf 適合直接列印或存檔。</p></div></div>
+      <div class="export-card-heading"><span>5</span><div><h2>選擇格式 <small>Select format</small></h2><p>建議使用 .xlsx；.csv 適合匯入其他系統；.pdf 適合直接列印或存檔。</p></div></div>
       <div class="export-choice-row export-format-choice-row"><label><input type="radio" name="file_format" value="xlsx" checked> <span><strong>Excel (.xlsx)</strong><small>Recommended</small></span></label><label><input type="radio" name="file_format" value="csv"> <span><strong>CSV (.csv)</strong><small>For other systems</small></span></label><label><input type="radio" name="file_format" value="pdf"> <span><strong>PDF (.pdf)</strong><small>Print or archive</small></span></label></div>
     </section>
     <div class="export-submit-row"><button class="button button-primary" type="submit">匯出資料 <small>Export data</small></button></div>
@@ -89,7 +111,7 @@
 </section>
 
 <section class="dashboard-view" data-dashboard-panel="roster-import">
-  <div class="view-heading"><span>ROSTER IMPORT</span><h2>名冊批次匯入 <small>Roster batch import</small></h2><p>只有學號的名單，選對應身分卡片上傳即可；姓名、身份別、學制由學生註冊時自行填寫。已存在的學號會自動略過，不會覆蓋。 / For lists that only have student IDs, pick the matching category card. Names, identity category, and degree level are filled in by students when they register. Existing student IDs are skipped automatically, never overwritten.</p></div>
+  <div class="view-heading"><span>ROSTER IMPORT</span><h2>名冊批次匯入 <small>Roster batch import</small></h2><p>選擇對應計畫與角色卡片，上傳「學號＋身分別」Excel／CSV 名單；舊的單欄學號名單仍可使用。已存在但身分別空白的名冊會自動補上，既有資料不會被覆蓋。 / Select the matching program and role card, then upload an Excel/CSV list with student ID and identity category. Legacy ID-only lists remain supported. Blank identities on existing records are filled without overwriting existing data.</p></div>
 
   <div class="quick-import-grid">
     {% for program in quick_import_programs %}
@@ -107,15 +129,16 @@
             {% endif %}
               {% csrf_token %}
               <input type="file" name="file" accept=".csv,.xlsx" required>
-              <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+              <button class="button button-primary button-small" type="submit">匯入名冊 <small>Import roster</small></button>
             </form>
           </div>
           <div class="quick-import-role-section">
-            <h3>學生名單 <small>Tutee roster</small></h3>
+            <h3>Tutee 名單 <small>Tutee roster</small></h3>
+            <p class="quick-import-card-note">這份名單裡的學生會歸屬於{{ program.name_zh }}，配對範圍、邀請權限與時數證明格式皆依此計畫決定。<br>Students on this list belong to {{ program.name_zh }}; their matching scope, invitation permissions, and certificate format follow this program.</p>
             <form action="{% url 'accounts:roster_import_quick' program.code %}" method="post" enctype="multipart/form-data">
               {% csrf_token %}
               <input type="file" name="file" accept=".csv,.xlsx" required>
-              <button class="button button-primary button-small" type="submit">匯入學號 <small>Import IDs</small></button>
+              <button class="button button-primary button-small" type="submit">匯入名冊 <small>Import roster</small></button>
             </form>
           </div>
         </div>

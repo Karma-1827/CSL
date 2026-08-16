@@ -6,6 +6,7 @@ from unittest.mock import patch
 import openpyxl
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -27,6 +28,7 @@ from .models import (
     RegistrationDraft,
     Role,
     RosterEntry,
+    SecurityQuestionAnswer,
     User,
 )
 
@@ -42,6 +44,17 @@ def minimal_pdf_bytes():
     buffer = io.BytesIO()
     writer.write(buffer)
     return buffer.getvalue()
+
+
+class CsrfFailureViewTests(TestCase):
+    def test_invalid_csrf_token_uses_friendly_failure_page(self):
+        client = Client(enforce_csrf_checks=True)
+        response = client.post(reverse("accounts:login"), {"username": "nobody"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(response, "accounts/csrf_failure.html")
+        self.assertContains(response, "頁面已過期", status_code=403)
+        self.assertContains(response, "您的操作尚未送出", status_code=403)
 
 
 class RegistrationTests(TestCase):
@@ -88,6 +101,7 @@ class RegistrationTests(TestCase):
             reverse("accounts:register"),
             {
                 "student_id": "TEST1001",
+                "registration_identity": "LOCAL",
                 "password1": self.registration_data["password1"],
                 "password2": self.registration_data["password2"],
             },
@@ -103,6 +117,31 @@ class RegistrationTests(TestCase):
         self.assertContains(response, "找不到註冊學號，請聯絡系辦")
         self.assertFalse(User.objects.filter(username="UNKNOWN").exists())
 
+    def test_registration_page_shows_fixed_identity_selector_beside_student_id(self):
+        response = self.client.get(reverse("accounts:register"))
+        self.assertContains(response, 'class="registration-fields-grid"')
+        self.assertContains(response, "身分別 / Identity")
+        self.assertContains(response, 'value="LOCAL"')
+        self.assertContains(response, 'value="OVERSEAS"')
+        self.assertContains(response, 'value="HONG_KONG_MACAO"')
+        self.assertContains(response, 'value="MAINLAND"')
+        self.assertContains(response, 'value="INTERNATIONAL"')
+        self.assertContains(response, 'value="MARYLAND"')
+
+    def test_registration_rejects_identity_that_does_not_match_roster(self):
+        response = self.client.post(
+            reverse("accounts:register"),
+            {
+                "student_id": "TEST1001",
+                "registration_identity": "MARYLAND",
+                "password1": self.registration_data["password1"],
+                "password2": self.registration_data["password2"],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "學號與身分別不符")
+        self.assertFalse(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
+
     def test_registration_claims_roster_and_hashes_answers(self):
         response = self.register_tutor()
         self.assertRedirects(response, reverse("accounts:dashboard"))
@@ -111,18 +150,18 @@ class RegistrationTests(TestCase):
         self.assertEqual(user.role, Role.TUTOR)
         self.assertTrue(user.check_password(self.registration_data["password1"]))
         self.assertEqual(user.email, "test.student@example.com")
-        self.assertEqual(user.nickname, "")
         self.assertIsNotNone(self.roster.claimed_at)
         self.assertFalse(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
         self.assertTrue(TutorProfile.objects.filter(tutor=user).exists())
         self.assertNotIn("Alpha answer", user.security_questions.answer_1_hash)
         self.assertTrue(user.security_questions.check_answers(["alpha ANSWER", "Beta answer", "Gamma answer"]))
 
-    def test_registration_saves_optional_nickname(self):
-        data = self.registration_data | {"nickname": "小華"}
+    def test_registration_cannot_overwrite_identity_verified_by_roster(self):
+        data = self.registration_data | {"identity_category": IdentityCategory.INTERNATIONAL}
         response = self.register_tutor(data)
         self.assertRedirects(response, reverse("accounts:dashboard"))
-        self.assertEqual(User.objects.get(username="TEST1001").nickname, "小華")
+        self.roster.refresh_from_db()
+        self.assertEqual(self.roster.identity_category, IdentityCategory.LOCAL)
 
     def test_registration_rejects_invalid_email(self):
         data = self.registration_data | {"email": "not-an-email"}
@@ -130,11 +169,23 @@ class RegistrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
 
+    def test_tutor_registration_requires_english_name(self):
+        data = self.registration_data | {"name_en": ""}
+        response = self.register_tutor(data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "此欄位為必填欄位")
+        self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
     def test_retired_security_question_rejected_at_registration(self):
         data = self.registration_data | {"question_1": "Q4"}
         self.client.post(
             reverse("accounts:register"),
-            {"student_id": "TEST1001", "password1": data["password1"], "password2": data["password2"]},
+            {
+                "student_id": "TEST1001",
+                "registration_identity": "LOCAL",
+                "password1": data["password1"],
+                "password2": data["password2"],
+            },
         )
         self.client.post(reverse("accounts:register_confirm"))
         response = self.client.post(reverse("accounts:register_tutor"), data)
@@ -145,18 +196,38 @@ class RegistrationTests(TestCase):
         data = self.registration_data | {"question_3": "Q1"}
         self.client.post(
             reverse("accounts:register"),
-            {"student_id": "TEST1001", "password1": data["password1"], "password2": data["password2"]},
+            {
+                "student_id": "TEST1001",
+                "registration_identity": "LOCAL",
+                "password1": data["password1"],
+                "password2": data["password2"],
+            },
         )
         self.client.post(reverse("accounts:register_confirm"))
         response = self.client.post(reverse("accounts:register_tutor"), data)
-        self.assertContains(response, "三題不可重複")
+        self.assertContains(response, "安全問題不可重複")
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
+    def test_security_question_model_rejects_duplicate_questions(self):
+        user = User.objects.create_user(username="SECURITY-CONSTRAINT", password="Test-password-2026")
+        questions = SecurityQuestionAnswer(
+            user=user,
+            question_1="Q1",
+            question_2="Q1",
+            question_3="Q2",
+            answer_1_hash="a",
+            answer_2_hash="b",
+            answer_3_hash="c",
+        )
+        with self.assertRaises(ValidationError):
+            questions.full_clean()
 
     def test_account_does_not_exist_before_profile_setup(self):
         response = self.client.post(
             reverse("accounts:register"),
             {
                 "student_id": "TEST1001",
+                "registration_identity": "LOCAL",
                 "password1": self.registration_data["password1"],
                 "password2": self.registration_data["password2"],
             },
@@ -172,6 +243,7 @@ class RegistrationTests(TestCase):
             reverse("accounts:register"),
             {
                 "student_id": "TEST1001",
+                "registration_identity": "LOCAL",
                 "password1": self.registration_data["password1"],
                 "password2": self.registration_data["password2"],
             },
@@ -239,6 +311,7 @@ class RegistrationTests(TestCase):
             reverse("accounts:register"),
             {
                 "student_id": "TUTEE1001",
+                "registration_identity": "MARYLAND",
                 "password1": "Another-secure-password-2026",
                 "password2": "Another-secure-password-2026",
             },
@@ -247,7 +320,7 @@ class RegistrationTests(TestCase):
         response = self.client.post(reverse("accounts:register_confirm"))
         self.assertRedirects(response, reverse("accounts:register_tutee"))
         data = {
-            "name_zh": "受輔導學生",
+            "name_zh": "",
             "name_en": "Tutee Student",
             "identity_category": "INTERNATIONAL",
             "phone": "0900000000",
@@ -256,7 +329,7 @@ class RegistrationTests(TestCase):
             "native_language": "English",
             "nationality": "United States",
             "department": "Languages",
-            "overall_level": "B1",
+            "overall_level": "HSK9",
             "learning_duration": "1_TO_2_YEARS",
             "level_listening": "3",
             "level_speaking": "2",
@@ -276,11 +349,26 @@ class RegistrationTests(TestCase):
             "answer_3": "Third answer",
             "agree": "on",
         }
+        form_response = self.client.get(reverse("accounts:register_tutee"))
+        self.assertNotContains(form_response, "所屬計畫 / Program")
+        self.assertNotContains(form_response, "University of Maryland")
+
+        missing_english_response = self.client.post(
+            reverse("accounts:register_tutee"), data | {"name_en": ""}
+        )
+        self.assertEqual(missing_english_response.status_code, 200)
+        self.assertContains(missing_english_response, "此欄位為必填欄位")
+        self.assertFalse(User.objects.filter(username="TUTEE1001").exists())
+
         response = self.client.post(reverse("accounts:register_tutee"), data)
         self.assertRedirects(response, reverse("accounts:dashboard"))
         user = User.objects.get(username="TUTEE1001")
         self.assertEqual(user.role, Role.TUTEE)
-        self.assertEqual(TuteeProfile.objects.get(tutee=user).target_skills, ["LISTENING", "SPEAKING"])
+        self.assertEqual(user.name_zh, "")
+        self.assertEqual(user.name_en, "Tutee Student")
+        profile = TuteeProfile.objects.get(tutee=user)
+        self.assertEqual(profile.overall_level, "HSK9")
+        self.assertEqual(profile.target_skills, ["LISTENING", "SPEAKING"])
 
 
 class AccountRecoveryTests(TestCase):
@@ -291,6 +379,7 @@ class AccountRecoveryTests(TestCase):
             reverse("accounts:register"),
             {
                 "student_id": "TEST1001",
+                "registration_identity": "LOCAL",
                 "password1": self.registration_data["password1"],
                 "password2": self.registration_data["password2"],
             },
@@ -310,11 +399,20 @@ class AccountRecoveryTests(TestCase):
         return self.client.post(reverse("accounts:recover"), {**verify_data, "action": "verify"})
 
     def test_valid_answers_allow_password_reset(self):
+        lookup_response = self.client.post(
+            reverse("accounts:recover"), {"student_id": "TEST1001", "action": "lookup"}
+        )
+        self.assertEqual(lookup_response.status_code, 200)
+        self.assertContains(lookup_response, "我第一所就讀的小學名稱？")
+        self.assertContains(lookup_response, "我最喜歡的食物？")
+        self.assertContains(lookup_response, "我最喜歡的一本書？")
+        self.assertNotContains(lookup_response, 'name="question_1"')
         verify_data = {
             "student_id": "TEST1001",
             "answer_1": "Alpha answer",
             "answer_2": "Beta answer",
             "answer_3": "Gamma answer",
+            "action": "verify",
         }
         response = self.lookup_then_verify(verify_data)
         self.assertRedirects(response, reverse("accounts:set_recovered_password"))
@@ -332,11 +430,16 @@ class AccountRecoveryTests(TestCase):
         questions.question_1 = "Q4"
         questions.set_answers(["Homeroom teacher answer", "Beta answer", "Gamma answer"])
         questions.save()
+        lookup_response = self.client.post(
+            reverse("accounts:recover"), {"student_id": "TEST1001", "action": "lookup"}
+        )
+        self.assertContains(lookup_response, "我第一位導師的姓氏？")
         verify_data = {
             "student_id": "TEST1001",
             "answer_1": "Homeroom teacher answer",
             "answer_2": "Beta answer",
             "answer_3": "Gamma answer",
+            "action": "verify",
         }
         response = self.lookup_then_verify(verify_data)
         self.assertRedirects(response, reverse("accounts:set_recovered_password"))
@@ -441,6 +544,14 @@ class LoginLockoutTests(TestCase):
         )
         self.assertContains(response, "嘗試次數過多")
         self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_login_student_id_is_case_insensitive(self):
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": "login-lockout-test", "password": "Correct-password-2026"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertEqual(response.wsgi_request.user, self.user)
 
     def test_successful_login_clears_failed_attempt_count(self):
         for _ in range(3):
@@ -667,9 +778,7 @@ class RosterLookupThrottleTests(TestCase):
 
 
 class PrivateNoStoreMiddlewareTests(TestCase):
-    """Batch 6 item 3 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): logged-in responses must
-    not be cacheable, so the browser back button after logout can't replay a sensitive
-    page."""
+    """Authenticated and public identity flows must never be browser-cacheable."""
 
     def setUp(self):
         self.tutor = User.objects.create_user(username="NOSTORE-TUTOR", password="Test-password-2026", role=Role.TUTOR)
@@ -685,29 +794,47 @@ class PrivateNoStoreMiddlewareTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertEqual(response["Cache-Control"], "private, no-store")
 
-    def test_unauthenticated_login_page_is_not_forced_no_store(self):
-        response = self.client.get(reverse("accounts:login"))
+    def test_public_identity_pages_get_private_no_store(self):
+        view_names = (
+            "accounts:login",
+            "accounts:register",
+            "accounts:register_confirm",
+            "accounts:register_tutor",
+            "accounts:register_tutee",
+            "accounts:recover",
+            "accounts:set_recovered_password",
+        )
+        for view_name in view_names:
+            with self.subTest(view_name=view_name):
+                response = self.client.get(reverse(view_name))
+                self.assertEqual(response["Cache-Control"], "private, no-store")
+                self.assertEqual(response["Pragma"], "no-cache")
+                self.assertEqual(response["Expires"], "0")
+
+    def test_unrelated_public_page_is_not_forced_no_store(self):
+        response = self.client.get("/this-page-does-not-exist/")
         self.assertNotEqual(response.get("Cache-Control"), "private, no-store")
 
 
 class ContentSecurityPolicyMiddlewareTests(TestCase):
-    """Batch 6 item 5 (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md): CSP ships in
-    Report-Only mode first, on every response, without any 'unsafe-inline'."""
+    """The enforcing CSP is present on every response without unsafe fallbacks."""
 
-    def test_login_page_carries_report_only_csp_header(self):
+    def test_login_page_carries_enforcing_csp_header(self):
         response = self.client.get(reverse("accounts:login"))
-        header = response["Content-Security-Policy-Report-Only"]
+        header = response["Content-Security-Policy"]
         self.assertIn("default-src 'self'", header)
         self.assertIn("script-src-attr 'none'", header)
         self.assertIn("frame-ancestors 'none'", header)
         self.assertNotIn("unsafe-inline", header)
-        self.assertNotIn("Content-Security-Policy", response.headers)
+        self.assertNotIn("Content-Security-Policy-Report-Only", response.headers)
+        self.assertIn("camera=()", response["Permissions-Policy"])
+        self.assertIn("microphone=()", response["Permissions-Policy"])
 
     def test_authenticated_dashboard_also_carries_the_policy(self):
         tutor = User.objects.create_user(username="CSP-TUTOR", password="Test-password-2026", role=Role.TUTOR)
         self.client.force_login(tutor)
         response = self.client.get(reverse("accounts:dashboard"))
-        self.assertIn("default-src 'self'", response["Content-Security-Policy-Report-Only"])
+        self.assertIn("default-src 'self'", response["Content-Security-Policy"])
 
 
 class QualificationTests(TestCase):
@@ -1093,7 +1220,7 @@ class QuickRosterImportTests(TestCase):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         for row in rows:
-            sheet.append([row])
+            sheet.append(list(row) if isinstance(row, (list, tuple)) else [row])
         buffer = io.BytesIO()
         workbook.save(buffer)
         return SimpleUploadedFile(
@@ -1127,6 +1254,84 @@ class QuickRosterImportTests(TestCase):
         entry = RosterEntry.objects.get(student_id="S30200001")
         self.assertEqual(entry.role, Role.TUTEE)
         self.assertEqual(entry.program_id, self.ntnu.pk)
+
+    def test_quick_import_reads_student_id_and_identity_from_two_column_xlsx(self):
+        self.client.force_login(self.admin)
+        upload = self._xlsx_upload(
+            "ST101.xlsx",
+            [
+                ("學號", "入學身份"),
+                ("S30210001", "僑生"),
+                ("S30210002", "港澳生"),
+                ("S30210003", "陸生"),
+                ("S30210004", "外國學生"),
+                ("S30210005", "本地生"),
+            ],
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["NTNU"]), {"file": upload}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#roster-import")
+        expected = {
+            "S30210001": IdentityCategory.OVERSEAS,
+            "S30210002": IdentityCategory.HONG_KONG_MACAO,
+            "S30210003": IdentityCategory.MAINLAND,
+            "S30210004": IdentityCategory.INTERNATIONAL,
+            "S30210005": IdentityCategory.LOCAL,
+        }
+        actual = dict(
+            RosterEntry.objects.filter(student_id__in=expected).values_list(
+                "student_id", "identity_category"
+            )
+        )
+        self.assertEqual(actual, expected)
+
+    def test_quick_import_backfills_blank_identity_without_overwriting_existing_value(self):
+        blank_entry = RosterEntry.objects.create(
+            student_id="S30220001", role=Role.TUTEE, program=self.ntnu
+        )
+        existing_entry = RosterEntry.objects.create(
+            student_id="S30220002",
+            role=Role.TUTEE,
+            program=self.ntnu,
+            identity_category=IdentityCategory.LOCAL,
+        )
+        self.client.force_login(self.admin)
+        upload = self._xlsx_upload(
+            "ST101.xlsx",
+            [
+                ("學號", "入學身份"),
+                (blank_entry.student_id, "僑生"),
+                (existing_entry.student_id, "外國學生"),
+            ],
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["NTNU"]),
+            {"file": upload},
+            follow=True,
+        )
+        blank_entry.refresh_from_db()
+        existing_entry.refresh_from_db()
+        self.assertEqual(blank_entry.identity_category, IdentityCategory.OVERSEAS)
+        self.assertEqual(existing_entry.identity_category, IdentityCategory.LOCAL)
+        self.assertContains(response, "已補上 1 筆")
+        self.assertContains(response, "保留系統原資料")
+        log = AuditLog.objects.get(event_type="ROSTER_IMPORTED")
+        self.assertEqual(log.metadata["updated_count"], 1)
+
+    def test_quick_import_skips_unknown_identity_value(self):
+        self.client.force_login(self.admin)
+        upload = self._xlsx_upload(
+            "unknown_identity.xlsx",
+            [("學號", "入學身份"), ("S30230001", "未知身分")],
+        )
+        response = self.client.post(
+            reverse("accounts:roster_import_quick", args=["NTNU"]),
+            {"file": upload},
+            follow=True,
+        )
+        self.assertFalse(RosterEntry.objects.filter(student_id="S30230001").exists())
+        self.assertContains(response, "無法識別身分別")
 
     def test_quick_import_tutor_program_category_creates_maryland_tutor_roster_entries(self):
         """Item 4: a program-scoped Tutor import card (e.g. Maryland's course roster) creates
@@ -1255,7 +1460,6 @@ class ProfileEditTests(TestCase):
             {
                 "phone": "0911222333",
                 "email": "tutor.edit@example.com",
-                "nickname": "小王",
                 "gender": "MALE",
                 "native_language": "Mandarin Chinese",
                 "nationality": "Taiwan",
@@ -1274,7 +1478,6 @@ class ProfileEditTests(TestCase):
         self.tutor_profile.refresh_from_db()
         self.assertEqual(self.tutor.phone, "0911222333")
         self.assertEqual(self.tutor.email, "tutor.edit@example.com")
-        self.assertEqual(self.tutor.nickname, "小王")
         self.assertEqual(self.tutor_profile.department, "應用華語文學系")
         self.assertEqual(self.tutor_profile.level_listening, 5)
         self.assertEqual(self.tutor_profile.teaching_notes, "更新後的教學簡介")

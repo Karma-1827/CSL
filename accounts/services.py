@@ -32,6 +32,8 @@ class RosterImportFileError(Exception):
 class RosterImportResult:
     created_count: int = 0
     created_ids: list = field(default_factory=list)
+    updated_count: int = 0
+    updated_ids: list = field(default_factory=list)
     skipped_existing_ids: list = field(default_factory=list)
     skipped_invalid: list = field(default_factory=list)
     errors: list = field(default_factory=list)
@@ -204,13 +206,56 @@ def import_roster_entries(uploaded_file):
 
 _STUDENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{4,24}$")
 
+_STUDENT_ID_HEADERS = {"學號", "學生學號", "studentid", "student_id"}
+_IDENTITY_IMPORT_ALIASES = {
+    "local": IdentityCategory.LOCAL,
+    "domesticstudent": IdentityCategory.LOCAL,
+    "本地生": IdentityCategory.LOCAL,
+    "本國生": IdentityCategory.LOCAL,
+    "overseas": IdentityCategory.OVERSEAS,
+    "overseaschinesestudent": IdentityCategory.OVERSEAS,
+    "僑生": IdentityCategory.OVERSEAS,
+    "hongkongmacao": IdentityCategory.HONG_KONG_MACAO,
+    "hongkongandmacaostudent": IdentityCategory.HONG_KONG_MACAO,
+    "港澳生": IdentityCategory.HONG_KONG_MACAO,
+    "mainland": IdentityCategory.MAINLAND,
+    "mainlandchinesestudent": IdentityCategory.MAINLAND,
+    "陸生": IdentityCategory.MAINLAND,
+    "international": IdentityCategory.INTERNATIONAL,
+    "internationalstudent": IdentityCategory.INTERNATIONAL,
+    "foreignstudent": IdentityCategory.INTERNATIONAL,
+    "外籍生": IdentityCategory.INTERNATIONAL,
+    "外國學生": IdentityCategory.INTERNATIONAL,
+    "國際學生": IdentityCategory.INTERNATIONAL,
+    # Maryland is represented by PartnerProgram rather than a fifth model-level identity;
+    # its registration selector derives MARYLAND from role + program.
+    "marylandstudent": IdentityCategory.INTERNATIONAL,
+    "馬里蘭學生": IdentityCategory.INTERNATIONAL,
+}
 
-def _read_single_column_values(uploaded_file):
-    """Read every non-empty cell from the first column of a CSV/.xlsx file.
+
+def _compact_import_label(raw_value):
+    return re.sub(r"[\s/_\-]+", "", _clean_str(raw_value)).lower()
+
+
+def _parse_quick_identity(raw_value):
+    value = _clean_str(raw_value)
+    if not value:
+        return ""
+    compact = _compact_import_label(value)
+    if compact in _IDENTITY_IMPORT_ALIASES:
+        return _IDENTITY_IMPORT_ALIASES[compact]
+    upper_value = value.upper()
+    return upper_value if upper_value in IdentityCategory.values else None
+
+
+def _read_quick_roster_rows(uploaded_file):
+    """Read student ID and optional identity from the first two columns.
 
     Source lists are often messy (a title row, a Chinese header row, stray
-    whitespace) rather than a clean single-column export, so this reads every
-    row rather than assuming a specific header.
+    whitespace) rather than a clean export, so this reads every row rather than
+    assuming a specific header. The second column remains optional for backwards
+    compatibility with historical ID-only lists.
     """
     name = uploaded_file.name.lower()
     values = []
@@ -218,44 +263,55 @@ def _read_single_column_values(uploaded_file):
         raw = uploaded_file.read().decode("utf-8-sig")
         for row_num, row in enumerate(csv.reader(io.StringIO(raw)), start=1):
             if row and row[0] is not None and str(row[0]).strip():
-                values.append((row_num, str(row[0]).strip()))
+                identity = row[1] if len(row) > 1 else ""
+                values.append((row_num, str(row[0]).strip(), identity))
     elif name.endswith(".xlsx"):
         workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
         sheet = workbook.worksheets[0]
         for row_num, row in enumerate(sheet.iter_rows(values_only=True), start=1):
             cell = row[0] if row else None
             if cell is not None and str(cell).strip():
-                values.append((row_num, str(cell).strip()))
+                identity = row[1] if len(row) > 1 else ""
+                values.append((row_num, str(cell).strip(), identity))
     else:
         raise RosterImportFileError("僅支援 .csv 或 .xlsx 檔案。 / Only .csv or .xlsx files are supported.")
     return values
 
 
 def import_roster_ids(uploaded_file, *, role, program=None):
-    """Quick import: a single-column list of student IDs, classified entirely
-    by which category (role/program) the admin picked, matching separately
-    supplied source lists per program."""
-    raw_values = _read_single_column_values(uploaded_file)
+    """Quick import: student IDs plus an optional identity-category column.
+
+    Role/program still come from the Admin card selected for upload. Identity is
+    read from column two when present; re-uploading may fill a previously blank
+    identity but never overwrites an existing non-blank administrative value.
+    """
+    raw_values = _read_quick_roster_rows(uploaded_file)
     if not raw_values:
         return RosterImportResult(errors=["檔案沒有任何資料列。 / The file has no data rows."])
 
-    seen = set()
-    candidate_ids = []
+    candidates = {}
     skipped_invalid = []
-    for row_num, raw_value in raw_values:
+    for row_num, raw_value, raw_identity in raw_values:
         candidate = raw_value.strip().upper()
+        if _compact_import_label(raw_value) in _STUDENT_ID_HEADERS:
+            continue
         if not _STUDENT_ID_PATTERN.match(candidate):
             skipped_invalid.append(f"第 {row_num} 列：「{raw_value}」不是有效學號格式，已略過。 / Row {row_num}: not a valid student ID, skipped.")
             continue
-        if candidate in seen:
+        identity_category = _parse_quick_identity(raw_identity)
+        if identity_category is None:
+            skipped_invalid.append(
+                f"第 {row_num} 列：無法識別身分別「{raw_identity}」，已略過。 / "
+                f"Row {row_num}: unknown identity category, skipped."
+            )
             continue
-        seen.add(candidate)
-        candidate_ids.append(candidate)
+        if candidate not in candidates or (not candidates[candidate] and identity_category):
+            candidates[candidate] = identity_category
 
-    existing_ids = set(
-        RosterEntry.objects.filter(student_id__in=candidate_ids).values_list("student_id", flat=True)
-    )
-    new_ids = [sid for sid in candidate_ids if sid not in existing_ids]
+    existing_entries = RosterEntry.objects.in_bulk(candidates, field_name="student_id")
+    new_ids = [student_id for student_id in candidates if student_id not in existing_entries]
+    updated_ids = []
+    skipped_existing_ids = []
 
     with transaction.atomic():
         for student_id in new_ids:
@@ -263,13 +319,30 @@ def import_roster_ids(uploaded_file, *, role, program=None):
                 student_id=student_id,
                 role=role,
                 program=program,
+                identity_category=candidates[student_id],
             )
             entry.full_clean(exclude=["id"])
             entry.save()
+        for student_id, entry in existing_entries.items():
+            incoming_identity = candidates[student_id]
+            if incoming_identity and not entry.identity_category:
+                entry.identity_category = incoming_identity
+                entry.full_clean(exclude=["id"])
+                entry.save(update_fields=["identity_category", "updated_at"])
+                updated_ids.append(student_id)
+            else:
+                skipped_existing_ids.append(student_id)
+                if incoming_identity and entry.identity_category != incoming_identity:
+                    skipped_invalid.append(
+                        f"學號 {student_id} 已有不同身分別，保留系統原資料。 / "
+                        f"Student ID {student_id} already has a different identity; existing data was kept."
+                    )
 
     return RosterImportResult(
         created_count=len(new_ids),
         created_ids=new_ids,
-        skipped_existing_ids=sorted(existing_ids),
+        updated_count=len(updated_ids),
+        updated_ids=sorted(updated_ids),
+        skipped_existing_ids=sorted(skipped_existing_ids),
         skipped_invalid=skipped_invalid,
     )

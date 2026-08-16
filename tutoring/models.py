@@ -620,10 +620,10 @@ class ClassRecord(models.Model):
     author = models.ForeignKey(User, on_delete=models.PROTECT, related_name="class_records")
     location = models.CharField("上課地點 / Location", max_length=150)
     topic = models.CharField("課堂主題 / Topic", max_length=200)
-    content = models.TextField("課堂內容 / Class content", max_length=2000)
+    content = models.TextField("課堂內容 / Class content", max_length=500)
     reflection = models.TextField("學習成果與回饋 / Outcome and reflection")
     skills_practiced = models.JSONField("授課類型 / Skills practiced", default=list, blank=True)
-    remarks = models.TextField("備註 / Remarks", max_length=2000, blank=True)
+    remarks = models.TextField("備註 / Remarks", max_length=500, blank=True)
     attachment = models.FileField(
         "附件 / Attachment",
         upload_to=class_record_attachment_upload_to,
@@ -633,7 +633,7 @@ class ClassRecord(models.Model):
     original_attachment_filename = models.CharField(max_length=255, blank=True)
     evidence_links = models.JSONField(
         "佐證連結 / Evidence links", default=list, blank=True,
-        help_text="僅 Tutor 課堂紀錄使用,取代附件上傳(item 14)。 / Tutor-only, replaces the file attachment.",
+        help_text="雙方課堂紀錄皆使用佐證連結。 / Evidence links are required for both participants.",
     )
     submitted_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -20,6 +20,12 @@ media/
 # 學校提供的內部行政/資安文件(非公開,不進版控)
 學校文件/
 
+# 私有授權字型與系戳(須由獲授權的部署環境另行提供,不得推送至公開 repository)
+assets/fonts/DFLiSongStd-W*.otf
+assets/fonts/DFLiSongStd-W*.ttf
+assets/fonts/Helvetica Neue*.ttf
+assets/certificates/
+
 # 本機人工檢查用預覽與會議用二進位文件(PDF/DOCX),不是正式資料來源,也不適合放進版控
 output/
 

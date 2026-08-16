@@ -175,28 +175,26 @@ class ClassRecordForm(forms.ModelForm):
         model = ClassRecord
         fields = ("location", "topic", "content", "skills_practiced", "remarks", "attachment", "evidence_links")
         widgets = {
-            "content": forms.Textarea(attrs={"rows": 5, "maxlength": 2000}),
-            "remarks": forms.Textarea(attrs={"rows": 5, "maxlength": 2000}),
+            "content": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
+            "remarks": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
             "attachment": forms.FileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         }
 
     def __init__(self, *args, author=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["attachment"].help_text = "PDF、JPG、PNG，最大 500 KB（選填）。\nPDF, JPG, or PNG, up to 500 KB (optional)."
-        self.fields["evidence_links"].help_text = (
-            "請提供 1–5 個可供對方及系辦查看的上課佐證連結。請確認分享權限，並於本次實習／輔導階段結束後至少 "
-            "10 天再刪除或下架；若查核時無法查看，該堂時數可能不予採計。\n"
-            "Provide 1–5 accessible evidence links. Check the sharing permissions and keep the links available for "
-            "at least 10 days after the practicum or tutoring stage ends. Hours may not be counted if the evidence "
-            "cannot be reviewed."
+        self.fields["evidence_links"].help_text = mark_safe(
+            '<span class="evidence-help-points">'
+            '<span><b>1</b><span>請提供 1–5 個可供對方及管理者查看的當次上課佐證連結，例如上課畫面截圖、教材、作業或錄影。'
+            '<small>Provide 1–5 accessible links showing evidence of this class, such as class screenshots, teaching materials, assignments, or recordings, for your partner and administrators to review.</small></span></span>'
+            '<span><b>2</b><span>請確認分享權限（共用檢視權限），確保對方及管理者可直接開啟查看。'
+            '<small>Confirm that the link-sharing permissions allow your partner and administrators to open and view the evidence.</small></span></span>'
+            '<span><b>3</b><span>請於本次實習／輔導階段結束後至少 10 天再刪除或下架；若查核時無法查看，該堂時數可能不予採計。'
+            '<small>Keep the links available for at least 10 days after the practicum or tutoring stage ends. Hours may not be counted if the evidence cannot be reviewed.</small></span></span>'
+            "</span>"
         )
-        # Tutors submit evidence links instead of an attachment (item 14); Tutees keep the
-        # original optional attachment and never see the links field. Author is unknown in
-        # a few call sites (e.g. field-level unit tests) — default to the Tutee shape there.
-        if author is not None and author.role == Role.TUTOR:
-            del self.fields["attachment"]
-        else:
-            del self.fields["evidence_links"]
+        # Both participants now submit the same 1–5 evidence links. The attachment model
+        # field remains only so historical records created before this change stay readable.
+        del self.fields["attachment"]
 
 
 class ClassAlertForm(forms.ModelForm):
@@ -332,7 +330,7 @@ class HoursDownloadForm(forms.Form):
         label="證明語言 / Certificate language",
         choices=LANGUAGE_CHOICES,
         initial="zh",
-        widget=forms.RadioSelect,
+        widget=forms.Select,
     )
     version = forms.ChoiceField(
         label="證明版本 / Certificate version",

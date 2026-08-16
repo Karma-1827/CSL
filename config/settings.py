@@ -22,6 +22,7 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+CSRF_FAILURE_VIEW = "accounts.views.csrf_failure"
 
 # How many reverse-proxy hops in front of this app add their own trustworthy
 # X-Forwarded-For value (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5). Defaults to 0

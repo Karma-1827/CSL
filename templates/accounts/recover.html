@@ -5,20 +5,26 @@
 {% block auth_content %}
 <div class="section-kicker">ACCOUNT RECOVERY</div>
 <h2>重設密碼 <span>Reset password</span></h2>
-<p class="section-intro">請選擇註冊時設定的三個問題並輸入答案。<br>Select the three questions used at registration and enter your answers.</p>
+{% if answer_form %}
+<p class="section-intro">請回答註冊時設定的三個安全問題。<br>Answer the three security questions selected during registration.</p>
 <form method="post" class="stack-form" novalidate>
   {% csrf_token %}
-  {% include "components/form_field.html" with field=form.student_id %}
+  <input type="hidden" name="student_id" value="{{ student_id }}">
   <div class="question-grid">
-    {% include "components/form_field.html" with field=form.question_1 %}
-    {% include "components/form_field.html" with field=form.answer_1 %}
-    {% include "components/form_field.html" with field=form.question_2 %}
-    {% include "components/form_field.html" with field=form.answer_2 %}
-    {% include "components/form_field.html" with field=form.question_3 %}
-    {% include "components/form_field.html" with field=form.answer_3 %}
+    {% include "components/form_field.html" with field=answer_form.answer_1 %}
+    {% include "components/form_field.html" with field=answer_form.answer_2 %}
+    {% include "components/form_field.html" with field=answer_form.answer_3 %}
   </div>
-  <button class="button button-primary button-full" type="submit">驗證身分 <span>Verify identity</span></button>
+  <button class="button button-primary button-full" type="submit" name="action" value="verify">驗證身分 <span>Verify identity</span></button>
 </form>
+<p class="auth-switch"><a href="{% url 'accounts:recover' %}">更換學號 / Use another student ID</a></p>
+{% else %}
+<p class="section-intro">請先輸入學號，系統將顯示您註冊時設定的三個安全問題。<br>Enter your student ID to view the three security questions selected during registration.</p>
+<form method="post" class="stack-form" novalidate>
+  {% csrf_token %}
+  {% include "components/form_field.html" with field=lookup_form.student_id %}
+  <button class="button button-primary button-full" type="submit" name="action" value="lookup">下一步 <span>Continue</span></button>
+</form>
+{% endif %}
 <p class="auth-switch"><a href="{% url 'accounts:login' %}">返回登入 / Back to sign in</a></p>
 {% endblock %}
-

@@ -36,7 +36,7 @@
             <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#find-tutee" data-dashboard-target="find-tutee"><span aria-hidden="true">⌕</span><b>尋找學生<small>Find students</small></b></a>
             <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力<small>Oral proficiency</small></b></a>
+            <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力證明<small>Oral proficiency</small></b></a>
           {% else %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             <a class="sidebar-link" href="#schedule" data-dashboard-target="schedule"><span aria-hidden="true">▦</span><b>我的課表<small>Schedule</small></b></a>
@@ -131,7 +131,7 @@
             <span class="semester-add-icon" aria-hidden="true">＋</span>
             <span><strong>Admin 手動配對</strong><small>Admin manual pairing</small></span>
           </summary>
-          <form class="schedule-form semester-form" action="{% url 'tutoring:create_pairing' %}" method="post">
+          <form class="schedule-form semester-form admin-pairing-form" action="{% url 'tutoring:create_pairing' %}" method="post">
             {% csrf_token %}{{ admin_pairing_form.as_div }}
             <p class="semester-edit-warning">不需雙方邀請，送出後立即建立配對；一般 NTNU 計畫仍維持 Tutor 同時最多 2 位 Tutee，非 NTNU 計畫才能額外安排第 3 位。<br>No invitation needed — the pairing is created immediately. NTNU still caps a tutor at 2 active tutees; only non-NTNU programs allow a 3rd.</p>
             <button class="button button-primary button-small" type="submit">建立配對 / Create pairing</button>
@@ -252,10 +252,10 @@
       {% include "dashboard/schedule_panel.html" %}
       {% include "dashboard/participant_v2_panels.html" %}
       <section class="dashboard-view" data-dashboard-panel="qualification">
-        <div class="view-heading"><span>QUALIFICATION</span><h2>口語能力 <small>Oral proficiency</small></h2></div>
-        <section class="panel status-panel focused-panel">
+        <div class="view-heading"><span>QUALIFICATION</span><h2>口語能力證明 <small>Oral proficiency</small></h2></div>
+        <section class="panel status-panel">
           <span class="eyebrow">QUALIFICATION</span>
-          <h2>口語能力 <small>Oral proficiency</small></h2>
+          <h2>口語能力證明 <small>Oral proficiency</small></h2>
           {% if qualification %}
             <div class="status-badge status-{{ qualification.status|lower }}">{{ qualification.get_status_display }}</div>
             <p>檔案 / File: <strong>{{ qualification.original_filename }}</strong></p>
@@ -268,6 +268,7 @@
             {% csrf_token %}
             {{ qualification_form.file }}
             <p class="help-text">{{ qualification_form.file.help_text }}</p>
+            {% include "accounts/qualification_document_note.html" %}
             <button class="button button-primary" type="submit">{% if qualification %}重新送審 / Resubmit{% else %}上傳證明 / Upload{% endif %}</button>
           </form>
         </section>
@@ -307,7 +308,7 @@
       <section class="dashboard-view" data-dashboard-panel="find-tutee">
         <div class="view-heading"><span>STUDENT MATCHING</span><h2>尋找學生 <small>Find students</small></h2></div>
       <section class="panel candidate-search-panel">
-        <div class="panel-heading"><div><span class="eyebrow">STUDENT MATCHING</span><h2>外籍學生 <small>International students</small></h2></div></div>
+        <div class="panel-heading"><div><span class="eyebrow">STUDENT MATCHING</span><h2>{% if tutee_matching_program %}{{ tutee_matching_program.name_zh }} <small>{{ tutee_matching_program.name_en }}</small>{% else %}學生 <small>Students</small>{% endif %}</h2></div></div>
         {% if can_match %}
         <details class="candidate-filter-disclosure">
           <summary class="candidate-filter-toggle">搜尋條件 / Search filters</summary>
@@ -424,7 +425,7 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
-<script src="{% static 'js/dashboard.js' %}?v=20260724-hours-download-ui" defer></script>
+<script src="{% static 'js/dashboard.js' %}?v=20260811-csrf-refresh" defer></script>
 <script src="{% static 'js/profile-options.js' %}" defer></script>
 <script src="{% static 'js/confirm-submit.js' %}?v=20260809-1" defer></script>
 {% endblock %}

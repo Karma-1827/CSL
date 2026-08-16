@@ -5,6 +5,8 @@
 > 性質：已確認需求與實作規格；若本文件與舊版 `CLAUDE.md`、`docs/PROGRESS.md` 文案衝突，以本文件為準，完成後再同步更新其他文件。  
 > 重要原則：保留既有資料與 migrations，不得重建資料庫、刪除歷史紀錄或使用破壞性 Git 指令。
 
+> **2026-08-10 後續決議（優先於本會議歷史規格）**：本文件保留 2026-08-04 當時的討論脈絡，但其中「暱稱」、「只有 Tutor 使用佐證連結／Tutee 使用附件」及「課堂紀錄 2000 字」已被後續決議取代。現行規則為：全面移除暱稱；Tutor/Tutee 都須填 1–5 個佐證連結且目前表單都不再上傳附件；課堂紀錄內容與備註均以 500 字為上限並顯示即時計數；安全問題三題不得重複；身份別另新增港澳生。最新狀態以 `CLAUDE.md` 與 `docs/PROGRESS.md` 為準。
+
 ## 一、實作前先理解的總原則
 
 1. 系統正式名稱改為「華語實習暨輔導系統 / Mandarin Practicum and Tutoring System」，簡稱 `MPTS`。
@@ -259,8 +261,8 @@ Tutee 仍須提交自己的課堂紀錄，但不需要填佐證連結。
 
 提示文案：
 
-> 請提供 1–5 個可供對方及系辦查看的上課佐證連結。請確認分享權限，並於本次實習／輔導階段結束後至少 10 天再刪除或下架；若查核時無法查看，該堂時數可能不予採計。  
-> Provide 1–5 accessible evidence links. Check the sharing permissions and keep the links available for at least 10 days after the practicum or tutoring stage ends. Hours may not be counted if the evidence cannot be reviewed.
+> 請提供 1–5 個可供對方及管理者查看的當次上課佐證連結，例如上課畫面截圖、教材、作業或錄影。請確認分享權限（共用檢視權限），並於本次實習／輔導階段結束後至少 10 天再刪除或下架；若查核時無法查看，該堂時數可能不予採計。
+> Provide 1–5 accessible links showing evidence of this class, such as class screenshots, teaching materials, assignments, or recordings, for your partner and administrators to review. Confirm that the link-sharing permissions allow viewing, and keep the links available for at least 10 days after the practicum or tutoring stage ends. Hours may not be counted if the evidence cannot be reviewed.
 
 權限判斷：系統不串接 Google Drive／YouTube API，也不做自動存取、權限或失效偵測。現有互相確認流程即為檢查機制：Tutee 點開 Tutor 的連結，若無法查看，向 Tutor 反映或選擇請對方修改；Admin 仍可人工抽查。
 

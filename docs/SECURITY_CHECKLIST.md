@@ -81,11 +81,11 @@
 | 29 | 普 | 識別鑑別使用者,禁止共用帳號 | ✅ | 學號即帳號,`RosterEntry.student_id`/`User.username` 皆為唯一約束,不存在共用帳號設計。 |
 | 30 | 普 | 預設密碼首次登入應強制變更 | ⬜ | 註冊時使用者自訂密碼,系統從不指派預設密碼,此情境不存在。 |
 | 31 | 普 | 身分驗證資訊不以明文傳輸 | 🟡 | 待 HTTPS 上線(見第 11 項),目前本機開發是 HTTP。 |
-| 32 | 普 | 帳戶鎖定機制(5 次失敗鎖 15 分鐘) | 🟡 | `BilingualAuthenticationForm.clean()`(`accounts/forms.py`)與忘記密碼流程已有「同 IP+學號 5 次失敗後鎖 15 分鐘」初版邏輯,但目前使用 Django 預設 `LocMemCache`,多個 Gunicorn worker 不共享計數、服務重啟會歸零;正式環境改成 PostgreSQL/Redis 等共享儲存前只能算部分符合。 |
+| 32 | 普 | 帳戶鎖定機制(5 次失敗鎖 15 分鐘) | ✅ | 登入、帳號恢復與 Django Admin 均有「IP＋帳號 5 次失敗鎖 15 分鐘」及跨 IP 單一帳號第二層限制；計數存於 PostgreSQL `django_cache_table`，跨 Gunicorn worker 共享且不因單一 worker 重啟歸零。 |
 | 33 | 普 | 密碼複雜度 + 密碼效期 | 🟡 | 已有長度 ≥10、常見密碼、相似性、純數字四項驗證器,複雜度尚可;但沒有強制最短/最長效期,密碼可以永久不改。 |
 | 34 | 普 | 密碼變更不可與前 3 次相同 | ❌ | 未實作密碼歷程紀錄。 |
 | 35 | 普 | 外部使用者身分驗證規範可自訂 | ⬜ | 系統沒有匿名/外部使用者,全部是名冊制的校內師生帳號。 |
-| 36 | 中 | 防範自動化程式登入嘗試 | 🟡 | 忘記密碼與一般登入已有「同 IP+學號 15 分鐘最多 5 次」初版節流(`recover_account`/`BilingualAuthenticationForm.clean()`),但目前直接採用外部傳入的 `X-Forwarded-For` 第一個值,可偽造 IP 切換節流 key,且 `LocMemCache` 不適合多 worker。完成可信 proxy IP 與共享節流儲存前只能算部分符合。 |
+| 36 | 中 | 防範自動化程式登入嘗試 | 🟡 | 登入、名冊查詢、帳號恢復及 Django Admin 已使用 PostgreSQL 共享節流，並同時限制 IP＋帳號與跨 IP 單一帳號。`client_ip()` 預設不信任外部 `X-Forwarded-For`，Nginx 範本亦會覆寫該標頭；程式碼控制已完成，但正式 VM 的 proxy 層數與不同來源 IP 實測尚未完成，因此維持部分符合。 |
 | 37 | 中 | 密碼重設用一次性、時效性 token | 🟡 | 系統刻意不做 Email/簡訊驗證(見 `CLAUDE.md` 系統邊界),改用「學號＋三題安全問題」,驗證成功後 10 分鐘內須完成新密碼設定——效果類似時效性 token,但不是控制措施原文設想的 email/簡訊管道,**需要跟系辦確認這個替代設計是否可以被認可為符合**。 |
 | 38 | 普 | 遮蔽鑑別過程資訊 | ✅ | 標準 `<input type="password">`,瀏覽器預設遮蔽。 |
 | 39 | 中 | 密碼應雜湊儲存 | ✅ | Django 預設 PBKDF2-SHA256 加鹽雜湊,已符合。 |
@@ -115,7 +115,7 @@
 
 | # | 等級 | 控制措施 | 狀態 | CSL 現況與待辦 |
 | - | - | - | - | - |
-| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到 `Pillow 12.3.0`、`pypdf 6.14.2`。**2026-08-08 再次掃出 `pypdf 6.14.2` 的 2 個新公開 CVE(CVE-2026-71852、CVE-2026-71870),已升級到 `pypdf 6.15.0`**,`pip-audit` 重跑確認 0 已知漏洞。升級前查過 Pillow 12.0 的破壞性變更(`ImageCms`/`fromarray()`/`ImageMorph`,專案完全沒用到這些 API,風險低;而且專案其實沒有任何程式碼直接 `import PIL`,`Pillow` 只是宣告的依賴,未被直接呼叫);pypdf 只用到穩定的 `PdfReader`/`PdfWriter`/`merge_page`/`add_page`/`encrypt` 基本 API。每次升級後都重新產生 NTNU/Maryland 摘要版、詳細版(含跨頁)、Admin 匯出 PDF,用 Poppler 轉圖比對確認排版、加密權限旗標與升級前一致;完整測試套件亦全數通過。CI 的 `pip-audit` step 維持會擋 build(非 `continue-on-error`)。 |
+| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到安全版本。**2026-08-08 再次掃出 `pypdf 6.14.2` 的 2 個新公開 CVE(CVE-2026-71852、CVE-2026-71870),已升級到 `pypdf 6.15.0`**,`pip-audit` 重跑確認 0 已知漏洞。Pillow 現用於 JPG/PNG 上傳內容與尺寸驗證；pypdf 用於 PDF 上傳結構驗證及證明產製。每次升級後都重新產生 NTNU/Maryland 摘要版、詳細版(含跨頁)、Admin 匯出 PDF,用 Poppler 轉圖比對確認排版、加密權限旗標與升級前一致;完整測試套件亦全數通過。CI 的 `pip-audit` step 維持會擋 build(非 `continue-on-error`)。 |
 | 57 | 中 | 定期確認漏洞修復狀態 | ✅ | 2026-08-08 為 `.github/workflows/ci.yml` 新增 `schedule: cron: "0 3 * * 1"`(每週一 UTC 03:00),即使該週沒有任何 push/PR 觸發 CI,也會固定重新執行含 `pip-audit` 的完整流程,解決「新 CVE 出現但沒人 push 程式碼觸發 CI」的空窗;實際範例就是這次的 `pypdf` 新 CVE 是靠手動執行 `pip-audit` 才發現,凸顯排程掃描的必要性。通知接收人仍依賴 GitHub 預設的 Actions 失敗通知(送給觸發者/repo watcher),尚未指定專責窗口,屬管理程序而非程式碼缺口。 |
 | 58 | 普 | 發現入侵跡象應通報特定人員 | ❌ | 沒有正式的通報聯絡窗口/流程文件。 |
 | 59 | 中 | 監控偵測攻擊與未授權連線 | ❌ | VM 層級,沒有 WAF/IDS 之類的工具。 |
@@ -148,16 +148,18 @@
 | --- | --- | --- |
 | `TW-Kai.ttf` | 證明 PDF 標題與內文(標楷體) | 國發會/數位發展部「全字庫」開放資料([data.gov.tw/dataset/5961](https://data.gov.tw/dataset/5961)),字型內嵌授權聲明可擇一適用「政府資料開放授權條款第一版」或「SIL OFL 1.1」,可合法重製、散布與商業使用 |
 | `LiberationSerif-Regular.ttf` / `LiberationSerif-Bold.ttf` | 證明 PDF 內文的英文/數字 | Red Hat「Liberation Fonts」專案,SIL Open Font License 1.1,與原本的 Times New Roman **度量相容**,換字型不影響既有排版 |
+| `DFLiSongStd-W3/W5/W7`、`Helvetica Neue Condensed Bold` | 正式證明的中文/英文字型(本機私有覆寫) | 私有授權素材,由 `.gitignore` 排除,不得隨公開原始碼散布；部署前須確認 VM 的使用授權並由管理者另行放置 |
+| `assets/certificates/CSL stamp.png` | 正式證明右下系戳 | 內部行政素材,由 `.gitignore` 排除,不得公開散布；正式 VM 由管理者另行放置 |
 
-原本盤點時發現的 `Kaiu.ttf`(來源不明的標楷體,疑似從 Windows 抽取)、`TimesNewRoman.ttf`/`-Bold.ttf`(字型內嵌 metadata 直接確認為 `(c) 2006 The Monotype Corporation`,微軟/Monotype 授權)以及完全未被程式引用的 `NotoSansTC.ttf`,已全部移除並換成上述兩款開放授權字型;來源、授權條文與下載日期記錄在 `assets/fonts/LICENSES.md`。`tutoring/reporting.py::build_hours_pdf()` 的字型註冊已改指向新檔名,內部 ReportLab 字型家族代號(`CertificateKai`/`CertificateTimesNewRoman`)維持不變,不影響其餘排版程式碼。換字型後已重新產生 NTNU 摘要版/詳細版(含跨頁)、Maryland 摘要版四種 PDF 預覽,用 Poppler 轉圖人工比對確認標題、內文、浮水印、表格排版皆正常,無缺字或跑版;126 項測試全數通過。
+原本盤點時發現的 `Kaiu.ttf`(來源不明的標楷體,疑似從 Windows 抽取)、`TimesNewRoman.ttf`/`-Bold.ttf`(字型內嵌 metadata 直接確認為 `(c) 2006 The Monotype Corporation`,微軟/Monotype 授權)以及完全未被程式引用的 `NotoSansTC.ttf`,已全部移除並換成上述兩款開放授權字型;來源、授權條文與下載日期記錄在 `assets/fonts/LICENSES.md`。2026-08-11 起,正式證明若部署環境已另行提供獲授權的華康儷宋體與 Helvetica Neue,`tutoring/reporting.py::build_hours_pdf()` 會優先註冊為 `CertificateLiSong`/`CertificateHelveticaNeue`;若素材不存在則自動回退到 `TW-Kai.ttf`/Liberation Serif。私有字型與系戳不得提交至公開 repository,正式 VM 佈署時須由獲授權的管理者另外放置。新版共用底圖、底部日期、右下系戳與詳細版跨頁均已重新產生預覽並逐頁人工檢查,確認無遮擋、缺字或跑版。
 
 ## 總結與行動優先序
 
-統計(共 62 項,2026-07-31 逐列重新計算):✅ 符合 21、🟡 部分符合 14、❌ 未實施 23、⬜ 不適用 4。
+統計(共 62 項,2026-08-10 依第 32 項共享節流完成狀態更新):✅ 符合 22、🟡 部分符合 13、❌ 未實施 23、⬜ 不適用 4。
 
 **已完成(2026-07-26 補做)**:
 - 第 5、6 項:session 閒置 30 分鐘自動登出(`SESSION_COOKIE_AGE`/`SESSION_SAVE_EVERY_REQUEST`)。
-- 第 32、36 項(初版完成、目前仍為部分符合):登入頁比照忘記密碼流程加上「同 IP+學號 15 分鐘最多 5 次」鎖定(`BilingualAuthenticationForm.clean()`),並修正登入頁原本會蓋掉鎖定／停用訊息的既有 bug。正式上線前仍須把 `LocMemCache` 換成共享儲存,並修正可偽造 `X-Forwarded-For` 的 IP 判定,詳見 `docs/CODE_REVIEW_IMPROVEMENTS.md` 4.3。
+- 第 32、36 項(2026-08-10 更新):登入、名冊查詢、帳號恢復及 Django Admin 已改用 PostgreSQL 共享節流，並修正可信 proxy/X-Forwarded-For 判定。第 32 項程式控制已符合；第 36 項僅因正式 VM 代理拓樸尚未實測而維持部分符合。
 - 第 17 項:逐一覆核全部 `AuditLog` 寫入點,確認沒有密碼/安全問題答案/自由文字個資,結論見上表。
 - 第 53 項:整理第三方元件清冊,見上方「第三方元件清冊(SBOM)」一節——過程中意外發現字型檔案授權風險,已於同日換成開放授權字型排除,見該節。
 - 第 19 項:`AuditLog.record()` 取代所有 `AuditLog.objects.create()`,稽核寫入失敗不再連帶弄壞呼叫端的資料庫交易或使用者操作。
