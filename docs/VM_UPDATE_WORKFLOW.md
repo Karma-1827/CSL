@@ -28,7 +28,7 @@
 - [x] 背景排程 systemd timer 名稱:`mpts-process-matching-state.timer`。
 - [x] Nginx 設定檔路徑:`/etc/nginx/mpts.conf`,symlink 到 `/etc/nginx/sites-enabled/mpts.conf`;`/etc/nginx/proxy_params_mpts.conf` 為共用 proxy 參數。**內建 `/etc/nginx/sites-enabled/default` 已移除**(這台 VM 的 IPv6 在核心層停用,預設站台的 `listen [::]:80` 會讓 `nginx -t`/服務啟動整個失敗,見 `docs/DEPLOY.md`「首次部署實際踩過的坑」)。
 - [x] PostgreSQL:同機安裝,**走 TCP `127.0.0.1:5432`(`scram-sha-256`),不是 Unix socket**——socket 預設 `peer` 認證只認「OS 帳號名稱＝角色名稱」,服務帳號是 `mpts`、資料庫角色是 `mpts_app`,兩者刻意不同名,peer 一定失敗,細節見 `docs/DEPLOY.md`。角色/資料庫名稱:`mpts_app`/`mpts`(密碼不記錄於本文件)。
-- [ ] NFS 掛載點與備份目錄:**尚未設定**,資訊中心信件僅提及「每季系統完整備份乙次」,遠低於一般期望的每日備份頻率,需另外確認是否要自建 `pg_dump`/`media` 每日備份腳本。
+- [~] 備份:**已建立本機每日備份**(`deploy/backup_mpts.sh` + `mpts-backup.timer`,03:15 執行,`/var/backups/mpts`,保留 14 天,已實測還原),但這只是同一台 VM 的本機磁碟,不是異地備援。NFS 掛載點/異地備份**尚未設定**——資訊中心信件僅提及「每季系統完整備份乙次」,遠低於一般期望的每日頻率,且該備份硬碟未以區塊裝置掛載到這台 VM(`lsblk` 確認),不是我們能寫入的位置,異地備份方案仍待確認。
 - [x] GitHub deploy key:**不需要**——repo 目前是 public,直接 `git clone`/`git fetch` 即可,不需要在 VM 上安裝任何 GitHub 憑證。若之後 repo 改回 private,才需要照第 9 節建立 read-only deploy key。
 - [~] 分支策略:首次部署直接 `git clone --branch main`(取得當時 `main` 最新 commit `859f48e`),**目前 `/opt/mpts` 仍是 attached 在 `main` 分支上,尚未切成 detached HEAD**(收尾階段已先關閉暫時的 sudo NOPASSWD,沒有再重開來做這個非急迫的整理動作)。下一次照第 6.2 節部署更新時,`git checkout --detach <TARGET_COMMIT>` 會自然把它轉成 detached HEAD;在那之前若有人手動在 VM 上 `git pull`,會讓正式環境跟著 `main` 最新 commit 移動,不符合本文件「正式環境用明確 commit 部署」的原則,首次真正的更新部署時務必用 detach 方式取代直接 pull。
 - [x] 正式 health check:`curl -I https://mpts.tcsl.ntnu.edu.tw/` 預期 `200`(未登入會拿到登入頁,不是 redirect);Django 本身沒有另外的 `/health/` endpoint。
@@ -132,14 +132,19 @@ git rev-parse HEAD
 
 ### 6.1 先備份
 
-執行專案正式備份流程，至少包含：
+```bash
+sudo /opt/mpts/deploy/backup_mpts.sh
+```
 
-- PostgreSQL database dump。
-- `media/` 使用者上傳文件。
-- 正式 `.env` 與部署設定的安全備份；備份內容須限制權限且不得進入 Git。
-- 記錄部署前 commit ID。
+這會產生 `/var/backups/mpts/<timestamp>/{db.dump,media.tar.gz}`(2026-08-17 已建立並實測還原,見 `docs/DEPLOY.md`「備份與還原」)。部署 migration 前務必確認這次執行**真的成功**(看腳本輸出的檔案大小,不是只看 exit code),不能只確認每日排程(`mpts-backup.timer`)曾經啟用過。
 
-備份命令、NFS 路徑及保留政策應由首次部署者依 VM 實際設定補入本節。部署 migration 前必須確認當次備份成功，不只確認排程曾啟用。
+同時記錄部署前 commit ID：
+
+```bash
+cd /opt/mpts && git rev-parse HEAD
+```
+
+**已知限制**:`backup_mpts.sh` 目前只寫到同一台 VM 的本機磁碟(`/var/backups/mpts`),不是異地備援;正式 `.env` 與 TLS 私鑰不在這個腳本的備份範圍內,需要另外妥善保存(不得進 Git)。異地備份/NFS 仍是待辦,見 `docs/DEPLOY.md`「上線前仍待確認」。
 
 ### 6.2 取得指定版本
 

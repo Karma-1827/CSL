@@ -1,0 +1,17 @@
+# Runs mpts-backup.service once daily. Time chosen to avoid the process_matching_state
+# timer's per-minute activity and any likely low-traffic window; adjust once real usage
+# patterns are known. Install with:
+#   systemctl daemon-reload
+#   systemctl enable --now mpts-backup.timer
+# (enable the .timer, not the .service).
+
+[Unit]
+Description=Run MPTS local backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

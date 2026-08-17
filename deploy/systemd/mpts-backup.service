@@ -1,0 +1,19 @@
+# Runs deploy/backup_mpts.sh once per invocation (docs/DEPLOY.md "備份與還原").
+# Triggered by mpts-backup.timer — do not `enable` this .service directly, only the
+# .timer. Runs as root (unlike mpts-gunicorn.service): it needs to read
+# /opt/mpts/media (owned by the unprivileged `mpts` account) and run pg_dump as the
+# `postgres` OS role, and it writes to /var/backups/mpts which the `mpts` account must
+# NOT be able to touch (see backup_mpts.sh header for the reasoning).
+#
+# Copy to /etc/systemd/system/mpts-backup.service, then:
+#   systemctl daemon-reload
+#   systemctl enable --now mpts-backup.timer
+
+[Unit]
+Description=MPTS local backup (PostgreSQL dump + media/ archive)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mpts/deploy/backup_mpts.sh

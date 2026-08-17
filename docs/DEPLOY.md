@@ -147,9 +147,28 @@ DJANGO_DEBUG=0 DJANGO_SECRET_KEY='deployment-check-only-secret-key-that-is-long-
 
 ### 備份與還原
 
-- PostgreSQL:建議 `pg_dump` 定期備份(頻率、保留週期待系辦/資訊中心確認,見「上線前仍待確認」);還原用 `pg_restore` 或直接 `psql < dump.sql`,依備份格式而定。
-- `media/`:內含口語能力證明、課堂紀錄附件、上課文件等私人檔案,備份時**不可**外洩到非授權存取的位置(例如不可上傳到公開雲端硬碟）;應與 PostgreSQL 備份有相同等級的存取控制。
-- **正式上線前至少完成一次「從備份還原到一個獨立測試環境」的演練**,包含資料庫還原與 `media/` 還原後應用程式仍能正常提供下載——只確認備份檔案有產生、從未實際還原過,不能視為備份機制已經可用。
+**2026-08-17 已在正式 VM 建立並測試 `deploy/backup_mpts.sh`**(`deploy/systemd/mpts-backup.service`+`.timer`,每天 03:15 執行):
+
+- PostgreSQL:`sudo -u postgres pg_dump -Fc` 自訂格式備份到 `/var/backups/mpts/<timestamp>/db.dump`。
+- `media/`:同一次備份打包成 `media.tar.gz`。
+- 備份目錄 `/var/backups/mpts` 為 `root:root 0700`,刻意與跑應用程式的 `mpts` 帳號分開(`mpts` 沒有 sudo,即使應用程式被入侵也碰不到備份檔案),符合「備份帳號與應用程式帳號分離」原則。
+- 保留天數預設 14 天(`MPTS_BACKUP_RETENTION_DAYS` 環境變數可覆寫),正式保留週期待系辦/資訊中心確認後再調整。
+- **這只是本機磁碟備份,不是異地備援**:這台 VM 只有一顆 150GB 系統碟(`lsblk` 確認),資訊中心信件提到的「600G 備份硬碟」並未以區塊裝置掛載到這台 VM,推測是資訊中心自己另外管理的每季全機備份,不是我們能寫入的位置。真正的異地/獨立備份(NFS 或其他)仍是「上線前仍待確認」的項目,在那之前這份本機備份只能防「程式改錯、誤刪資料、bad migration」,防不了整台 VM 或系統碟本身損毀。
+
+**還原步驟**(2026-08-17 已在正式 VM 對一個一次性測試資料庫實際演練過,不只是空跑腳本):
+
+```bash
+sudo -u postgres createdb <測試用資料庫名稱>
+# 注意重新導向必須由 root 讀取備份目錄(0700),不能讓 postgres 帳號自己開檔:
+sudo cat /var/backups/mpts/<timestamp>/db.dump | sudo -u postgres pg_restore -d <測試用資料庫名稱>
+# 用實際資料表核對筆數,不能只看指令有沒有噴錯:
+sudo -u postgres psql -d <測試用資料庫名稱> -t -c "SELECT count(*) FROM accounts_user;"
+sudo -u postgres dropdb <測試用資料庫名稱>
+```
+
+`pg_restore -d <db> <path>` 或 `< path` 重新導向這種寫法會因為呼叫的 shell 是 `tcsladmin`(沒有讀取 `/var/backups/mpts` 的權限)而失敗,即使前面加了 `sudo -u postgres` 也一樣——重新導向是呼叫端 shell 處理的,不是 `sudo -u postgres` 之後才處理,務必用 `sudo cat file | sudo -u postgres pg_restore ...` 這種管線寫法,讓「讀檔」這一步用 root 權限完成、「還原」這一步才切成 `postgres` 帳號。`media.tar.gz` 還原只是單純 `tar -xzf`,沒有這個問題。
+
+- **正式上線前至少完成一次「從備份還原到一個獨立測試環境」的演練**,包含資料庫還原與 `media/` 還原後應用程式仍能正常提供下載——只確認備份檔案有產生、從未實際還原過,不能視為備份機制已經可用。目前只驗證過資料庫還原到一次性測試資料庫並核對筆數,**尚未**驗證還原後接上一份完整應用程式實例、`media/` 檔案下載是否正常,建議之後找時間補做這一步。
 
 ### 故障排除
 
