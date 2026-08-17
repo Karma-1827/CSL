@@ -1,7 +1,8 @@
 # Template Nginx server block for MPTS (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 8
 # item 2). This is a TEMPLATE, not a ready-to-use config: every value marked TODO depends
-# on the real DNS name, TLS certificate, deployment path, and internal network ranges,
-# none of which are known yet (see docs/DEPLOY.md "上線前仍待確認"). Copy this file and
+# on the allocated DNS name, TLS certificate, deployment path, and approved network ranges.
+# DNS and the NTNU VPN range are filled from the 2026-08-17 IT Center handoff;
+# certificate and filesystem paths remain TODO (see docs/DEPLOY.md). Copy this file and
 # proxy_params_mpts.conf to /etc/nginx/, fill in the TODOs, symlink into
 # /etc/nginx/sites-enabled/, then `nginx -t` before reloading.
 #
@@ -28,19 +29,24 @@ upstream mpts_app {
     server unix:/run/mpts/gunicorn.sock fail_timeout=0;
 }
 
+# IPv6 listeners intentionally omitted: the allocated VM (2026-08-17 IT Center handoff)
+# has IPv6 disabled at the kernel level (`ip -6 addr show` empty,
+# /sys/module/ipv6/parameters/disable=1) — `listen [::]:80/443` makes nginx fail to start
+# entirely ("socket() [::]:80 failed (97: Address family not supported by protocol)"), not
+# just skip IPv6. Re-add the `listen [::]:...` lines only if a future host actually has
+# IPv6 enabled.
+#
 # Plain HTTP only exists to redirect to HTTPS (and to answer ACME HTTP-01 challenges if
 # certbot/acme.sh is used for renewal — add a location for that here if needed).
 server {
     listen 80;
-    listen [::]:80;
-    server_name TODO-mpts.example.ntnu.edu.tw;
+    server_name mpts.tcsl.ntnu.edu.tw;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name TODO-mpts.example.ntnu.edu.tw;
+    server_name mpts.tcsl.ntnu.edu.tw;
 
     client_header_timeout 15s;
     client_body_timeout 30s;
@@ -95,11 +101,10 @@ server {
         alias TODO/opt/mpts/media/;
     }
 
-    # /system-admin/ 限制在校內／VPN 來源(批次4);實際網段待網管確認,
-    # 不可用 0.0.0.0/0 或留空等同開放。
+    # /system-admin/ 初期只允許資訊中心核配的師大 VPN 網段。若資訊中心日後另行
+    # 核准校內來源網段，再以書面資料追加；不可用 0.0.0.0/0 或留空等同開放。
     location /system-admin/ {
-        allow TODO-140.122.0.0/16;   # 範例：師大校內網段，需網管確認實際範圍
-        allow TODO-203.0.113.10;     # 範例：VPN 出口固定 IP，需網管確認實際位址
+        allow 140.122.57.0/24;       # 師大 VPN 網段（資訊中心開通信 2026-08 確認）
         deny all;
 
         proxy_pass http://mpts_app;

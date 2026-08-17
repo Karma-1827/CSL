@@ -4,7 +4,7 @@
 
 ## 目標環境
 
-學校提供的 Linux VM＋PostgreSQL。`deploy/` 目錄(批次8)已提供 Gunicorn 設定、Nginx server block 範本、systemd unit/timer 與正式環境 `.env` 範本,但**都是範本,套用前必須先填入實際 DNS、TLS 憑證路徑、部署路徑與網段**(見下方「上線前仍待確認」);尚無 Dockerfile 或 CI/CD 自動部署,取得實際 VM 前也無法完成套件安裝、TLS 憑證與網段相關的最後一哩驗證。
+學校提供的 Linux VM＋PostgreSQL。`deploy/` 目錄(批次8)已提供 Gunicorn 設定、Nginx server block 範本、systemd unit/timer 與正式環境 `.env` 範本。**2026-08-17 已在資訊中心分配的正式 VM(`mpts.tcsl.ntnu.edu.tw`)套用過一次,套件安裝、DB、Gunicorn、Nginx、TLS(Let's Encrypt)、`/system-admin/` IP 白名單皆已驗證可正常運作**,細節與過程中修正的落差見下方「首次部署實際踩過的坑」;仍待確認的項目移到「上線前仍待確認」。尚無 Dockerfile 或 CI/CD 自動部署,目前每次部署仍是手動依 `docs/DEPLOY.md` 步驟操作。
 
 此系統預計歸類為「校務行政系統及隸屬系所之行政資訊系統」,依目前取得的校方說明免收 VM 租賃費用;正式申請仍以學校審核結果為準。預估帳號規模 500 人以上,服務對外開放且需支援手機瀏覽。
 
@@ -14,9 +14,9 @@
 
 - 預載作業系統:`Ubuntu (64bit)`。
 - CPU:`8 Core`。
-- RAM:`16 GB`。
+- RAM:`32 GB`。
 - 系統硬碟:`150 GB`(申請表可選上限)。
-- 備份用 NFS:`120 GB`暫定;最終應依學校 NFS 備份機制與保留版本數確認。
+- 備份用 NFS:`600 GB`(申請表可選上限);實際備份保留版本數仍須依學校 NFS 機制確認。
 - DNS:使用學校格式 `<自設主機名稱>.<單位英文縮寫>.ntnu.edu.tw`;主機名稱與單位縮寫尚待系辦/網管確認,不可在程式設定中先猜定。
 - 預設系統管理帳號:填維運用 Linux 帳號,不要使用 `admin`、`root`、姓名、學號或與 Django Admin 相同的帳號;最終帳號名稱由申請人與校方規範確認。
 
@@ -24,9 +24,9 @@
 
 申請表如要求說明超過 4 Core 或 8 GB RAM 的理由,可使用下列內容:
 
-> 本系統預計提供 500 人以上使用,同一台虛擬伺服器需同時執行 Nginx、Django WSGI 應用服務、PostgreSQL 資料庫、背景排程及稽核紀錄。使用尖峰包含學期初名冊匯入與註冊、配對期間的名單查詢與邀請、排課與簽到,以及學期末大量時數統計、Excel 匯出與 PDF 證明產生。PDF 產生、Excel 匯出、檔案掃描/處理與資料庫查詢均會同時消耗 CPU 與記憶體,因此規劃 8 Core、16 GB RAM,以保留尖峰負載、系統更新與未來合作計畫擴充空間。
+> 本系統預計提供 500 人以上使用,同一台虛擬伺服器需同時執行 Nginx、Django WSGI 應用服務、PostgreSQL 資料庫、背景排程及稽核紀錄。使用尖峰包含學期初名冊匯入與註冊、配對期間的名單查詢與邀請、排課與簽到,以及學期末大量時數統計、Excel 匯出與 PDF 證明產生。PDF 產生、Excel 匯出、檔案掃描/處理與資料庫查詢均會同時消耗 CPU 與記憶體,因此規劃 8 Core、32 GB RAM,以保留尖峰負載、資料庫快取、系統更新與未來合作計畫擴充空間。
 >
-> 系統硬碟需存放 Ubuntu、應用程式、PostgreSQL 資料庫、靜態檔案、資格證明與可能的 PDF/JPG/PNG 上傳、產生的證明文件、系統與稽核 log 及更新暫存空間。使用者資料需跨學期保存,且後續可能增加合作計畫與附件,因此申請 150 GB 系統硬碟,避免正式上線後因容量不足重新申請搬遷。另規劃 NFS 備份空間保存資料庫與 media 備份;備份不可和正式資料只放在同一顆系統硬碟。
+> 系統硬碟需存放 Ubuntu、應用程式、PostgreSQL 資料庫、靜態檔案、資格證明與可能的 PDF/JPG/PNG 上傳、產生的證明文件、系統與稽核 log 及更新暫存空間。使用者資料需跨學期保存,且後續可能增加合作計畫與附件,因此申請 150 GB 系統硬碟,避免正式上線後因容量不足重新申請搬遷。另申請 600 GB NFS 備份空間保存 PostgreSQL、media 與必要設定的每日、每週及每月多版本備份;備份容量需大於主機實際資料量,才能保留多個歷史還原點,且不可和正式資料只放在同一顆系統硬碟。
 
 容量大不等於可以無限保存檔案。正式上線前仍須決定附件保存期限、log rotation、備份保留版本與定期容量告警。
 
@@ -65,13 +65,21 @@
 
 ## 上線前仍待確認
 
-- 正式 DNS 主機名稱與單位英文縮寫。
-- 校方實際核配的 CPU、RAM、150 GB 系統碟與 NFS 容量。
-- 正式系統管理帳號、SSH 金鑰與可登入來源限制。
-- PostgreSQL 是同機安裝或由學校提供獨立服務。
-- 正式 RPO、RTO、每日/每週備份頻率、備份保留週期與復原責任人(待系辦/資訊中心確認,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 20 項)。
+**2026-08-17 已由資訊中心分配並完成初次部署,下列已確認:**
+
+- 正式 DNS 主機名稱:`mpts.tcsl.ntnu.edu.tw`(IP `140.122.64.169`),已可公開解析。
+- VM 規格:Ubuntu 24.04.2 LTS、CPU*8、RAM*32 GB、系統碟 150 GB、備份碟 600 GB(依資訊中心信件為準,較 `docs/DEPLOY.md` 舊版申請規劃的 16 GB RAM 更高)。
+- PostgreSQL:同機安裝(非獨立服務),見上方「首次部署實際踩過的坑」的 `POSTGRES_HOST` 說明。
+- TLS 憑證:Let's Encrypt(`certbot certonly --standalone` 取得,已設定 renewal-hooks 搭配 Nginx 自動續約,90 天效期)。
+- SSH 存取:資訊中心提供的預設帳號 `tcsladmin` 已改密碼;僅限師大 VPN 網段 `140.122.57.0/24` 才能從校外連線(SSH port 22、RDP port 3389),其餘防火牆規則需自行設定。`/system-admin/` 的 Nginx IP 白名單已套用同一個 VPN 網段。
+
+**仍待確認:**
+
+- `/system-admin/` 的一般校內網段(目前只有 VPN 網段 `140.122.57.0/24` 有資訊中心書面確認,`deploy/nginx/mpts.conf.example` 對應那行仍是刻意會讓 `nginx -t` 失敗的 TODO 佔位,取得後才能加回去)。
+- 正式 RPO、RTO、每日/每週備份頻率、備份保留週期與復原責任人(待系辦/資訊中心確認,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 20 項;資訊中心信件僅提到「每季系統完整備份乙次」,遠低於本文件件先前規劃的每日備份,需另外確認是否需要自建更高頻率的 `pg_dump`/`media` 備份,不能只依賴資訊中心的季備份)。
 - 個資、口語能力證明文件、課堂紀錄附件、稽核 log、對話紀錄與正式證明 PDF 的保存/刪除政策,同樣待系辦/資訊中心確認,系統不會自行寫死刪除年限。異常回報目前不提供附件上傳,不列入附件保存範圍。
-- TLS 憑證由學校自動提供、網管代管或由維運者申請。
+- VM 目前有待套用的核心更新(需重開機),尚未安排維護窗口。
+- `/protected-media/` 的 `X-Accel-Redirect` 尚未在三個受保護下載 view 中實際串接(見上方第 12 項),目前私人檔案下載仍全部經由 Django `FileResponse` 直接串流,不是本次部署的阻斷項,但正式上線後應找時間補上以降低 WSGI worker 負擔。
 
 ## 本機常用指令
 
@@ -96,17 +104,28 @@ DJANGO_DEBUG=0 DJANGO_SECRET_KEY='deployment-check-only-secret-key-that-is-long-
 
 ## 部署、升級、回滾、備份與故障排除(批次8)
 
-以下流程假設 `deploy/` 目錄下的範本已經套用成正式設定(見上方各節),部署路徑以 `/opt/mpts` 為例,實際路徑、服務帳號名稱由正式環境決定時一併更新本節。**這是流程草稿,尚未在真實 VM 上實際演練過**,取得 VM 後第一次操作應視為對這份文件的驗證,發現落差要回頭更新這裡。
+以下流程假設 `deploy/` 目錄下的範本已經套用成正式設定(見上方各節),部署路徑以 `/opt/mpts` 為例,實際路徑、服務帳號名稱由正式環境決定時一併更新本節。**2026-08-17 已在師大資訊中心分配的正式 VM(`mpts.tcsl.ntnu.edu.tw`,140.122.64.169)完整演練過一次**,下方步驟與「首次部署實際踩過的坑」皆已依實測更新。
 
 ### 初次部署
 
-1. 建立服務帳號、`/opt/mpts` 目錄與 Python virtualenv(`python -m venv /opt/mpts/.venv`),`pip install -r requirements.txt`。
-2. 依 `deploy/.env.production.example` 建立 `/opt/mpts/.env`,權限設為 `600`。
+1. 建立服務帳號(`useradd --system --home-dir /opt/mpts --shell /usr/sbin/nologin --create-home mpts`)、Python virtualenv(`python -m venv /opt/mpts/.venv`),`pip install -r requirements.txt`。repo 目前是 **public**,可直接 `git clone https://github.com/Karma-1827/CSL.git` 到 `/opt/mpts`,不需要 deploy key/PAT;若之後改回 private 才需要另外處理認證。
+2. 依 `deploy/.env.production.example` 建立 `/opt/mpts/.env`,權限設為 `600`,擁有者是 `mpts`(不是操作用的管理帳號)。**機密值不要交給任何 agent 填進版控裡的範本檔**,應另外產生一份不進 git 的真實 `.env` 再用 `scp`/`install` 送上機,範本檔只留 `TODO` 佔位。
 3. `python manage.py migrate`、`python manage.py collectstatic --noinput`。
 4. 複製 `deploy/systemd/*.service`、`deploy/systemd/*.timer` 到 `/etc/systemd/system/`,`deploy/nginx/*.conf*` 到 `/etc/nginx/`(依上方各節填好 TODO)。
 5. `systemctl daemon-reload`,`systemctl enable --now mpts-gunicorn.service mpts-process-matching-state.timer`。
 6. `nginx -t` 通過後 `systemctl reload nginx`。
 7. 用一組非正式人員帳號(見 `docs/VULNERABILITY_SCAN_IMPROVEMENTS.md` 第 8 節)實際跑過登入、Dashboard、排課、下載證明,確認整條路徑(Nginx → Gunicorn → PostgreSQL)正常。
+
+### 首次部署實際踩過的坑(2026-08-17,真實 VM)
+
+- **PostgreSQL Unix socket 預設用 `peer` 認證,`POSTGRES_HOST` 留空會失敗**:Ubuntu 預設 `pg_hba.conf` 對 `local`(Unix socket)連線一律用 `peer`——只認「作業系統帳號名稱與資料庫角色名稱相同」,不看密碼。服務用的作業系統帳號是 `mpts`,但 `.env.production.example` 建議的資料庫角色名稱是 `mpts_app`(兩者故意分開命名以求清楚),兩者對不上,`peer` 認證必定失敗(`FATAL: Peer authentication failed for user "mpts_app"`),與密碼是否正確無關。**修正:`POSTGRES_HOST=127.0.0.1`**(改用 TCP 連線,走 `pg_hba.conf` 裡 `host ... 127.0.0.1/32 scram-sha-256` 那條規則,才會真的檢查密碼)。`deploy/.env.production.example` 與本文件第 34 行附近的欄位說明已同步更新,不要再把 `POSTGRES_HOST` 留空。
+- **這台 VM 的 IPv6 在核心層停用**(`ip -6 addr show` 空白、`/sys/module/ipv6/parameters/disable=1`):`deploy/nginx/mpts.conf.example` 原本每個 `listen` 都有對應的 `listen [::]:...`,套用後 nginx **完全無法啟動**(`socket() [::]:80 failed (97: Address family not supported by protocol)`,不是「忽略 IPv6 繼續用 IPv4」,是直接啟動失敗),連 `apt install nginx` 都會卡在 postinst 步驟導致 dpkg 整個回報錯誤。已把範本裡的 `listen [::]:...` 全部拿掉並加註解說明;若未來真的换到有 IPv6 的主機,需要自行加回來並重新用 `nginx -t` 驗證。
+- **`apt install nginx` 失敗時,系統內建的預設 site 也要處理**:上述 IPv6 問題發生時,`/etc/nginx/sites-enabled/default`(Ubuntu 內建範例站台)也一起因為同一個原因無法通過 `nginx -t`,導致 postinst script 失敗、`dpkg` 整包標記為「未完全安裝」。要先 `rm -f /etc/nginx/sites-enabled/default`,確認 `nginx -t` 通過後再 `dpkg --configure -a` 補完安裝,才能繼續套用我們自己的 `mpts.conf`。
+- **`/opt/mpts` 目錄權限與 Nginx 讀取靜態檔案的衝突**:服務帳號 `mpts` 的 home directory 預設是 `0750`(`useradd --create-home` 的預設 umask),擁有者/群組都是 `mpts`,other 完全沒有權限。Nginx 的 worker process 跑在 `www-data` 底下,預設連 `/opt/mpts/` 都無法 `cd` 進去,`/static/` location 一律 403/500。**修正:`usermod -aG mpts www-data`**——因為 `0750` 的 group 本來就有 `r-x`,把 `www-data` 加進 `mpts` 群組即可讀取,不需要放寬成 `0755`(避免其他系統帳號也能列出 `/opt/mpts` 內容)。
+- **Let's Encrypt 用 `certbot certonly --standalone`,和 Nginx 搶 80 埠**:因為當時 Nginx 還沒有正式設定檔可用,用 `--standalone` 模式最簡單(certbot 自己臨時監聽 80 取得憑證,不需要先有能動的 Nginx)。但正式續約時 Nginx 已經在跑並占用 80 埠,`certbot renew` 會失敗或卡住。**修正:在 `/etc/letsencrypt/renewal-hooks/pre/`、`/post/` 各放一支腳本,續約前 `systemctl stop nginx`、續約後 `systemctl start nginx`**,`certbot renew --dry-run` 驗證過搭配這組 hook 可以正常運作,Nginx 續約完會自動起回來。
+- **手動測試 `certbot renew --dry-run` 時,不要忘記加 `--no-random-sleep-on-renew`**:certbot 的 `renew` 指令預設會插入一段隨機延遲(有時長達數分鐘),用意是避免大量伺服器在同一時間(例如 systemd timer 觸發的整點)一起打 Let's Encrypt 的伺服器造成尖峰負載;`certbot.timer` 本身照預設保留這個延遲即可(不需要改),但**手動**驗證時如果沒加這個旗標,會誤以為指令「卡住」了,其實只是在等待隨機延遲跑完。
+- 套件安裝過程中 `apt` 提示核心版本(`6.8.0-106-generic`)與目前執行中版本不一致,建議重開機套用新核心更新——**這次部署刻意沒有重開機**(避免中斷已經在跑的服務去驗證一個和這次部署無關的核心更新),留給之後找一個維護窗口再處理,重開機前記得確認 gunicorn/nginx/postgresql 三個服務都設定成開機自動啟動(`systemctl is-enabled` 三者皆為 `enabled`)。
+- 部署過程中為了讓自動化流程能連進去跑 `sudo` 指令,曾**暫時**在 `/etc/sudoers.d/90-mpts-deploy-tmp` 開一條 `tcsladmin ALL=(ALL) NOPASSWD: ALL`,部署收尾後已刪除並用 `sudo -n true` 確認密碼再度變成必填。**這不是常態設定**,之後若要用自動化工具跑維運指令,應該改成只針對特定指令的最小權限 sudoers 規則,而不是整條解鎖。
 
 ### 升級(部署新版本)
 
