@@ -42,6 +42,24 @@ class IdleAccountFilter(admin.SimpleListFilter):
         return queryset
 
 
+class RosterClaimStatusFilter(admin.SimpleListFilter):
+    title = "註冊狀態 / Registration status"
+    parameter_name = "claimed"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "已註冊 / Registered"),
+            ("no", "尚未註冊 / Not registered"),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(claimed_at__isnull=False)
+        if self.value() == "no":
+            return queryset.filter(claimed_at__isnull=True)
+        return queryset
+
+
 @admin.register(User)
 class CSLUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
@@ -57,6 +75,7 @@ class CSLUserAdmin(UserAdmin):
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
+    change_list_template = "admin/accounts/rosterentry/change_list.html"
     list_display = (
         "student_id",
         "name_zh",
@@ -69,9 +88,36 @@ class RosterEntryAdmin(admin.ModelAdmin):
         "claimed_at",
         "profile_link",
     )
-    list_filter = ("role", "education_level", "identity_category", "program", "is_enabled")
+    list_filter = (
+        "role",
+        "identity_category",
+        "education_level",
+        "program",
+        "is_enabled",
+        RosterClaimStatusFilter,
+    )
     search_fields = ("student_id", "name_zh", "name_en")
+    search_help_text = "可輸入學號、中文姓名或英文姓名。 / Search by student ID, Chinese name, or English name."
     readonly_fields = ("claimed_at", "created_at", "updated_at")
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = {
+            **(extra_context or {}),
+            "roster_role_choices": RosterEntry._meta.get_field("role").choices,
+            "roster_identity_choices": RosterEntry._meta.get_field("identity_category").choices,
+            "roster_education_choices": RosterEntry._meta.get_field("education_level").choices,
+            "roster_program_choices": PartnerProgram.objects.order_by("name_zh"),
+            "roster_filters": {
+                "q": request.GET.get("q", ""),
+                "role": request.GET.get("role__exact", ""),
+                "identity": request.GET.get("identity_category__exact", ""),
+                "education": request.GET.get("education_level__exact", ""),
+                "program": request.GET.get("program__id__exact", ""),
+                "enabled": request.GET.get("is_enabled__exact", ""),
+                "claimed": request.GET.get("claimed", ""),
+            },
+        }
+        return super().changelist_view(request, extra_context=extra_context)
 
     @admin.display(description="行政檔案 / Admin profile")
     def profile_link(self, obj):

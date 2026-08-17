@@ -1,0 +1,68 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/admin_roster.css' %}">
+{% endblock %}
+
+{% block search %}
+  {{ block.super }}
+  <form class="roster-filter-bar" method="get">
+    {% if roster_filters.q %}<input type="hidden" name="q" value="{{ roster_filters.q }}">{% endif %}
+    <div class="roster-filter-heading">
+      <strong>篩選名冊 / Filter roster</strong>
+      <span>可同時套用多個條件。 / Combine multiple filters.</span>
+    </div>
+    <div class="roster-filter-grid">
+      <label>
+        <span>身份 / Role</span>
+        <select name="role__exact">
+          <option value="">全部 / All</option>
+          {% for value, label in roster_role_choices %}<option value="{{ value }}"{% if roster_filters.role == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>學生類別 / Student category</span>
+        <select name="identity_category__exact">
+          <option value="">全部 / All</option>
+          {% for value, label in roster_identity_choices %}<option value="{{ value }}"{% if roster_filters.identity == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>學制 / Degree level</span>
+        <select name="education_level__exact">
+          <option value="">全部 / All</option>
+          {% for value, label in roster_education_choices %}<option value="{{ value }}"{% if roster_filters.education == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>所屬計畫 / Program</span>
+        <select name="program__id__exact">
+          <option value="">全部 / All</option>
+          {% for program in roster_program_choices %}<option value="{{ program.pk }}"{% if roster_filters.program == program.pk|stringformat:'s' %} selected{% endif %}>{{ program.name_zh }} / {{ program.name_en }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>可註冊 / Registration enabled</span>
+        <select name="is_enabled__exact">
+          <option value="">全部 / All</option>
+          <option value="1"{% if roster_filters.enabled == '1' %} selected{% endif %}>是 / Yes</option>
+          <option value="0"{% if roster_filters.enabled == '0' %} selected{% endif %}>否 / No</option>
+        </select>
+      </label>
+      <label>
+        <span>註冊狀態 / Registration status</span>
+        <select name="claimed">
+          <option value="">全部 / All</option>
+          <option value="yes"{% if roster_filters.claimed == 'yes' %} selected{% endif %}>已註冊 / Registered</option>
+          <option value="no"{% if roster_filters.claimed == 'no' %} selected{% endif %}>尚未註冊 / Not registered</option>
+        </select>
+      </label>
+    </div>
+    <div class="roster-filter-actions">
+      <a href=".">清除篩選 / Clear</a>
+      <button type="submit">套用篩選 / Apply filters</button>
+    </div>
+  </form>
+{% endblock %}

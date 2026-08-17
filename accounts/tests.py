@@ -1028,6 +1028,44 @@ class AdminDashboardNavigationTests(TestCase):
         usernames = {user.username for user in response.context["cl"].result_list}
         self.assertEqual(usernames, {"NAV-TUTOR", "NAV-TUTEE"})
 
+    def test_roster_admin_shows_visible_filter_bar(self):
+        response = self.client.get(reverse("admin:accounts_rosterentry_changelist"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "篩選名冊 / Filter roster")
+        self.assertContains(response, 'name="role__exact"')
+        self.assertContains(response, 'name="identity_category__exact"')
+        self.assertContains(response, 'name="program__id__exact"')
+        self.assertContains(response, 'name="claimed"')
+
+    def test_roster_admin_combines_role_identity_and_claimed_filters(self):
+        matching = RosterEntry.objects.create(
+            student_id="FILTER-TUTOR",
+            role=Role.TUTOR,
+            education_level=EducationLevel.MASTER,
+            identity_category=IdentityCategory.LOCAL,
+            claimed_at=timezone.now(),
+        )
+        RosterEntry.objects.create(
+            student_id="FILTER-OTHER",
+            role=Role.TUTOR,
+            education_level=EducationLevel.MASTER,
+            identity_category=IdentityCategory.INTERNATIONAL,
+        )
+
+        response = self.client.get(
+            reverse("admin:accounts_rosterentry_changelist"),
+            {
+                "role__exact": Role.TUTOR,
+                "identity_category__exact": IdentityCategory.LOCAL,
+                "claimed": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result_ids = {entry.pk for entry in response.context["cl"].result_list}
+        self.assertEqual(result_ids, {matching.pk})
+
 
 class IdleAccountFilterTests(TestCase):
     """Checklist item 3: idle accounts are flagged for manual review, never auto-disabled."""

@@ -1,0 +1,93 @@
+.roster-filter-bar {
+  margin: 0 0 18px;
+  padding: 18px;
+  border: 1px solid var(--hairline-color);
+  border-radius: 8px;
+  background: var(--darkened-bg);
+}
+
+.roster-filter-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.roster-filter-heading strong {
+  color: var(--body-fg);
+  font-size: 15px;
+}
+
+.roster-filter-heading span {
+  color: var(--body-quiet-color);
+  font-size: 12px;
+}
+
+.roster-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.roster-filter-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--body-quiet-color);
+  font-weight: 600;
+}
+
+.roster-filter-grid select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 32px 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--body-bg);
+  color: var(--body-fg);
+}
+
+.roster-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.roster-filter-actions a {
+  color: var(--link-fg);
+  font-weight: 600;
+}
+
+.roster-filter-actions button {
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.roster-filter-actions button:hover {
+  background: var(--button-hover-bg);
+}
+
+@media (max-width: 1000px) {
+  .roster-filter-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .roster-filter-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .roster-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
