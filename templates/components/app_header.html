@@ -1,7 +1,8 @@
 {% load static %}
 <header class="app-header">
   <a class="app-brand" href="{% url 'accounts:dashboard' %}">
-    <img src="{% static 'img/ntnu-csl-logo.png' %}" alt="華語文教學系 / Department of Chinese as a Second Language">
+    <img class="logo-ntnu" src="{% static 'img/ntnu-logo.png' %}" alt="國立臺灣師範大學 / National Taiwan Normal University">
+    <img class="logo-csl" src="{% static 'img/ntnu-csl-logo.png' %}" alt="華語文教學系 / Department of Chinese as a Second Language">
     <span><strong>華語實習暨輔導系統 MPTS</strong><small>Mandarin Practicum and Tutoring System</small></span>
   </a>
   <div class="user-menu">
