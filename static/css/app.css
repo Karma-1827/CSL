@@ -1,16 +1,17 @@
 :root {
-  --paper: #f9f7f7;
-  --mist: #dbe2ef;
-  --blue: #3f72af;
-  --navy: #112d4e;
+  --paper: #faf6f3;
+  --mist: #f2e2e4;
+  --blue: #8c1d40;
+  --navy: #68152f;
   --slate-900: #27374d;
   --slate-700: #526d82;
   --slate-400: #9db2bf;
   --slate-100: #dde6ed;
-  --deep-ink: #1b262c;
-  --ocean-800: #0f4c75;
-  --ocean-500: #3282b8;
-  --ocean-100: #bbe1fa;
+  --deep-ink: #68152f;
+  --ocean-800: #8c1d40;
+  --ocean-500: #c39a5a;
+  --ocean-100: #f0d9b5;
+  --gold-deep: #8a6428;
   --white: #ffffff;
   --ink-muted: var(--slate-700);
   --border: #c8d5de;
@@ -125,7 +126,7 @@ a {
     150deg,
     var(--deep-ink),
     var(--ocean-800) 58%,
-    var(--ocean-500)
+    var(--gold-deep)
   );
 }
 .brand-kicker,
@@ -396,14 +397,14 @@ a {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   margin-bottom: 22px;
   overflow: hidden;
-  border: 1px solid #bfcfe2;
+  border: 1px solid #e2bfca;
   border-radius: 14px;
   background: var(--mist);
 }
 .roster-card > div {
   min-width: 0;
   padding: 16px 18px;
-  border-right: 1px solid #c5d3e4;
+  border-right: 1px solid #e4c5cf;
 }
 .roster-card > div:last-child {
   border-right: 0;
@@ -441,7 +442,7 @@ a {
   align-items: center;
   gap: 13px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #e4ebf3;
+  border-bottom: 1px solid #f3e4e9;
 }
 .form-section-heading > span {
   width: 38px;
@@ -551,7 +552,7 @@ a {
 }
 .rating-field {
   padding: 16px;
-  border: 1px solid #e0e8f1;
+  border: 1px solid #f1e0e6;
   border-radius: 12px;
   background: var(--paper);
 }
@@ -624,7 +625,7 @@ a {
   display: grid;
   gap: 24px;
   padding: 22px;
-  border: 1px solid #dce5ef;
+  border: 1px solid #efdce2;
   border-radius: 14px;
   background: linear-gradient(145deg, #fff, var(--paper));
 }
@@ -659,7 +660,7 @@ a {
 }
 .target-skills-card {
   padding: 20px;
-  border: 1px solid #d8e3ef;
+  border: 1px solid #efd8e0;
   border-radius: 14px;
   background: linear-gradient(145deg, #fff, var(--paper));
 }
@@ -713,7 +714,7 @@ a {
   justify-content: center;
   position: relative;
   padding: 10px 12px;
-  border: 2px solid #dce5ef;
+  border: 2px solid #efdce2;
   border-radius: 11px;
   color: var(--ink-muted);
   background: #fff;
@@ -726,7 +727,7 @@ a {
 .target-skills-card .choice-control label:hover,
 #id_skills_practiced label:hover {
   color: var(--blue);
-  border-color: #9fb9d7;
+  border-color: #d79fb1;
   transform: translateY(-1px);
 }
 .target-skills-card .choice-control label:has(input:checked),
@@ -754,7 +755,7 @@ a {
 #id_skills_practiced {
   padding: 14px;
   margin-top: 4px;
-  border: 1px solid #d8e3ef;
+  border: 1px solid #efd8e0;
   border-radius: 12px;
   background: linear-gradient(145deg, #fff, var(--paper));
 }
@@ -865,7 +866,7 @@ a {
 }
 .preview-message {
   color: var(--navy);
-  border: 1px solid #b9cbe0;
+  border: 1px solid #e0b9c6;
   background: var(--mist);
 }
 .button:disabled {
@@ -1099,7 +1100,7 @@ a {
     135deg,
     var(--deep-ink),
     var(--ocean-800) 68%,
-    var(--ocean-500)
+    var(--gold-deep)
   );
   box-shadow: 0 18px 45px rgba(39, 55, 77, 0.16);
 }
@@ -1272,7 +1273,7 @@ a {
   display: grid;
   gap: 4px;
   padding: 13px 0;
-  border-bottom: 1px solid #e8eef5;
+  border-bottom: 1px solid #f5e8ec;
 }
 .profile-data-item span,
 .profile-subsection > span,
@@ -1339,7 +1340,7 @@ a {
 .rating-dots i {
   width: 9px;
   height: 9px;
-  border: 1px solid #b8c8db;
+  border: 1px solid #dbb8c3;
   border-radius: 50%;
   background: #fff;
 }
@@ -1409,7 +1410,7 @@ a {
   margin-bottom: 24px;
   color: #fff;
   border-radius: 22px;
-  background: linear-gradient(135deg, var(--navy), #28598f);
+  background: linear-gradient(135deg, var(--navy), #8f284b);
 }
 .guide-hero h1 {
   margin: 4px 0 8px;
@@ -1498,7 +1499,7 @@ a {
     145deg,
     var(--deep-ink),
     var(--ocean-800) 68%,
-    var(--ocean-500)
+    var(--gold-deep)
   );
 }
 .sidebar-avatar {
@@ -1605,7 +1606,7 @@ a {
 }
 .sidebar-link-external {
   margin-top: 4px;
-  border-top: 1px solid #e5ebf2;
+  border-top: 1px solid #f2e5e9;
   border-radius: 0 0 10px 10px;
 }
 .sidebar-note {
@@ -1791,7 +1792,7 @@ a {
 .stat-card-link:hover,
 .stat-card-link:focus-visible {
   color: var(--navy);
-  border-color: #9eb8d6;
+  border-color: #d69eb0;
   box-shadow: 0 13px 30px rgba(17, 45, 78, 0.12);
   transform: translateY(-3px);
   outline: none;
@@ -1889,7 +1890,7 @@ th {
 td {
   padding: 13px 11px;
   vertical-align: middle;
-  border-bottom: 1px solid #e7edf4;
+  border-bottom: 1px solid #f4e7eb;
 }
 .col-nowrap {
   white-space: nowrap;
@@ -1915,7 +1916,7 @@ td small {
   display: flex;
   gap: 10px;
   padding: 11px 0;
-  border-bottom: 1px solid #e7edf4;
+  border-bottom: 1px solid #f4e7eb;
 }
 .activity-dot {
   flex: 0 0 auto;
@@ -2040,7 +2041,7 @@ td small {
   display: grid;
   gap: 8px;
   padding: 13px;
-  border: 1px solid #d8e2ec;
+  border: 1px solid #ecd8df;
   border-radius: 10px;
   background: var(--paper);
 }
@@ -2155,7 +2156,7 @@ td small {
   display: none;
 }
 .candidate-filter-toggle:hover {
-  background: #dceef9;
+  background: #f9dcea;
 }
 .candidate-filter-disclosure[open] .candidate-filter-toggle {
   color: #fff;
@@ -2165,9 +2166,9 @@ td small {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border: 1px solid #d5e1e9;
+  border: 1px solid #e9d5de;
   border-radius: 16px;
-  background: #f7fafc;
+  background: #fcf7f9;
 }
 .candidate-filter-row {
   display: grid;
@@ -2210,7 +2211,7 @@ td small {
   justify-content: center;
   width: 152px;
   padding: 8px 12px;
-  border: 2px solid #dce5ef;
+  border: 2px solid #efdce2;
   border-radius: 999px;
   color: var(--ink-muted);
   background: #fff;
@@ -2222,7 +2223,7 @@ td small {
 }
 .chip-check:hover {
   color: var(--blue);
-  border-color: #9fb9d7;
+  border-color: #d79fb1;
 }
 .chip-check:has(input:checked) {
   color: #fff;
@@ -2242,7 +2243,7 @@ td small {
   justify-content: flex-end;
   gap: 12px;
   padding-top: 10px;
-  border-top: 1px solid #e3eaf2;
+  border-top: 1px solid #f2e3e8;
 }
 .candidate-filter-actions > .result-count {
   margin-right: auto;
@@ -2270,7 +2271,7 @@ td small {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #e3eaf2;
+  border-bottom: 1px solid #f2e3e8;
 }
 .candidate-card-head > strong {
   font-size: 0.78rem;
@@ -2364,7 +2365,7 @@ td small {
 .invitation-card h3 {
   margin: 0 0 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #e4ebf3;
+  border-bottom: 1px solid #f3e4e9;
   font-size: 0.94rem;
 }
 .invitation-card h3 small {
@@ -2387,7 +2388,7 @@ td small {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 0;
-  border-bottom: 1px solid #e4ebf3;
+  border-bottom: 1px solid #f3e4e9;
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -2478,9 +2479,9 @@ td small {
 .invitation-profile-details {
   margin: 12px 0 2px 49px;
   padding: 18px;
-  border: 1px solid #cbd9e8;
+  border: 1px solid #e8cbd5;
   border-radius: 13px;
-  background: linear-gradient(145deg, #fff, #f8fafc);
+  background: linear-gradient(145deg, #fff, #fcf8f9);
 }
 .invitation-profile-heading {
   display: flex;
@@ -2488,7 +2489,7 @@ td small {
   gap: 10px;
   padding-bottom: 12px;
   margin-bottom: 13px;
-  border-bottom: 1px solid #e3eaf2;
+  border-bottom: 1px solid #f2e3e8;
 }
 .invitation-profile-heading > span {
   color: var(--blue);
@@ -2547,7 +2548,7 @@ td small {
   justify-content: space-between;
   gap: 7px;
   padding: 8px 9px;
-  border: 1px solid #d6e1ed;
+  border: 1px solid #edd6de;
   border-radius: 9px;
   background: #fff;
 }
@@ -2599,7 +2600,7 @@ td small {
   gap: 16px;
   margin-top: 14px;
   padding: 15px;
-  border: 1px solid #cbd9e8;
+  border: 1px solid #e8cbd5;
   border-radius: 11px;
   background: var(--paper);
 }
@@ -2645,7 +2646,7 @@ td small {
   justify-content: center;
   gap: 5px;
   padding-left: 16px;
-  border-left: 1px solid #d5e0eb;
+  border-left: 1px solid #ebd5dd;
 }
 .matched-message-action > span,
 .matched-message-action > small {
@@ -2856,7 +2857,7 @@ td small {
   width: 100%;
   min-height: 43px;
   padding: 9px 11px;
-  border: 1px solid #c8d6e7;
+  border: 1px solid #e7c8d2;
   border-radius: 9px;
   color: var(--navy);
   background: #fff;
@@ -2886,7 +2887,7 @@ td small {
   gap: 11px !important;
   min-height: 54px;
   padding: 8px 12px;
-  border: 1px solid #c8d6e7;
+  border: 1px solid #e7c8d2;
   border-radius: 10px;
   background: var(--slate-100);
 }
@@ -2934,7 +2935,7 @@ td small {
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
-  border: 1px solid #d4dfeb;
+  border: 1px solid #ebd4dc;
   border-radius: 13px;
   color: var(--navy);
   background: #fff;
@@ -2953,7 +2954,7 @@ td small {
   display: grid;
   place-items: center;
   padding-right: 15px;
-  border-right: 1px solid #dce5ef;
+  border-right: 1px solid #efdce2;
 }
 .class-row time strong {
   font-size: 1rem;
@@ -3082,7 +3083,7 @@ td small {
 .schedule-group > .class-list {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #dce5ee;
+  border-top: 1px solid #eedce2;
 }
 .schedule-group {
   padding: 15px 17px;
@@ -3123,7 +3124,7 @@ td small {
   grid-template-columns: minmax(240px, 1fr) minmax(320px, 0.8fr);
   gap: 20px;
   padding: 16px;
-  border: 1px solid #d5e0eb;
+  border: 1px solid #ebd5dd;
   border-radius: 12px;
 }
 .makeup-review-row > div,
@@ -3239,7 +3240,7 @@ td small {
 .admin-record-section + .admin-record-section {
   margin-top: 18px;
   padding-top: 17px;
-  border-top: 1px solid #dbe4ed;
+  border-top: 1px solid #eddbe1;
 }
 .admin-record-section h3 {
   margin: 0 0 10px;
@@ -3295,7 +3296,7 @@ td small {
     135deg,
     var(--deep-ink),
     var(--ocean-800) 68%,
-    var(--ocean-500)
+    var(--gold-deep)
   );
   box-shadow: 0 15px 35px rgba(39, 55, 77, 0.18);
 }
@@ -3328,9 +3329,9 @@ td small {
   gap: 1px;
   margin: 19px 0;
   overflow: hidden;
-  border: 1px solid #d4dfeb;
+  border: 1px solid #ebd4dc;
   border-radius: 14px;
-  background: #d4dfeb;
+  background: #ebd4dc;
 }
 .class-flow > div {
   display: grid;
@@ -3500,7 +3501,7 @@ td small {
 }
 .current-attachment-note {
   padding: 9px 12px;
-  border: 1px solid #d8e2ec;
+  border: 1px solid #ecd8df;
   border-radius: 9px;
   background: var(--paper);
   color: var(--ink-muted);
@@ -3523,7 +3524,7 @@ td small {
 .evidence-link-row input[type="url"] {
   min-height: 42px;
   padding: 0 12px;
-  border: 1px solid #cdd9e2;
+  border: 1px solid #e2cdd6;
   border-radius: 9px;
   font-size: 0.82rem;
 }
@@ -3546,7 +3547,7 @@ td small {
   display: grid;
   gap: 5px;
   padding: 13px;
-  border: 1px solid #d8e2ec;
+  border: 1px solid #ecd8df;
   border-radius: 10px;
   background: var(--paper);
 }
@@ -3766,7 +3767,7 @@ td small {
     border-right: 0;
   }
   .roster-card > div:nth-child(-n + 2) {
-    border-bottom: 1px solid #c5d3e4;
+    border-bottom: 1px solid #e4c5cf;
   }
   .four-column-fields {
     grid-template-columns: 1fr 1fr;
@@ -3820,7 +3821,7 @@ td small {
   }
   .roster-card > div {
     border-right: 0;
-    border-bottom: 1px solid #c5d3e4;
+    border-bottom: 1px solid #e4c5cf;
   }
   .roster-card > div:last-child {
     border-bottom: 0;
@@ -3980,7 +3981,7 @@ td small {
   .matched-message-action {
     width: 100%;
     padding: 12px 7px 3px;
-    border-top: 1px solid #d5e0eb;
+    border-top: 1px solid #ebd5dd;
     border-left: 0;
   }
   .invitation-row {
@@ -4043,7 +4044,7 @@ td small {
   gap: 12px;
 }
 .semester-settings-card {
-  border: 1px solid #c9d8e6;
+  border: 1px solid #e6c9d4;
   border-radius: 15px;
   overflow: hidden;
   background: #fff;
@@ -4077,7 +4078,7 @@ td small {
   overflow: hidden;
   border: 1px dashed #9db2bf;
   border-radius: 15px;
-  background: #f8fbfd;
+  background: #fdf8fa;
 }
 .semester-add-disclosure > summary {
   display: grid;
@@ -4101,8 +4102,8 @@ td small {
   font-weight: 650;
 }
 .semester-add-disclosure[open] > summary {
-  border-bottom: 1px solid #d7e2ea;
-  background: #eef5f9;
+  border-bottom: 1px solid #ead7df;
+  background: #f9eef3;
 }
 .semester-add-icon {
   display: grid;
@@ -4110,13 +4111,13 @@ td small {
   height: 34px;
   place-items: center;
   border-radius: 50%;
-  background: #0f4c75;
+  background: #8c1d40;
   color: #fff;
   font-size: 1.2rem;
   line-height: 1;
 }
 .semester-add-disclosure[open] .semester-add-icon {
-  background: #3282b8;
+  background: #c39a5a;
 }
 .semester-new-form {
   padding: 18px;
@@ -4130,7 +4131,7 @@ td small {
   margin: 16px 0 0;
   padding: 13px 16px;
   border-radius: 12px;
-  background: #edf4f7;
+  background: #f7edf3;
   color: #526d82;
 }
 .semester-setting-list {
@@ -4144,7 +4145,7 @@ td small {
   align-items: center;
   gap: 18px;
   padding: 15px 17px;
-  border: 1px solid #d7e2ea;
+  border: 1px solid #ead7df;
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 8px 22px rgba(39, 55, 77, 0.05);
@@ -4190,8 +4191,8 @@ td small {
   min-width: 88px;
   padding: 6px 11px;
   border-radius: 999px;
-  color: #0f4c75;
-  background: #e4f3fc;
+  color: #8c1d40;
+  background: #fce4f0;
   font-size: 0.8rem;
   font-weight: 850;
   line-height: 1.15;
@@ -4202,7 +4203,7 @@ td small {
 }
 .semester-setting-status.status-future {
   color: #526d82;
-  background: #edf2f5;
+  background: #f5edf1;
 }
 .semester-setting-status.status-past {
   color: #8a6418;
@@ -4240,9 +4241,9 @@ td small {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  border: 1px solid #d7e2ea;
-  background: #f4f8fb;
-  color: #0f4c75;
+  border: 1px solid #ead7df;
+  background: #fbf4f7;
+  color: #8c1d40;
   font-size: 0.85rem;
   cursor: pointer;
   list-style: none;
@@ -4251,18 +4252,18 @@ td small {
   display: none;
 }
 .semester-edit-icon-btn:hover {
-  background: #e4f3fc;
-  border-color: #9fc7e0;
+  background: #fce4f0;
+  border-color: #e09fbe;
 }
 .semester-edit-disclosure[open] .semester-edit-icon-btn {
-  background: #0f4c75;
-  border-color: #0f4c75;
+  background: #8c1d40;
+  border-color: #8c1d40;
   color: #fff;
 }
 .semester-edit-disclosure .semester-edit-form {
   padding: 16px 17px;
-  border-top: 1px solid #d7e2ea;
-  background: #eef5f9;
+  border-top: 1px solid #ead7df;
+  background: #f9eef3;
   border-radius: 0 0 12px 12px;
 }
 .semester-edit-warning {
@@ -4303,7 +4304,7 @@ td small {
   padding: 0 8px;
   place-items: center;
   border-radius: 999px;
-  color: #0f4c75;
+  color: #8c1d40;
   background: #dde6ed;
   font-size: 0.76rem;
 }
@@ -4317,17 +4318,17 @@ td small {
   gap: 4px 20px;
   border-radius: 12px;
   padding: 13px 15px;
-  background: #f6f9fc;
+  background: #fcf6f8;
   color: #27374d;
   text-decoration: none;
 }
 .conversation-link-list > a.is-ended {
-  border: 1px solid #d8e2e9;
-  background: #fbfcfd;
+  border: 1px solid #e9d8e0;
+  background: #fdfbfc;
 }
 .conversation-link-list > a.has-unread {
-  border: 1px solid #bcdcf0;
-  background: #eef6fc;
+  border: 1px solid #f0bcd5;
+  background: #fceef4;
 }
 .conversation-link-list a small {
   color: #526d82;
@@ -4336,7 +4337,7 @@ td small {
   grid-column: 2;
   grid-row: 1 / -1;
   align-self: center;
-  color: #0f4c75;
+  color: #8c1d40;
   font-style: normal;
 }
 .conversation-link-list a strong {
@@ -4366,7 +4367,7 @@ td small {
 }
 .conversation-time {
   grid-column: 1;
-  color: #90a4b7;
+  color: #b7909f;
   font-size: 0.68rem;
 }
 .unread-badge {
@@ -4383,7 +4384,7 @@ td small {
 }
 .conversation-history {
   overflow: hidden;
-  border: 1px solid #d5e1e9;
+  border: 1px solid #e9d5de;
   border-radius: 13px;
   background: #fff;
 }
@@ -4406,7 +4407,7 @@ td small {
   height: 28px;
   place-items: center;
   border-radius: 50%;
-  color: #0f4c75;
+  color: #8c1d40;
   background: #dde6ed;
   font-style: normal;
   transition: transform 0.18s ease;
@@ -4420,8 +4421,8 @@ td small {
   transform: rotate(45deg);
 }
 .conversation-history[open] > summary {
-  border-bottom: 1px solid #dce5ed;
-  background: #f8fafc;
+  border-bottom: 1px solid #eddce3;
+  background: #fcf8f9;
 }
 .conversation-history[open] > summary > i {
   transform: rotate(180deg);
@@ -4435,7 +4436,7 @@ td small {
   padding: 7px 11px;
   border-radius: 10px;
   color: #526d82;
-  background: #edf2f5;
+  background: #f5edf1;
   font-size: 0.72rem;
   font-weight: 800;
   text-align: right;
@@ -4479,15 +4480,15 @@ td small {
 }
 .hours-summary strong {
   font-size: 2rem;
-  color: #0f4c75;
+  color: #8c1d40;
 }
 .deadline-note {
   display: grid;
   gap: 5px;
   margin-bottom: 18px;
   padding: 14px 16px;
-  border-left: 4px solid #3282b8;
-  background: #edf6fc;
+  border-left: 4px solid #c39a5a;
+  background: #fcedf4;
   color: #27374d;
 }
 .hours-download-form,
@@ -4514,7 +4515,7 @@ td small {
   height: 22px;
   padding: 0;
   justify-self: start;
-  accent-color: #0f4c75;
+  accent-color: #8c1d40;
 }
 .admin-pairing-form {
   padding: 20px clamp(18px, 2.4vw, 28px) 24px;
@@ -4541,7 +4542,7 @@ td small {
 .semester-deadlines span {
   padding: 8px 11px;
   border-radius: 9px;
-  background: #f3f7fa;
+  background: #faf3f6;
 }
 .admin-class-list a,
 .admin-class-list > div {
@@ -4550,7 +4551,7 @@ td small {
   gap: 16px;
   align-items: center;
   padding: 15px;
-  border: 1px solid #d6e1ea;
+  border: 1px solid #ead6de;
   border-radius: 13px;
   color: #27374d;
   text-decoration: none;
@@ -4571,7 +4572,7 @@ td small {
   font-size: 0.86rem;
 }
 .admin-class-list b {
-  color: #0f4c75;
+  color: #8c1d40;
 }
 .class-overview-filter {
   display: grid;
@@ -4583,9 +4584,9 @@ td small {
   gap: 12px;
   margin-bottom: 18px;
   padding: 16px;
-  border: 1px solid #d5e1e9;
+  border: 1px solid #e9d5de;
   border-radius: 16px;
-  background: #f7fafc;
+  background: #fcf7f9;
 }
 .class-overview-filter label {
   display: grid;
@@ -4611,7 +4612,7 @@ td small {
   align-items: end;
   min-height: 100px;
   padding: 17px;
-  border: 1px solid #d6e1ea;
+  border: 1px solid #ead6de;
   border-radius: 15px;
   background: #fff;
 }
@@ -4627,7 +4628,7 @@ td small {
 }
 .class-overview-metrics strong,
 .tutor-schedule-metrics strong {
-  color: #0f4c75;
+  color: #8c1d40;
   font-size: 1.8rem;
 }
 .class-overview-metrics .has-attention,
@@ -4641,23 +4642,23 @@ td small {
 }
 .class-overview-metrics > div:nth-child(1),
 .tutor-schedule-metrics > div:nth-child(1) {
-  border-color: #c8d9e5;
+  border-color: #e5c8d5;
   background: linear-gradient(145deg, #fff 58%, #dde6ed);
 }
 .class-overview-metrics > div:nth-child(2),
 .tutor-schedule-metrics > div:nth-child(2) {
-  border-color: #bdd9eb;
-  background: linear-gradient(145deg, #fff 58%, #e3f3fc);
+  border-color: #ebbdd3;
+  background: linear-gradient(145deg, #fff 58%, #fce3ef);
 }
 .class-overview-metrics > div:nth-child(3),
 .tutor-schedule-metrics > div:nth-child(3) {
-  border-color: #c5d3dc;
-  background: linear-gradient(145deg, #fff 58%, #edf2f5);
+  border-color: #dcc5d0;
+  background: linear-gradient(145deg, #fff 58%, #f5edf1);
 }
 .class-overview-metrics > div:nth-child(4),
 .tutor-schedule-metrics > div:nth-child(4) {
-  border-color: #b8d7eb;
-  background: linear-gradient(145deg, #edf7fd, #fff);
+  border-color: #ebb8d0;
+  background: linear-gradient(145deg, #fdedf5, #fff);
 }
 .class-exception-preview > summary,
 .tutor-schedule-section > summary {
@@ -4716,14 +4717,14 @@ td small {
 .tutor-overview-head {
   padding: 11px 18px;
   border-radius: 10px;
-  background: #edf3f7;
+  background: #f7edf2;
   color: #526d82;
   font-size: 0.76rem;
   font-weight: 850;
 }
 .tutor-overview-list > a {
   padding: 14px 18px;
-  border-bottom: 1px solid #e1e9ef;
+  border-bottom: 1px solid #efe1e7;
   color: #27374d;
   text-decoration: none;
   transition:
@@ -4731,7 +4732,7 @@ td small {
     transform 0.16s ease;
 }
 .tutor-overview-list > a:hover {
-  background: #f3f8fb;
+  background: #fbf3f7;
   transform: translateX(2px);
 }
 .tutor-overview-name {
@@ -4752,7 +4753,7 @@ td small {
   background: #fff0c8;
 }
 .tutor-overview-list em {
-  color: #0f4c75;
+  color: #8c1d40;
   font-style: normal;
   font-size: 0.82rem;
   font-weight: 850;
@@ -4766,7 +4767,7 @@ td small {
   padding: 18px;
 }
 .simple-pagination a {
-  color: #0f4c75;
+  color: #8c1d40;
   font-weight: 800;
   text-decoration: none;
 }
@@ -4782,7 +4783,7 @@ td small {
   padding: 24px 28px;
   border-radius: 20px;
   color: #fff;
-  background: linear-gradient(120deg, #27374d, #0f4c75);
+  background: linear-gradient(120deg, #27374d, #8c1d40);
 }
 .tutor-schedule-hero h1 {
   margin: 5px 0;
@@ -4790,7 +4791,7 @@ td small {
 }
 .tutor-schedule-hero p {
   margin: 0;
-  color: #bbe1fa;
+  color: #f0d9b5;
 }
 .tutor-schedule-hero form {
   min-width: min(360px, 100%);
@@ -4816,7 +4817,7 @@ td small {
   min-width: 220px;
   padding: 12px 14px;
   border-radius: 11px;
-  background: #edf4f7;
+  background: #f7edf3;
 }
 .tutor-pairing-strip small {
   color: #526d82;
@@ -4850,8 +4851,8 @@ td small {
   height: 36px;
   padding: 0 10px;
   border-radius: 999px;
-  color: #0f4c75;
-  background: #dceef9;
+  color: #8c1d40;
+  background: #f9dcea;
   font-style: normal;
   font-weight: 850;
 }
@@ -4863,7 +4864,7 @@ td small {
   transition: background 0.16s ease;
 }
 .tutor-schedule-section > summary.tutor-schedule-section-heading:hover {
-  background: #f4f8fb;
+  background: #fbf4f7;
 }
 .tutor-schedule-section
   > summary.tutor-schedule-section-heading::-webkit-details-marker {
@@ -4891,7 +4892,7 @@ td small {
 }
 .export-scope label {
   padding: 11px 14px;
-  border: 1px solid #cbd9e5;
+  border: 1px solid #e5cbd5;
   border-radius: 10px;
 }
 .export-user-grid {
@@ -4909,7 +4910,7 @@ td small {
   align-items: start;
   padding: 11px;
   border-radius: 10px;
-  background: #f5f8fb;
+  background: #fbf5f7;
 }
 .export-user-grid span {
   display: grid;
@@ -4926,20 +4927,20 @@ td small {
   margin: 0;
 }
 .export-program-card {
-  border-color: #b9ccdc;
-  background: linear-gradient(135deg, #fff 68%, #e9f1f7);
+  border-color: #dcb9c7;
+  background: linear-gradient(135deg, #fff 68%, #f7e9ef);
 }
 .export-audience-card {
-  border-color: #c5d8e5;
-  background: linear-gradient(135deg, #fff 68%, #edf5fa);
+  border-color: #e5c5d4;
+  background: linear-gradient(135deg, #fff 68%, #faedf3);
 }
 .export-period-card {
-  border-color: #bfd9e9;
-  background: linear-gradient(135deg, #fff 68%, #e9f6fd);
+  border-color: #e9bfd3;
+  background: linear-gradient(135deg, #fff 68%, #fde9f3);
 }
 .export-fields-card {
-  border-color: #c8cde4;
-  background: linear-gradient(135deg, #fff 68%, #f0f1fa);
+  border-color: #e4c8c9;
+  background: linear-gradient(135deg, #fff 68%, #faf0f0);
 }
 .export-format-card {
   border-color: #bcdbc9;
@@ -4958,16 +4959,16 @@ td small {
   height: 42px;
   border-radius: 13px;
   color: #fff;
-  background: #0f4c75;
+  background: #8c1d40;
   font-size: 1.05rem;
   font-weight: 900;
   box-shadow: 0 7px 16px rgba(15, 76, 117, 0.18);
 }
 .export-audience-card .export-card-heading > span {
-  background: #3282b8;
+  background: #c39a5a;
 }
 .export-period-card .export-card-heading > span {
-  background: #3f72af;
+  background: #8c1d40;
 }
 .export-fields-card .export-card-heading > span {
   background: #526d82;
@@ -5004,21 +5005,21 @@ td small {
   gap: 11px;
   min-height: 66px;
   padding: 12px 15px;
-  border: 1px solid #cad8e2;
+  border: 1px solid #e2cad5;
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.82);
   cursor: pointer;
 }
 .export-choice-row > label:has(input:checked) {
-  border-color: #3282b8;
+  border-color: #c39a5a;
   box-shadow: 0 0 0 3px rgba(50, 130, 184, 0.12);
-  background: #f2f9fd;
+  background: #fdf2f7;
 }
 .export-choice-row input {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  accent-color: #0f4c75;
+  accent-color: #8c1d40;
 }
 .export-choice-row span {
   display: grid;
@@ -5028,7 +5029,7 @@ td small {
 }
 .export-program-select {
   padding: 15px;
-  border: 1px solid #d4e1e9;
+  border: 1px solid #e9d4de;
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.86);
 }
@@ -5044,7 +5045,7 @@ td small {
 }
 .export-user-picker {
   margin-top: 14px;
-  border: 1px solid #d2dee7;
+  border: 1px solid #e7d2db;
   border-radius: 13px;
   background: #fff;
 }
@@ -5067,7 +5068,7 @@ td small {
 }
 .export-user-picker > summary em {
   margin-left: auto;
-  color: #0f4c75;
+  color: #8c1d40;
   font-style: normal;
   font-size: 0.8rem;
   font-weight: 800;
@@ -5078,8 +5079,8 @@ td small {
   justify-content: space-between;
   gap: 14px;
   padding: 14px 16px;
-  border-top: 1px solid #e0e8ee;
-  background: #f7fafc;
+  border-top: 1px solid #eee0e6;
+  background: #fcf7f9;
 }
 .export-user-tools > label {
   display: grid;
@@ -5098,8 +5099,8 @@ td small {
   padding: 14px 16px;
 }
 .export-user-grid label:has(input:checked) {
-  outline: 2px solid #9cc9e6;
-  background: #eaf6fd;
+  outline: 2px solid #e69cbf;
+  background: #fdeaf3;
 }
 .export-user-grid label[hidden] {
   display: none !important;
@@ -5110,7 +5111,7 @@ td small {
   gap: 12px;
   margin-top: 14px;
   padding: 15px;
-  border: 1px solid #d4e1e9;
+  border: 1px solid #e9d4de;
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.86);
 }
@@ -5138,7 +5139,7 @@ td small {
   gap: 14px;
   margin-bottom: 12px;
   padding: 12px 14px;
-  border: 1px solid #d5dbea;
+  border: 1px solid #ead5d8;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.8);
 }
@@ -5162,21 +5163,21 @@ td small {
   gap: 10px;
   min-height: 58px;
   padding: 11px 13px;
-  border: 1px solid #d2d9e5;
+  border: 1px solid #e5d2d6;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.84);
   cursor: pointer;
 }
 .export-field-grid > label:has(input:checked) {
-  border-color: #7f97aa;
-  background: #edf3f7;
+  border-color: #aa7f91;
+  background: #f7edf2;
   box-shadow: 0 0 0 2px rgba(82, 109, 130, 0.1);
 }
 .export-field-grid input {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
-  accent-color: #0f4c75;
+  accent-color: #8c1d40;
 }
 .export-field-grid span {
   display: grid;
@@ -5213,7 +5214,7 @@ td small {
   display: grid;
 }
 .export-submit-row > span strong {
-  color: #bbe1fa;
+  color: #f0d9b5;
 }
 .export-submit-row > span small {
   color: #dde6ed;
@@ -5227,7 +5228,7 @@ td small {
   border-left: 4px solid #9db2bf;
   border-radius: 0 10px 10px 0;
   color: #526d82;
-  background: #f1f5f7;
+  background: #f7f1f4;
   font-size: 0.87rem;
 }
 .message-page-main {
@@ -5243,7 +5244,7 @@ td small {
 }
 .conversation-list,
 .conversation-panel {
-  border: 1px solid #cbd9e5;
+  border: 1px solid #e5cbd5;
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 16px 38px rgba(39, 55, 77, 0.08);
@@ -5282,8 +5283,8 @@ td small {
   align-items: center;
   gap: 16px;
   padding: 20px 24px;
-  border-bottom: 1px solid #dbe4ec;
-  background: #f7fafc;
+  border-bottom: 1px solid #ecdbe2;
+  background: #fcf7f9;
 }
 .conversation-panel h1 {
   margin: 2px 0;
@@ -5303,7 +5304,7 @@ td small {
   flex-direction: column;
   gap: 11px;
   padding: 24px;
-  background: #f8fafc;
+  background: #fcf8f9;
 }
 .message-bubble {
   align-self: flex-start;
@@ -5316,7 +5317,7 @@ td small {
 .message-bubble.is-mine {
   align-self: flex-end;
   border-radius: 16px 5px 16px 16px;
-  background: #0f4c75;
+  background: #8c1d40;
   color: #fff;
 }
 .message-bubble p {
@@ -5330,7 +5331,7 @@ td small {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 18px;
-  border-top: 1px solid #dbe4ec;
+  border-top: 1px solid #ecdbe2;
 }
 .message-compose textarea {
   resize: vertical;
@@ -5441,7 +5442,7 @@ td small {
   min-height: 43px;
   padding: 9px 38px 9px 11px;
   appearance: none;
-  border: 1px solid #c8d6e7;
+  border: 1px solid #e7c8d2;
   border-radius: 9px;
   color: var(--navy);
   background-color: #fff;
@@ -5473,7 +5474,7 @@ td small {
   min-height: 43px;
   padding: 9px 11px;
   appearance: none;
-  border: 1px solid #c8d6e7;
+  border: 1px solid #e7c8d2;
   border-radius: 9px;
   color: var(--navy);
   background: #fff;
@@ -5512,7 +5513,7 @@ td small {
 .dashboard-workspace input[type="password"]:focus,
 .dashboard-workspace input[type="number"]:focus,
 .dashboard-workspace textarea:focus {
-  border-color: #3282b8;
+  border-color: #c39a5a;
   outline: 0;
   box-shadow: 0 0 0 3px rgba(50, 130, 184, 0.16);
 }
@@ -5546,13 +5547,13 @@ td small {
   gap: 4px 12px;
   min-height: 112px;
   padding: 18px;
-  border: 1px solid #d8e2ea;
+  border: 1px solid #ead8df;
   border-radius: 15px;
-  background: #f9fbfc;
+  background: #fcf9fb;
 }
 .hours-overview-metrics > div.is-verified {
-  border-color: #b8d7eb;
-  background: linear-gradient(135deg, #edf7fd, #fff);
+  border-color: #ebb8d0;
+  background: linear-gradient(135deg, #fdedf5, #fff);
 }
 .hours-overview-metrics span,
 .history-count-card span {
@@ -5562,7 +5563,7 @@ td small {
 }
 .hours-overview-metrics strong,
 .history-count-card strong {
-  color: #0f4c75;
+  color: #8c1d40;
   font-size: 2.1rem;
   line-height: 1;
 }
@@ -5580,7 +5581,7 @@ td small {
 }
 .semester-hours-card {
   overflow: hidden;
-  border: 1px solid #d3dfe9;
+  border: 1px solid #e9d3dc;
   border-radius: 14px;
   background: #fff;
 }
@@ -5615,7 +5616,7 @@ td small {
   text-align: right;
 }
 .semester-hours-total strong {
-  color: #0f4c75;
+  color: #8c1d40;
   font-size: 1.35rem;
 }
 .semester-hours-total small {
@@ -5629,7 +5630,7 @@ td small {
   place-items: center;
   border-radius: 50%;
   background: #dde6ed;
-  color: #0f4c75;
+  color: #8c1d40;
   font-style: normal;
   transition: transform 0.18s ease;
 }
@@ -5645,8 +5646,8 @@ td small {
   transform: rotate(180deg);
 }
 .semester-hours-card[open] > summary {
-  border-bottom: 1px solid #dce5ed;
-  background: #f8fafc;
+  border-bottom: 1px solid #eddce3;
+  background: #fcf8f9;
 }
 .semester-hours-content {
   padding: 14px;
@@ -5674,16 +5675,16 @@ td small {
   place-items: center;
   border: 1px solid #9db2bf;
   border-radius: 50%;
-  color: #0f4c75;
-  background: #edf4f8;
+  color: #8c1d40;
+  background: #f8edf2;
   font-size: 0.88rem;
   font-weight: 900;
   cursor: pointer;
 }
 .info-popover-button:hover,
 .info-popover-button[aria-expanded="true"] {
-  border-color: #3282b8;
-  background: #dceef9;
+  border-color: #c39a5a;
+  background: #f9dcea;
 }
 .info-popover {
   position: absolute;
@@ -5692,7 +5693,7 @@ td small {
   right: 0;
   width: min(390px, calc(100vw - 56px));
   padding: 16px 17px;
-  border: 1px solid #b9ccdb;
+  border: 1px solid #dbb9c7;
   border-radius: 13px;
   color: #27374d;
   background: #fff;
@@ -5704,8 +5705,8 @@ td small {
   right: 10px;
   width: 11px;
   height: 11px;
-  border-top: 1px solid #b9ccdb;
-  border-left: 1px solid #b9ccdb;
+  border-top: 1px solid #dbb9c7;
+  border-left: 1px solid #dbb9c7;
   background: #fff;
   content: "";
   transform: rotate(45deg);
@@ -5741,13 +5742,13 @@ td small {
   min-width: 0;
   height: 100%;
   padding: 18px;
-  border: 1px solid #d4e0e9;
+  border: 1px solid #e9d4dd;
   border-radius: 15px;
-  background: linear-gradient(145deg, #fff 66%, #edf4f8);
+  background: linear-gradient(145deg, #fff 66%, #f8edf2);
 }
 .certificate-version-card {
-  border-color: #c5dbea;
-  background: linear-gradient(145deg, #fff 66%, #e9f6fd);
+  border-color: #eac5d6;
+  background: linear-gradient(145deg, #fff 66%, #fde9f3);
 }
 .certificate-option-heading {
   display: flex;
@@ -5762,11 +5763,11 @@ td small {
   place-items: center;
   border-radius: 11px;
   color: #fff;
-  background: #0f4c75;
+  background: #8c1d40;
   font-weight: 900;
 }
 .certificate-version-card .certificate-option-heading > span {
-  background: #3282b8;
+  background: #c39a5a;
 }
 .certificate-option-heading > div {
   display: grid;
@@ -5798,15 +5799,15 @@ td small {
   gap: 9px;
   min-height: 50px;
   padding: 10px 12px;
-  border: 1px solid #cbd9e4;
+  border: 1px solid #e4cbd5;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.88);
   cursor: pointer;
 }
 .certificate-version-options label:has(input:checked),
 .certificate-detail-fields label:has(input:checked) {
-  border-color: #3282b8;
-  background: #edf8fe;
+  border-color: #c39a5a;
+  background: #feedf6;
   box-shadow: 0 0 0 2px rgba(50, 130, 184, 0.1);
 }
 .certificate-version-options input,
@@ -5814,7 +5815,7 @@ td small {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
-  accent-color: #0f4c75;
+  accent-color: #8c1d40;
 }
 .certificate-summary-note {
   display: flex;
@@ -5822,7 +5823,7 @@ td small {
   gap: 11px;
   margin-top: 13px;
   padding: 14px;
-  border: 1px solid #d4e1e9;
+  border: 1px solid #e9d4de;
   border-radius: 12px;
   color: #27374d;
   background: rgba(255, 255, 255, 0.9);
@@ -5838,7 +5839,7 @@ td small {
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: #3282b8;
+  background: #c39a5a;
   font-size: 0.78rem;
   font-weight: 900;
 }
@@ -5857,7 +5858,7 @@ td small {
 .certificate-detail-fields {
   margin-top: 13px;
   padding: 14px;
-  border: 1px solid #d4e1e9;
+  border: 1px solid #e9d4de;
   border-radius: 12px;
   background: #fff;
 }
