@@ -30,7 +30,7 @@
 - [x] PostgreSQL:同機安裝,**走 TCP `127.0.0.1:5432`(`scram-sha-256`),不是 Unix socket**——socket 預設 `peer` 認證只認「OS 帳號名稱＝角色名稱」,服務帳號是 `mpts`、資料庫角色是 `mpts_app`,兩者刻意不同名,peer 一定失敗,細節見 `docs/DEPLOY.md`。角色/資料庫名稱:`mpts_app`/`mpts`(密碼不記錄於本文件)。
 - [~] 備份:**已建立本機每日備份**(`deploy/backup_mpts.sh` + `mpts-backup.timer`,03:15 執行,`/var/backups/mpts`,保留 14 天,已實測還原),但這只是同一台 VM 的本機磁碟,不是異地備援。NFS 掛載點/異地備份**尚未設定**——資訊中心信件僅提及「每季系統完整備份乙次」,遠低於一般期望的每日頻率,且該備份硬碟未以區塊裝置掛載到這台 VM(`lsblk` 確認),不是我們能寫入的位置,異地備份方案仍待確認。
 - [x] GitHub deploy key:**不需要**——repo 目前是 public,直接 `git clone`/`git fetch` 即可,不需要在 VM 上安裝任何 GitHub 憑證。若之後 repo 改回 private,才需要照第 9 節建立 read-only deploy key。
-- [~] 分支策略:首次部署直接 `git clone --branch main`(取得當時 `main` 最新 commit `859f48e`),**目前 `/opt/mpts` 仍是 attached 在 `main` 分支上,尚未切成 detached HEAD**(收尾階段已先關閉暫時的 sudo NOPASSWD,沒有再重開來做這個非急迫的整理動作)。下一次照第 6.2 節部署更新時,`git checkout --detach <TARGET_COMMIT>` 會自然把它轉成 detached HEAD;在那之前若有人手動在 VM 上 `git pull`,會讓正式環境跟著 `main` 最新 commit 移動,不符合本文件「正式環境用明確 commit 部署」的原則,首次真正的更新部署時務必用 detach 方式取代直接 pull。
+- [x] 分支策略:首次部署直接 `git clone --branch main`(取得當時 `main` 最新 commit `859f48e`,當時仍 attached 在 `main` 分支上)。**2026-08-18 第一次照第 6.2 節部署更新時已 `git checkout --detach af7fc38...`**,`/opt/mpts` 現在確實是 detached HEAD,固定在明確 commit,不會被人手動 `git pull` 意外帶走。之後每次更新都延續這個模式。
 - [x] 正式 health check:`curl -I https://mpts.tcsl.ntnu.edu.tw/` 預期 `200`(未登入會拿到登入頁,不是 redirect);Django 本身沒有另外的 `/health/` endpoint。
 - [ ] TLS 憑證來源已改為 **Let's Encrypt**(非資訊中心提供),見 `docs/DEPLOY.md`「首次部署實際踩過的坑」的 certbot standalone + renewal-hooks 說明,90 天效期、`certbot.timer` 自動續約。
 
@@ -282,3 +282,9 @@ Deploy key 的 private key 只存在 VM，權限應為 `600`；public key 加到
 - Gunicorn socket 與其他 runtime file
 
 Git 僅同步程式碼、migration、template、static source、部署範本及經核准的文件。`collectstatic` 產物可在 VM 重新產生，不應從本機手動覆蓋。
+
+## 11. 部署紀錄
+
+依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
+
+- **2026-08-18**：操作者 Claude Code。上一版 `859f48e` → 新版 `af7fc38`（配色改為師大酒紅/金色系 + 頁首並列師大校徽與華語系 logo，`603eace`/`af7fc38`）。無 migration。部署前備份：`/var/backups/mpts/20260818-171119`。驗收：`https://mpts.tcsl.ntnu.edu.tw/` 回應 200，`app.css` 內容確認為新色票、`ntnu-logo.png` 回應 200，`link` 標籤 cache-busting 版本正確更新。過程中發現 `deploy/backup_mpts.sh` 先前是用 `scp`/`install` 手動佈署到 VM 上（在該檔案真正進入 git 歷史之前），與這次 `git checkout --detach` 的目標 commit 衝突（unmerged untracked file）；核對兩者內容位元組相同後刪除未追蹤版本再重試，之後的部署不會再遇到這個特定衝突。
