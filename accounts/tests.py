@@ -846,9 +846,22 @@ class QualificationTests(TestCase):
         self.client.force_login(self.tutor)
         upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
         response = self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
-        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
         document = QualificationDocument.objects.get(tutor=self.tutor)
         self.assertEqual(document.original_filename, "proof.pdf")
+
+    def test_oversized_upload_returns_to_qualification_tab_with_error(self):
+        """The upload form lives on the dashboard's #qualification tab; a rejected
+        upload (e.g. over the 1 MB limit) must redirect back to that same tab rather
+        than dropping the user onto #overview, which used to happen because the
+        redirect target had no fragment at all."""
+        self.client.force_login(self.tutor)
+        oversized = SimpleUploadedFile(
+            "too_big.pdf", minimal_pdf_bytes() + b"0" * 1_000_001, content_type="application/pdf"
+        )
+        response = self.client.post(reverse("accounts:upload_qualification"), {"file": oversized})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        self.assertFalse(QualificationDocument.objects.filter(tutor=self.tutor).exists())
 
     def test_tutee_cannot_upload_qualification(self):
         tutee = User.objects.create_user(username="TUTEE1", password="Tutee-password-2026", role=Role.TUTEE)

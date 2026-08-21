@@ -1019,7 +1019,7 @@ def upload_qualification(request):
         for errors in form.errors.values():
             for error in errors:
                 messages.error(request, error)
-    return redirect("accounts:dashboard")
+    return redirect(reverse("accounts:dashboard") + "#qualification")
 
 
 @login_required
@@ -1056,7 +1056,7 @@ def review_qualification(request, pk):
         {"result": document.status},
     )
     messages.success(request, "審核結果已儲存。 / Review result saved.")
-    return redirect("accounts:dashboard")
+    return redirect(reverse("accounts:dashboard") + "#qualifications")
 
 
 @role_required(Role.ADMIN)

@@ -483,6 +483,33 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "請擇一上傳以下文件")
         self.assertContains(response, "Please upload one of the following documents")
 
+    def test_invite_tutee_returns_to_find_tutee_tab(self):
+        """The invite button lives on the dashboard's #find-tutee tab; redirecting back
+        to a bare #overview after sending an invite (the old behaviour) dropped the
+        tutor off the candidate list they were just browsing."""
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("tutoring:invite_tutee", args=[self.tutee.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#find-tutee")
+
+    def test_invite_tutor_returns_to_find_tutor_tab(self):
+        self.client.force_login(self.maryland)
+        response = self.client.post(reverse("tutoring:invite_tutor", args=[self.maryland_tutor.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#find-tutor")
+
+    def test_respond_invitation_returns_to_invitations_tab(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        self.client.force_login(self.tutee)
+        response = self.client.post(
+            reverse("tutoring:respond_invitation", args=[invitation.pk]), {"action": "reject"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#invitations")
+
+    def test_cancel_pending_invitation_returns_to_invitations_tab(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("tutoring:cancel_invitation", args=[invitation.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#invitations")
+
     def test_tutee_find_teacher_heading_stays_csl_teacher(self):
         self.client.force_login(self.maryland)
         response = self.client.get(reverse("accounts:dashboard"))
@@ -1059,6 +1086,47 @@ class ClassWorkflowTests(TestCase):
             "reflection": "完成本次練習並互相回饋",
             "remarks": "",
         }
+
+    def test_schedule_class_view_returns_to_schedule_tab_on_success_and_error(self):
+        """schedule_class's form lives on the dashboard's #schedule tab; both the success
+        and validation-error redirects used to drop the tutor back on #overview instead."""
+        self.client.force_login(self.tutor)
+        class_date = timezone.localdate() + timedelta(days=1)
+        response = self.client.post(
+            reverse("tutoring:schedule_class"),
+            {
+                "pairing": self.pairing.pk,
+                "class_date": class_date.isoformat(),
+                "start_time": "10:00",
+                "duration": "1.0",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#schedule")
+
+        invalid_response = self.client.post(reverse("tutoring:schedule_class"), {})
+        self.assertRedirects(invalid_response, reverse("accounts:dashboard") + "#schedule")
+
+    def test_class_cancel_returns_to_schedule_tab(self):
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("tutoring:class_cancel", args=[session.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#schedule")
+
+    def test_makeup_review_without_next_param_returns_to_makeup_review_tab(self):
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        MakeupReview.objects.create(session=session, status=MakeupReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="CLASS-MAKEUP-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("tutoring:makeup_review", args=[session.pk]), {"action": "approve"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#makeup-review")
 
     def test_schedule_reserves_weekly_quota_and_dashboard_shows_class(self):
         # Anchor to the Tuesday/Wednesday of a future week instead of "today + 1/+2 days":

@@ -322,7 +322,7 @@ def invite_tutee(request, user_id):
         _show_validation_error(request, error)
     else:
         messages.success(request, "邀請已送出，對方需於五天內回覆。 / Invitation sent and will expire in five days.")
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#find-tutee")
 
 
 @login_required
@@ -336,7 +336,7 @@ def invite_tutor(request, user_id):
         _show_validation_error(request, error)
     else:
         messages.success(request, "邀請已送出，對方需於五天內回覆。 / Invitation sent and will expire in five days.")
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#find-tutor")
 
 
 @login_required
@@ -354,7 +354,7 @@ def respond_invitation(request, pk):
             messages.success(request, "已建立輔導配對！ / Tutoring match created!")
         else:
             messages.success(request, "已婉拒邀請。 / Invitation declined.")
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#invitations")
 
 
 @login_required
@@ -366,7 +366,7 @@ def cancel_pending_invitation(request, pk):
         _show_validation_error(request, error)
     else:
         messages.success(request, "邀請已取消。 / Invitation cancelled.")
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#invitations")
 
 
 @login_required
@@ -455,7 +455,7 @@ def schedule_class(request):
         for errors in form.errors.values():
             for error in errors:
                 messages.error(request, error)
-        return redirect("accounts:dashboard")
+        return redirect(f"{reverse('accounts:dashboard')}#schedule")
     try:
         sessions = schedule_classes(
             tutor=request.user,
@@ -469,7 +469,7 @@ def schedule_class(request):
         _show_validation_error(request, error)
     else:
         messages.success(request, f"已排入 {len(sessions)} 堂課。 / {len(sessions)} class(es) scheduled.")
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#schedule")
 
 
 def _session_for_user(user, pk):
@@ -649,7 +649,7 @@ def class_cancel(request, pk):
         _show_validation_error(request, error)
     else:
         messages.success(request, "課程已取消，時數額度已釋放。 / Class cancelled and reserved hours released.")
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#schedule")
 
 
 @login_required
@@ -698,7 +698,7 @@ def makeup_review(request, pk):
         messages.success(request, "補登審核已完成。 / Makeup review completed.")
     if request.POST.get("next") == "detail":
         return redirect("tutoring:class_detail", pk=pk)
-    return redirect("accounts:dashboard")
+    return redirect(f"{reverse('accounts:dashboard')}#makeup-review")
 
 
 @login_required
