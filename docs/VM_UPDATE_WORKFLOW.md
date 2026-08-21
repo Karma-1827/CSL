@@ -287,6 +287,7 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-08-21（七）**：操作者 Claude Code。上一版 `55e61b4` → 新版 `f44fd29`（口語能力審核區塊版面調整：下載連結移到預覽下方、審核備註移到通過/拒絕按鈕下方，`6233ecc`；「下載」連結改為小按鈕樣式，`f44fd29`)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260821-184434`。驗收:`https://mpts.tcsl.ntnu.edu.tw/` 回應 200,`app.css` 內容確認含新的 `.qualification-review-form` 規則。`git checkout --detach` 乾淨無衝突。
 - **2026-08-21（六）**：操作者 Claude Code。上一版 `a8c8a24` → 新版 `55e61b4`（此次一併帶上先前已 push 但尚未部署的 `b014afc` 口語能力證明預覽功能,以及 `55e61b4` 本身:「補件」改為「拒絕」+ 補上審核備註輸入欄位)。**含 migration**:`tutoring.0024_alter_qualificationdocument_status`(純 choices 顯示文字變更,無資料異動)。部署前備份:`/var/backups/mpts/20260821-183137`。驗收:`https://mpts.tcsl.ntnu.edu.tw/` 與 `/system-admin/login/` 皆回應 200。`git checkout --detach` 乾淨無衝突。
 - **2026-08-21（五）**：操作者 Claude Code。上一版 `5f0d19f` → 新版 `a8c8a24`（修正 10 處 view 完成動作後一律 redirect 回 dashboard 首頁分頁、而非留在原本操作分頁的問題:口語能力證明上傳/審核、邀請學生/老師、接受/拒絕/取消邀請、排課、取消課程、補登審核,詳見 commit message)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260821-180358`。驗收:`https://mpts.tcsl.ntnu.edu.tw/` 回應 200。`git checkout --detach` 乾淨無衝突。
 - **2026-08-21（四）**：操作者 Claude Code。上一版 `dfe1a4b` → 新版 `5f0d19f`（修正個人資料編輯頁/老師註冊頁/學生註冊頁「可配合時段」下方雙語提示文字與勾選格緊貼的間距問題，純 CSS/template 改動）。無 migration、無相依套件變更。部署前備份：`/var/backups/mpts/20260821-172632`。驗收：`https://mpts.tcsl.ntnu.edu.tw/` 回應 200，`app.css` 內容確認含新的 `.choice-field > .form-note` 規則。`git checkout --detach` 乾淨無衝突。
