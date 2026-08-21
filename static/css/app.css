@@ -2802,6 +2802,24 @@ td small {
 .pairing-release-review-form .inline-actions {
   margin-top: 3px;
 }
+.qualification-file-links {
+  display: grid;
+  gap: 3px;
+}
+.qualification-review-form {
+  display: grid;
+  gap: 6px;
+}
+.qualification-review-form input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--navy);
+  background: #fff;
+  font-size: 0.76rem;
+}
 
 /* V2 class schedule and mutual class verification */
 .schedule-metrics {

@@ -89,19 +89,20 @@
                     <tr>
                       <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
                       <td>
-                        <div class="inline-actions">
+                        <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
-                          <span aria-hidden="true">·</span>
                           <a href="{% url 'accounts:download_qualification' document.pk %}" rel="noopener">下載 / Download</a>
                         </div>
                       </td>
                       <td>{{ document.uploaded_at|date:"Y-m-d H:i" }}</td>
                       <td>
-                        <form action="{% url 'accounts:review_qualification' document.pk %}" method="post" class="inline-actions">
+                        <form action="{% url 'accounts:review_qualification' document.pk %}" method="post" class="qualification-review-form">
                           {% csrf_token %}
+                          <div class="inline-actions">
+                            <button class="button button-small button-success" name="action" value="approve">通過 / Approve</button>
+                            <button class="button button-small button-danger" name="action" value="reject">拒絕 / Reject</button>
+                          </div>
                           <input type="text" name="review_note" placeholder="審核備註 / Review note">
-                          <button class="button button-small button-success" name="action" value="approve">通過 / Approve</button>
-                          <button class="button button-small button-danger" name="action" value="reject">拒絕 / Reject</button>
                         </form>
                       </td>
                     </tr>
