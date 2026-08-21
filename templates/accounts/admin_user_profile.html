@@ -49,7 +49,7 @@
         {% if qualification %}
           <div class="profile-data-grid profile-data-grid-compact">
             <div class="profile-data-item"><span>狀態 / Status</span><strong>{{ qualification.get_status_display }}</strong></div>
-            <div class="profile-data-item"><span>檔案 / File</span><strong class="inline-actions"><a href="{% url 'accounts:download_qualification' qualification.pk %}?intent=preview" target="_blank" rel="noopener">{{ qualification.original_filename }}</a><span aria-hidden="true">·</span><a href="{% url 'accounts:download_qualification' qualification.pk %}" rel="noopener">下載 / Download</a></strong></div>
+            <div class="profile-data-item"><span>檔案 / File</span><strong class="inline-actions"><a href="{% url 'accounts:download_qualification' qualification.pk %}?intent=preview" target="_blank" rel="noopener">{{ qualification.original_filename }}</a><a class="button button-secondary button-small" href="{% url 'accounts:download_qualification' qualification.pk %}" rel="noopener">下載 / Download</a></strong></div>
             <div class="profile-data-item"><span>送出時間 / Submitted</span><strong>{{ qualification.uploaded_at|date:"Y-m-d H:i" }}</strong></div>
             {% if qualification.reviewed_by %}<div class="profile-data-item"><span>審核者 / Reviewed by</span><strong>{{ qualification.reviewed_by.bilingual_name }}</strong></div>{% endif %}
           </div>

@@ -91,7 +91,7 @@
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
-                          <a href="{% url 'accounts:download_qualification' document.pk %}" rel="noopener">下載 / Download</a>
+                          <a class="button button-secondary button-small" href="{% url 'accounts:download_qualification' document.pk %}" rel="noopener">下載 / Download</a>
                         </div>
                       </td>
                       <td>{{ document.uploaded_at|date:"Y-m-d H:i" }}</td>
