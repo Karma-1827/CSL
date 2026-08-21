@@ -88,7 +88,13 @@
                   {% for document in pending_qualifications %}
                     <tr>
                       <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
-                      <td><a href="{% url 'accounts:download_qualification' document.pk %}" target="_blank" rel="noopener">{{ document.original_filename }}</a></td>
+                      <td>
+                        <div class="inline-actions">
+                          <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
+                          <span aria-hidden="true">·</span>
+                          <a href="{% url 'accounts:download_qualification' document.pk %}" rel="noopener">下載 / Download</a>
+                        </div>
+                      </td>
                       <td>{{ document.uploaded_at|date:"Y-m-d H:i" }}</td>
                       <td>
                         <form action="{% url 'accounts:review_qualification' document.pk %}" method="post" class="inline-actions">

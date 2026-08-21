@@ -895,6 +895,25 @@ class QualificationTests(TestCase):
         self.assertEqual(response["Cache-Control"], "private, no-store")
         self.assertEqual(response["X-Content-Type-Options"], "nosniff")
 
+    def test_admin_can_preview_qualification_inline(self):
+        """Admin's oral-proficiency review queue needs an in-browser preview, not just a
+        forced download — safe here specifically because validate_qualification_file()
+        only ever accepts PDF/JPG/PNG, none of which execute as scripts if rendered
+        inline (unlike the general download_class_document()/attachment path, which
+        stays attachment-only)."""
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("accounts:download_qualification", args=[document.pk]), {"intent": "preview"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertNotIn("attachment", response["Content-Disposition"])
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(
+            AuditLog.objects.filter(event_type="QUALIFICATION_DOCUMENT_PREVIEWED").count(), 1
+        )
+
     def test_admin_can_download_qualification(self):
         document = self.upload_and_get_document()
         self.client.force_login(self.admin)

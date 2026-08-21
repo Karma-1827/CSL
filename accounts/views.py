@@ -975,12 +975,15 @@ def class_documents(request):
     return render(request, "accounts/class_documents.html", {"documents": documents})
 
 
-def _private_file_response(file_field, filename):
+def _private_file_response(file_field, filename, *, inline=False):
     """Shared response shaping for private, permission-gated file downloads (batch 3,
-    docs/VULNERABILITY_SCAN_IMPROVEMENTS.md item 6): force download (never render inline
-    in the browser, which could execute an uploaded HTML/SVG file in the app's origin),
-    and tell caches/proxies never to store a copy of someone's private document."""
-    response = FileResponse(file_field.open("rb"), as_attachment=True, filename=filename)
+    docs/VULNERABILITY_SCAN_IMPROVEMENTS.md item 6): force download by default (never
+    render inline in the browser, which could execute an uploaded HTML/SVG file in the
+    app's origin), and tell caches/proxies never to store a copy of someone's private
+    document. `inline=True` is only safe for callers whose upload validator already
+    restricts the file to formats browsers render harmlessly (PDF/JPG/PNG) — see
+    download_qualification(), the only caller that currently opts in."""
+    response = FileResponse(file_field.open("rb"), as_attachment=not inline, filename=filename)
     response["Cache-Control"] = "private, no-store"
     response["X-Content-Type-Options"] = "nosniff"
     return response
@@ -1027,12 +1030,17 @@ def download_qualification(request, pk):
     document = get_object_or_404(QualificationDocument, pk=pk)
     if request.user.role != Role.ADMIN and document.tutor_id != request.user.pk:
         raise Http404
+    is_preview = request.GET.get("intent") == "preview"
     AuditLog.record(
-        actor=request.user, target_user=request.user, event_type="QUALIFICATION_DOCUMENT_DOWNLOADED",
-        description="下載口語能力證明 / Oral proficiency document downloaded",
+        actor=request.user, target_user=request.user,
+        event_type="QUALIFICATION_DOCUMENT_PREVIEWED" if is_preview else "QUALIFICATION_DOCUMENT_DOWNLOADED",
+        description="預覽口語能力證明 / Oral proficiency document previewed" if is_preview
+        else "下載口語能力證明 / Oral proficiency document downloaded",
         metadata={"document_id": document.pk, "tutor_id": document.tutor_id},
     )
-    return _private_file_response(document.file, document.original_filename)
+    # Safe to render inline: validate_qualification_file() restricts uploads to
+    # PDF/JPG/PNG only, none of which execute as scripts in the browser.
+    return _private_file_response(document.file, document.original_filename, inline=is_preview)
 
 
 @role_required(Role.ADMIN)
