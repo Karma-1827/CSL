@@ -58,7 +58,6 @@ from tutoring.services import (
     tutor_has_approved_qualification,
     class_is_valid,
     active_semester,
-    semester_applies_to_user,
     export_users_for_program,
     user_program,
     visible_class_document_programs,
@@ -290,7 +289,6 @@ def dashboard(request):
         current_semester
         and today >= current_semester.starts_on
         and today <= current_semester.ends_on
-        and semester_applies_to_user(current_semester, request.user)
     )
     context = {"current_semester": current_semester, "matching_open": matching_open}
     if request.user.role == Role.ADMIN:

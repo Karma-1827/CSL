@@ -77,11 +77,11 @@
   - 尚未排入這一批的項目(3、4、5、7、11–16)留待後續批次;第 15 項(資料模型地基)已於第二批完成,見下。
 - **2026-08 系辦會議後 20 項需求 — 第二批(進行中,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)：**
   - 第 15 項(計畫別、可重疊執行期間)**已完成**,是第 4、12、13、16 項的資料模型地基:
-    - `Semester` 新增可為空的 `program` FK(`None` = 舊版共用期間,保留給既有資料與尚未指定計畫的期間相容用;新建立的期間表單一律要求選計畫,編輯既有期間仍可不選)與 `applicable_users` M2M(留空 = 該計畫所有符合資格帳號都適用,不需要為舊資料回填名單)。
+    - `Semester` 新增可為空的 `program` FK(`None` = 舊版共用期間,保留給既有資料與尚未指定計畫的期間相容用;新建立的期間表單一律要求選計畫,編輯既有期間仍可不選)。
     - 重疊檢查改成「同一 `program` 值內才擋」,移除原本「目前與未來最多三個學期」的全域筆數上限(model、`SemesterCreateForm`/`SemesterSettingsForm`、`accounts:dashboard` 的 `configured_non_past_semester_count` 判斷、admin_v2_panels.html 的 3/3 提示與手冊文字都已同步移除)。
-    - 新增 `tutoring/services.py::active_semester(program=None)`(取代原本無參數版本,優先找計畫專屬且啟用中的期間,找不到才退回舊版共用期間)、`semester_applies_to_user()`、`user_program()` 三個小工具,`dashboard()` 的 `matching_open` 與 `send_invitation()` 都已改用,依當事人(Tutee)所屬計畫決定要看哪個期間。
-    - `Semester.validate_applicable_users()` 擋下非 Tutor/Tutee、已停用帳號,以及計畫不符的 Tutee(Tutor 目前不受計畫限制,因為還沒有第 4 項的修課名單機制)。
-    - 新增 `tutoring.tests.ProgramScopedSemesterTests`(9 個測試)涵蓋:可建立超過三筆期間、同計畫重疊擋下/不同計畫重疊放行、舊版共用期間彼此仍擋重疊、`active_semester()` 的計畫優先/退回邏輯、同一使用者可同時適用多計畫多期間、空白適用對象等於開放給所有人、適用對象驗證擋下計畫不符的 Tutee、`send_invitation()` 會選到計畫專屬期間而非不相關的舊版期間。另外用真實 HTTP 流程(登入、建立 NTNU 與 Maryland 重疊期間、嘗試建立同計畫重疊期間)驗證過一次,行為與測試一致。
+    - 新增 `tutoring/services.py::active_semester(program=None)`(取代原本無參數版本,優先找計畫專屬且啟用中的期間,找不到才退回舊版共用期間)、`user_program()` 兩個小工具,`dashboard()` 的 `matching_open` 與 `send_invitation()` 都已改用,依當事人(Tutee)所屬計畫決定要看哪個期間。
+    - 新增 `tutoring.tests.ProgramScopedSemesterTests`(現存 7 個測試,原本另有 2 個是下方已移除的 `applicable_users` 相關測試)涵蓋:可建立超過三筆期間、同計畫重疊擋下/不同計畫重疊放行、舊版共用期間彼此仍擋重疊、`active_semester()` 的計畫優先/退回邏輯、`send_invitation()` 會選到計畫專屬期間而非不相關的舊版期間。另外用真實 HTTP 流程(登入、建立 NTNU 與 Maryland 重疊期間、嘗試建立同計畫重疊期間)驗證過一次,行為與測試一致。
+    - **2026-08-21 已移除本項當初一併加入的 `Semester.applicable_users`**(M2M 到 `User`、`Semester.validate_applicable_users()`、`semester_applies_to_user()`、`SemesterCreateForm`/`SemesterSettingsForm` 的對應欄位與 `clean()` 驗證全部移除,`tutoring/migrations/0025_remove_semester_applicable_users`):這個欄位加入以來實際上從未真正被使用,而且它想解決的「一人同時適用多個計畫」问题解決錯了層次——是掛在學期上的名單,不是使用者身上的「屬於哪些計畫」屬性,真正決定配對權限的 `tutor_can_serve_program()` 完全不會去看這個名單。使用者同時指出一個既有不對稱:`RosterEntry.program` 目前是單一可空欄位,NTNU Tutor 用「留空」隱含代表、Maryland Tutor 用明確值代表;若未來真的需要「一人同時屬於多個計畫」,更根本的做法是把 `RosterEntry.program` 改成多對多並讓 NTNU 也變成明確值,不是在學期層加名單——這是一個獨立、需要 migration+資料回填+重新檢查所有「一人一計畫」假設的中型任務,列入下方「尚未定案的產品/維運決策」,不與這次移除混在一起。
     - 尚未涵蓋(留給第 12、13、16 項一併處理):排課/時數統計/證明下載目前仍直接讀 `Pairing.semester`,不會重新判斷「此刻該用哪個期間」。候選瀏覽依計畫名單過濾已由第 4 項補齊,見下。
   - 第 4 項(馬里蘭學生與大學部 Tutor 專屬配對)**已完成**:
     - 名冊匯入頁籤每個啟用中合作計畫新增一張「{計畫}修課 Tutor」卡片(`accounts:roster_import_quick` 的 `category_code` 用 `TUTOR:<程式碼>`),把 Tutor 學號匯入時一併設定 `RosterEntry.program`——沿用 Tutee 早就在用的同一個欄位與匯入流程,`RosterEntry.clean()` 原本就沒有禁止 Tutor 設定 `program`,只是先前的匯入介面沒有入口,所以完全不需要新 model 或新 migration。
@@ -90,7 +90,7 @@
     - 新增 `tutoring.tests.MatchingFixtureTestCase`(抽出共用 fixture,避免測試類別互相繼承導致重複執行)、`MarylandTutorRosterTests`(6 個測試,涵蓋一般 Tutor 看不到/配不到馬里蘭學生、馬里蘭 Tutor 看不到/配不到 NTNU 學生、名單內但學制不符會被擋下、一般配對不受影響)與 `accounts.tests` 新增 1 個測試驗證修課名單匯入正確寫入 `RosterEntry.program`。修正既有 `MatchingTests` 5 個測試(原本的假設是任何合格 Tutor 都能配對馬里蘭學生,已改用具備修課資格的 Tutor fixture)。另外用真實 HTTP 匯入一筆馬里蘭修課 Tutor 學號驗證過一次。
   - 第 12 項(Admin 為合作計畫額外手動配對)**已完成**(第一階段規格):
     - Dashboard「配對管理」頁籤新增「Admin 手動配對」表單(`AdminPairingForm`,選 Tutor/Tutee/期間),送出後呼叫 `tutoring/services.py::create_admin_pairing()` 直接建立 `Pairing`,不經過邀請/接受;`Pairing` 新增 `created_by` 欄位(`migration tutoring/0019`)只在這個路徑被設定,標示是哪位 Admin 建立的,一般邀請流程建立的維持 `None`。
-    - 除了「不需要邀請」,其餘檢查(角色、帳號啟用、`tutor_can_serve_program()` 計畫名單、期間 `applicable_users`、Tutee 是否已有 active Tutor、是否重複配對)與一般邀請流程共用同一套規則——**明確和使用者確認過**:Admin 不能藉此繞過第 4 項的計畫限制。
+    - 除了「不需要邀請」,其餘檢查(角色、帳號啟用、`tutor_can_serve_program()` 計畫名單、Tutee 是否已有 active Tutor、是否重複配對)與一般邀請流程共用同一套規則——**明確和使用者確認過**:Admin 不能藉此繞過第 4 項的計畫限制。
     - 名額規則採使用者確認的「同學期總量上限 3 位」版本(而非「每計畫各自 +1」):`tutor_has_admin_pairing_capacity()` 對 NTNU 維持原本 2 位上限,非 NTNU 合作計畫可以讓 Admin 多建立第 3 位;一般邀請流程的 `tutor_has_capacity()` 完全沒有變動,只有走這個新功能才可能到 3 位。時數上限(每組每週 2 小時/每組 32 小時/Tutor 每學期 64 小時)刻意不變,先當 fallback,不猜測計畫別新數字。
     - 新增 `tutoring.tests.AdminPairingTests`(6 個測試):一般使用者呼叫會被擋下(service 層與 view 層各一個)、Admin 可直接建立配對且正確標記 `created_by`、非 NTNU 計畫可以拿到第 3 位、NTNU 無法拿到第 3 位、計畫名單與重複配對檢查依然生效。另外用真實登入+表單送出驗證過「NTNU 滿額被擋下」與「非 NTNU 正常建立」兩種情境。
   - 第 13 項(時數證明語言選擇)**已完成**:
@@ -206,6 +206,7 @@ V3/V3.1 核心業務功能已完成,V4 的重心轉為「讓系統真的能在�
 
 ## 尚未定案的產品/維運決策
 
+- **「一人同時屬於多個合作計畫」的資料模型(2026-08-21 使用者討論後列入,非急迫):**目前 `RosterEntry.program` 是單一可空欄位,一個人只能歸屬一個計畫,且 NTNU Tutor 用「留空」隱含代表、Maryland Tutor 用明確值代表,兩者表示方式不對稱。若未來真的出現「一人同時服務 NTNU 與 Maryland」的情境,現有模型完全無法表示。建議做法是把 `RosterEntry.program` 改成多對多(Tutee 維持恰好一個,Tutor 可以是 0、1 或多個),同時讓 NTNU 也變成明確的成員值,不再用留空隱含代表;`tutor_can_serve_program()`、`user_program()` 等判斷邏輯都要跟著改成「檢查是否在集合內」而非「比對單一值」。這牽涉 migration、既有 NTNU Tutor 資料回填,以及重新檢查所有假設「一人一計畫」的地方(邀請、配對名額、時數上限、上課文件可見範圍),列為獨立的中型任務,不是現在就要做——先前曾用 `Semester.applicable_users` 想在學期層面局部解決這個問題,但層次不對(見上方第 15 項的移除紀錄),已於 2026-08-21 移除。
 - **名冊更新後的帳號狀態:**目前名冊匯入只會新增學號或略過重複學號，不會比對「上次名冊有、這次消失」的學號，也不會自動停用已註冊帳號；因此被移出新名冊的既有使用者仍可登入。待系辦確認應採「自動停用」、「保留」或「人工判斷」後，再回寫決策並實作對應流程。
 - **資料保存政策(待系辦/資訊中心確認,`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 20 項)：**尚未取得以下正式答案,系統目前不會、也不應在答案確定前自行寫死刪除年限或新增自動刪除排程:
   - 個資、口語能力證明文件、課堂紀錄(含未來的 Tutor 外部佐證連結)、私訊、正式證明 PDF 與 AuditLog 各自應保存多久。

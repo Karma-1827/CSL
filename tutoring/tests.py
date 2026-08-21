@@ -80,7 +80,6 @@ from .services import (
     review_pairing_release_request,
     reschedule_class,
     schedule_classes,
-    semester_applies_to_user,
     send_invitation,
     submit_incident_report,
     submit_pairing_release_request,
@@ -116,10 +115,10 @@ class SemesterTests(TestCase):
         with self.assertRaises(ValidationError):
             semester.full_clean()
 
-    def test_create_form_asks_for_dates_program_and_applicable_users(self):
+    def test_create_form_asks_for_dates_and_program(self):
         self.assertEqual(
             list(SemesterCreateForm().fields),
-            ["name_zh", "name_en", "starts_on", "ends_on", "program", "applicable_users"],
+            ["name_zh", "name_en", "starts_on", "ends_on", "program"],
         )
         self.assertTrue(SemesterCreateForm().fields["program"].required)
 
@@ -299,7 +298,7 @@ class ProgramScopedSemesterTests(TestCase):
         self.assertEqual(active_semester(program=self.maryland), legacy)
         self.assertEqual(active_semester(), legacy)
 
-    def test_user_can_be_applicable_to_multiple_programs_and_periods(self):
+    def test_user_program_reflects_tutee_program_and_ordinary_tutor_has_none(self):
         tutee_roster = RosterEntry.objects.create(
             student_id="MULTI-TUTEE", name_zh="多計畫學生", role=Role.TUTEE,
             education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
@@ -311,52 +310,8 @@ class ProgramScopedSemesterTests(TestCase):
             education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
         )
         tutor = User.objects.create_user(username="MULTI-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
-
-        ntnu_period = Semester.objects.create(
-            name_zh="NTNU 專屬", name_en="NTNU specific", program=self.ntnu, is_active=True,
-            starts_on=self.today, ends_on=self.today + timedelta(days=90),
-        )
-        maryland_period = Semester.objects.create(
-            name_zh="馬里蘭計畫", name_en="Maryland program", program=self.maryland, is_active=True,
-            starts_on=self.today, ends_on=self.today + timedelta(days=90),
-        )
-        ntnu_period.applicable_users.set([tutor, tutee])
-        maryland_period.applicable_users.set([tutor])
-        self.assertTrue(semester_applies_to_user(ntnu_period, tutor))
-        self.assertTrue(semester_applies_to_user(ntnu_period, tutee))
-        self.assertTrue(semester_applies_to_user(maryland_period, tutor))
         self.assertEqual(user_program(tutee), self.ntnu)
         self.assertIsNone(user_program(tutor))
-
-    def test_empty_applicable_users_means_open_to_everyone(self):
-        period = Semester.objects.create(
-            name_zh="開放期間", name_en="Open period", program=self.ntnu, is_active=True,
-            starts_on=self.today, ends_on=self.today + timedelta(days=90),
-        )
-        tutee_roster = RosterEntry.objects.create(
-            student_id="OPEN-TUTEE", name_zh="學生", role=Role.TUTEE,
-            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
-            program=self.ntnu,
-        )
-        tutee = User.objects.create_user(username="OPEN-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
-        self.assertTrue(semester_applies_to_user(period, tutee))
-
-    def test_applicable_users_rejects_tutee_from_a_different_program(self):
-        maryland_roster = RosterEntry.objects.create(
-            student_id="WRONG-PROGRAM-TUTEE", name_zh="馬里蘭學生", role=Role.TUTEE,
-            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
-            program=self.maryland,
-        )
-        maryland_tutee = User.objects.create_user(
-            username="WRONG-PROGRAM-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=maryland_roster
-        )
-        form = SemesterCreateForm(data={
-            "name_zh": "NTNU 專屬", "name_en": "NTNU specific",
-            "starts_on": self.today.isoformat(), "ends_on": (self.today + timedelta(days=90)).isoformat(),
-            "program": self.ntnu.pk, "applicable_users": [maryland_tutee.pk],
-        })
-        self.assertFalse(form.is_valid())
-        self.assertIn("applicable_users", form.errors)
 
     def test_send_invitation_uses_tutee_program_period_over_unrelated_legacy_period(self):
         Semester.objects.filter(is_active=True).delete()

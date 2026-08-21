@@ -104,14 +104,6 @@ def active_semester(program=None):
     return current.filter(program__isnull=True).order_by("starts_on").first()
 
 
-def semester_applies_to_user(semester, user):
-    """Whether a user participates in a period: explicit applicable_users membership if the
-    period restricts membership, otherwise open to everyone (see Semester.applicable_users)."""
-    if not semester.applicable_users.exists():
-        return True
-    return semester.applicable_users.filter(pk=user.pk).exists()
-
-
 def user_program(user):
     """The partner program a user is scoped to, or None for the default/legacy pool: every
     Tutee has a program (required by RosterEntry.clean()); a Tutor only has one if they're on
@@ -432,8 +424,6 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
     current = active_semester(program=user_program(tutee))
     semester = Semester.objects.select_for_update().filter(pk=current.pk).first() if current else None
     _validate_matching_window(semester)
-    if not semester_applies_to_user(semester, tutor) or not semester_applies_to_user(semester, tutee):
-        raise ValidationError("此期間不適用於其中一方帳號。 / This period does not apply to one of these accounts.")
     if initiator.pk not in {tutor.pk, tutee.pk}:
         raise ValidationError("您不是這筆邀請的參與者。 / You are not a participant in this invitation.")
     if initiator.pk == tutee.pk and not _tutee_can_initiate_invitation(tutee):
@@ -572,8 +562,6 @@ def create_admin_pairing(*, admin, tutor_id, tutee_id, semester_id):
     tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
     semester = Semester.objects.select_for_update().get(pk=semester_id)
     tutee_program = user_program(tutee)
-    if not semester_applies_to_user(semester, tutor) or not semester_applies_to_user(semester, tutee):
-        raise ValidationError("此期間不適用於其中一方帳號。 / This period does not apply to one of these accounts.")
     if not tutor_can_serve_program(tutor, tutee_program):
         raise ValidationError(
             "此 Tutor 不在該計畫的修課名單中，無法配對。 / This tutor is not on that program's course roster and cannot be matched."
