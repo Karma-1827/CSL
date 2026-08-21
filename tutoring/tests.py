@@ -298,7 +298,12 @@ class ProgramScopedSemesterTests(TestCase):
         self.assertEqual(active_semester(program=self.maryland), legacy)
         self.assertEqual(active_semester(), legacy)
 
-    def test_user_program_reflects_tutee_program_and_ordinary_tutor_has_none(self):
+    def test_user_program_resolves_ordinary_tutor_to_ntnu_not_none(self):
+        """An ordinary tutor (no explicit roster program) implicitly serves NTNU
+        (tutor_can_serve_program()) — user_program() must resolve that to the real NTNU
+        PartnerProgram, not bare None, or active_semester(program=user_program(tutor))
+        silently falls back to looking up the legacy shared period instead of an
+        NTNU-scoped one an Admin actually created (the bug this test guards against)."""
         tutee_roster = RosterEntry.objects.create(
             student_id="MULTI-TUTEE", name_zh="多計畫學生", role=Role.TUTEE,
             education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
@@ -311,7 +316,31 @@ class ProgramScopedSemesterTests(TestCase):
         )
         tutor = User.objects.create_user(username="MULTI-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
         self.assertEqual(user_program(tutee), self.ntnu)
-        self.assertIsNone(user_program(tutor))
+        self.assertEqual(user_program(tutor), self.ntnu)
+
+    def test_ordinary_ntnu_tutor_sees_the_same_ntnu_specific_semester_as_ntnu_tutees(self):
+        """Reproduces the real bug: creating an NTNU-scoped semester used to apply to NTNU
+        tutees (whose roster program is explicitly NTNU) but not to ordinary NTNU tutors
+        (whose roster program is None), because active_semester(program=None) only ever
+        looks up the legacy shared period, never a program-specific one."""
+        tutee_roster = RosterEntry.objects.create(
+            student_id="SEM-BUG-TUTEE", name_zh="學期學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu,
+        )
+        tutee = User.objects.create_user(username="SEM-BUG-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster)
+        tutor_roster = RosterEntry.objects.create(
+            student_id="SEM-BUG-TUTOR", name_zh="學期老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutor = User.objects.create_user(username="SEM-BUG-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster)
+
+        ntnu_specific = Semester.objects.create(
+            name_zh="NTNU 專屬學期", name_en="NTNU-specific semester", program=self.ntnu, is_active=True,
+            starts_on=self.today, ends_on=self.today + timedelta(days=90),
+        )
+        self.assertEqual(active_semester(program=user_program(tutee)), ntnu_specific)
+        self.assertEqual(active_semester(program=user_program(tutor)), ntnu_specific)
 
     def test_send_invitation_uses_tutee_program_period_over_unrelated_legacy_period(self):
         Semester.objects.filter(is_active=True).delete()

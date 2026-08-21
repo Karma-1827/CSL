@@ -105,13 +105,23 @@ def active_semester(program=None):
 
 
 def user_program(user):
-    """The partner program a user is scoped to, or None for the default/legacy pool: every
-    Tutee has a program (required by RosterEntry.clean()); a Tutor only has one if they're on
-    that program's own tutor roster (see tutor_can_serve_program() and
-    MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 4) — ordinary tutors return None."""
-    if user.role in {Role.TUTEE, Role.TUTOR} and user.roster_entry_id:
-        return user.roster_entry.program
-    return None
+    """The partner program a user is scoped to.
+
+    Every Tutee has a program (required by RosterEntry.clean()). A Tutor only has an
+    explicit one if they're on that program's own tutor roster (see
+    tutor_can_serve_program() and MEETING_CHANGE_REQUIREMENTS_2026-08-04.md item 4) —
+    an "ordinary" tutor with no roster program implicitly serves NTNU, so this resolves
+    to the real NTNU PartnerProgram for them rather than returning bare None. Returning
+    None there used to make active_semester(program=user_program(tutor)) silently look up
+    the legacy shared period instead of an NTNU-scoped one, so an NTNU-specific semester
+    an Admin just created would apply to NTNU tutees but not to ordinary NTNU tutors.
+    """
+    if user.role not in {Role.TUTEE, Role.TUTOR} or not user.roster_entry_id:
+        return None
+    program = user.roster_entry.program
+    if program is not None or user.role == Role.TUTEE:
+        return program
+    return PartnerProgram.objects.filter(code="NTNU").first()
 
 
 def tutor_can_serve_program(tutor, program):

@@ -434,8 +434,6 @@ def dashboard(request):
         )
     elif request.user.role == Role.TUTOR:
         tutee_matching_program = user_program(request.user)
-        if tutee_matching_program is None:
-            tutee_matching_program = PartnerProgram.objects.filter(code="NTNU").first()
         qualification = QualificationDocument.objects.filter(tutor=request.user).first()
         pairings = Pairing.objects.filter(
             semester=current_semester, tutor=request.user, status=PairingStatus.ACTIVE
