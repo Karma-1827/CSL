@@ -531,7 +531,8 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
     name_en = forms.CharField(label="英文姓名 / English name", max_length=150)
     education_level = forms.ChoiceField(
         label="學制 / Degree level",
-        choices=[choice for choice in EducationLevel.choices if choice[0] != EducationLevel.NOT_APPLICABLE],
+        choices=[("", "請選擇 / Select")]
+        + [choice for choice in EducationLevel.choices if choice[0] != EducationLevel.NOT_APPLICABLE],
     )
     level_listening = forms.TypedChoiceField(label="聽力 / Listening", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     level_speaking = forms.TypedChoiceField(label="口說 / Speaking", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
