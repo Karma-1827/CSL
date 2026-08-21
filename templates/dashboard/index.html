@@ -99,8 +99,9 @@
                       <td>
                         <form action="{% url 'accounts:review_qualification' document.pk %}" method="post" class="inline-actions">
                           {% csrf_token %}
+                          <input type="text" name="review_note" placeholder="審核備註 / Review note">
                           <button class="button button-small button-success" name="action" value="approve">通過 / Approve</button>
-                          <button class="button button-small button-danger" name="action" value="reject">補件 / Revise</button>
+                          <button class="button button-small button-danger" name="action" value="reject">拒絕 / Reject</button>
                         </form>
                       </td>
                     </tr>

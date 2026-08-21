@@ -167,7 +167,7 @@ class QualificationStatus(models.TextChoices):
     NOT_SUBMITTED = "NOT_SUBMITTED", "未提交 / Not submitted"
     PENDING = "PENDING", "待審核 / Pending review"
     APPROVED = "APPROVED", "已通過 / Approved"
-    REJECTED = "REJECTED", "需補件 / Revision required"
+    REJECTED = "REJECTED", "已拒絕 / Rejected"
 
 
 class QualificationDocument(models.Model):

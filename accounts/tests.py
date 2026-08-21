@@ -15,7 +15,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from tutoring.models import QualificationDocument, TuteeProfile, TutorProfile
+from tutoring.models import QualificationDocument, QualificationStatus, TuteeProfile, TutorProfile
 
 from .forms import client_ip
 
@@ -876,6 +876,39 @@ class QualificationTests(TestCase):
         upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
         self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
         return QualificationDocument.objects.get(tutor=self.tutor)
+
+    def test_admin_can_reject_qualification_with_a_note(self):
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]),
+            {"action": "reject", "review_note": "證明文件模糊不清，請重新掃描上傳。"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.REJECTED)
+        self.assertEqual(document.review_note, "證明文件模糊不清，請重新掃描上傳。")
+        self.assertEqual(document.reviewed_by, self.admin)
+
+    def test_admin_can_approve_qualification(self):
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]), {"action": "approve"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.APPROVED)
+
+    def test_non_admin_cannot_review_qualification(self):
+        document = self.upload_and_get_document()
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]), {"action": "approve"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.PENDING)
 
     def test_stored_filename_is_randomized_but_original_name_is_kept_for_display(self):
         """Batch 3 item 5: new uploads use a UUID-based server-side filename so stored
