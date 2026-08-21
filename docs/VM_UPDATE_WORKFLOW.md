@@ -287,4 +287,5 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-08-21**：操作者 Claude Code。上一版 `af7fc38` → 新版 `6e5ec53`（`188b7c3`：`/system-admin/` 白名單改為整個師大網段 `140.122.0.0/16`（先前逐一加 `/24` 白名單追不上實際觀察到的多個不同校內來源網段，這次未含在本次程式部署內，屬 Nginx 設定變更，已於當天先行套用；`6e5ec53`：註冊安全問題三選單改為即時互斥選取，選過的題目自動從其他兩個選單停用，伺服器端重複檢查不變）。無 migration。部署前備份：`/var/backups/mpts/20260821-154707`。驗收：`https://mpts.tcsl.ntnu.edu.tw/` 回應 200、新增的 `static/js/security-questions.js` 回應 200。這次 `git checkout --detach` 乾淨無衝突。
 - **2026-08-18**：操作者 Claude Code。上一版 `859f48e` → 新版 `af7fc38`（配色改為師大酒紅/金色系 + 頁首並列師大校徽與華語系 logo，`603eace`/`af7fc38`）。無 migration。部署前備份：`/var/backups/mpts/20260818-171119`。驗收：`https://mpts.tcsl.ntnu.edu.tw/` 回應 200，`app.css` 內容確認為新色票、`ntnu-logo.png` 回應 200，`link` 標籤 cache-busting 版本正確更新。過程中發現 `deploy/backup_mpts.sh` 先前是用 `scp`/`install` 手動佈署到 VM 上（在該檔案真正進入 git 歷史之前），與這次 `git checkout --detach` 的目標 commit 衝突（unmerged untracked file）；核對兩者內容位元組相同後刪除未追蹤版本再重試，之後的部署不會再遇到這個特定衝突。
