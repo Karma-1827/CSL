@@ -552,6 +552,9 @@ a {
   border: 1px solid var(--danger);
   border-radius: 10px;
 }
+.choice-field > .form-note {
+  margin-top: 10px;
+}
 .rating-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

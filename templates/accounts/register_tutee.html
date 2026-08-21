@@ -54,7 +54,7 @@
   <p class="timezone-note">台灣時間 · Taiwan time (UTC/GMT+8)</p>
   <div class="schedule-card">
     <div class="choice-field{% if form.preferred_days.errors %} has-error{% endif %}"><label>1. {{ form.preferred_days.label }}<span class="required-mark"> *</span></label>{{ form.preferred_days }}{% for error in form.preferred_days.errors %}<p class="field-error">{{ error }}</p>{% endfor %}</div>
-    <div class="choice-field{% if form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ form.preferred_time_slots }}{% for error in form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<br><p class="form-note bilingual-note">其他時間：配對後請與老師討論實際上課時間。<br>Other times: discuss the actual class time with your teacher after matching.</p></div>
+    <div class="choice-field{% if form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ form.preferred_time_slots }}{% for error in form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<p class="form-note bilingual-note">其他時間：配對後請與老師討論實際上課時間。<br>Other times: discuss the actual class time with your teacher after matching.</p></div>
   </div>
 </section>
 {% endblock %}
