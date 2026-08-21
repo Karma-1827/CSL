@@ -127,6 +127,27 @@ DJANGO_DEBUG=0 DJANGO_SECRET_KEY='deployment-check-only-secret-key-that-is-long-
 - 套件安裝過程中 `apt` 提示核心版本(`6.8.0-106-generic`)與目前執行中版本不一致,建議重開機套用新核心更新——**這次部署刻意沒有重開機**(避免中斷已經在跑的服務去驗證一個和這次部署無關的核心更新),留給之後找一個維護窗口再處理,重開機前記得確認 gunicorn/nginx/postgresql 三個服務都設定成開機自動啟動(`systemctl is-enabled` 三者皆為 `enabled`)。
 - 部署過程中為了讓自動化流程能連進去跑 `sudo` 指令,曾**暫時**在 `/etc/sudoers.d/90-mpts-deploy-tmp` 開一條 `tcsladmin ALL=(ALL) NOPASSWD: ALL`,部署收尾後已刪除並用 `sudo -n true` 確認密碼再度變成必填。**這不是常態設定**,之後若要用自動化工具跑維運指令,應該改成只針對特定指令的最小權限 sudoers 規則,而不是整條解鎖。
 
+### 事件紀錄:系統碟被 iptables drop log 灌爆(2026-08-21)
+
+**現象**:使用者發現 `df -h /` 顯示使用率 80.4%,查明時已到 84%(148GB 系統碟)。
+
+**根因**:VM 的防火牆規則是資訊中心提供的範本 `/etc/iptables.rule`(開機由 `/etc/rc.local` 載入,見信件「其餘防火牆敬請自行設定」),範本最後一條是無限速的全比對 LOG 規則:
+
+```text
+iptables -A INPUT -j LOG --log-level info --log-prefix "IPTABLES-DROP: "
+```
+
+INPUT chain 預設政策是 `DROP`,任何沒被前面規則放行的封包都會落到這條規則被**無限次數**寫進 `syslog`/`kern.log`,不論來源、不論協定。2026-08-16 00:00:02 起,師大校內 IP `140.122.196.254`(不在任何已知白名單網段,推測是校內某台設備誤把 syslog 轉發設定指向這個新分配的 IP,而不是真正的外部攻擊)開始持續對這台 VM 的 UDP port 514(syslog 協定埠)發送封包,防火牆正確擋下,但**每個被擋的封包都寫一行 log**,5 天下來 `syslog`+`kern.log`(含輪替的 `.1`)累積到近 110GB,把系統碟從正常水位推到 84%。整段期間應用程式服務(Gunicorn/Nginx/PostgreSQL/排程 timer)皆維持正常運作,未發生服務中斷。
+
+**處置**(皆已在正式 VM 執行):
+
+1. 立即釋放空間:`rm -f /var/log/kern.log.1 /var/log/syslog.1`(已輪替、非使用中,直接刪除)+ `truncate -s 0 /var/log/kern.log /var/log/syslog`(用 `truncate` 而非 `rm`,讓 rsyslog 沿用同一個已開啟的 file descriptor 繼續寫入,不需要重啟 rsyslog)。磁碟使用率由 84% 降回 8%。
+2. 修正根因:把 `/etc/iptables.rule` 裡的 LOG 規則加上速率限制(`-m limit --limit 5/min --limit-burst 10`),並用 `iptables -R INPUT 10 ...` 立即套用到目前運行中的規則,同時修改 `/etc/iptables.rule` 本身(改前備份為 `/etc/iptables.rule.bak-20260821`)確保重開機後這條限速規則仍然生效。這樣往後不論是同一個來源再次來洪水式流量,還是任何其他掃描/誤設定流量,都不會再無限制地灌爆碟。
+3. 加一層保險:`/etc/logrotate.d/rsyslog` 原本只有 `weekly`(以天為單位,沒有大小上限),已改成 `size 500M`(改前備份為 `/etc/logrotate.d/rsyslog.bak-20260821`)。**注意這台機器的 logrotate 3.21.0 版本,`size` 與 `weekly`/`daily` 等時間條件在同一個 stanza 裡是互斥的,以設定檔中「後面出現的那個」為準**(`logrotate -d` 會印出 `note: 'X' overrides previously specified 'Y'` 提示),不是像新版文件說的兩者可以同時生效,務必把 `size` 寫在 `weekly` **之後**才會是 size 優先;寫反了會像這次一樣完全不生效還不會報錯。logrotate 本身透過 `logrotate.timer` 每天執行一次,所以「500M 上限」實際上是「檢查當下超過 500M 就轉檔」,極端情況下一天內仍可能超過 500M 一些,但已足以避免重演這次 5 天灌 110GB 的規模。
+4. **意外收穫**:`/etc/iptables.rule` 裡列出了資訊中心範本本身就有的幾個內部網段(僅用於 OS 層 SSH 存取控制,和 Nginx 的 `/system-admin/` HTTP 層白名單是兩回事,但很可能反映了同一批真實網段):`140.122.20.0/23`、`140.122.56.0/23`、`140.122.67.0/23`(SSH)、`140.122.66.0/23`(SSH,另一條)、`140.122.85.0/24`(TCP,用途不明)。`140.122.56.0/23` 涵蓋了資訊中心書面確認的 VPN 網段 `140.122.57.0/24`,兩者一致。**這不是資訊中心針對 `/system-admin/` HTTP 存取的書面確認**,不能直接拿來取代 `deploy/nginx/mpts.conf.example` 目前的 `140.122.0.0/16`,但如果之後要把 `/system-admin/` 的白名單收斂回更精確的範圍,這是一個值得先問資訊中心「這幾個範圍是否也涵蓋一般管理端上網存取」的線索,而不用整個從零開始猜。
+
+**後續待辦**:應正式知會資訊中心或校內網管,`140.122.196.254` 這個來源持續對 `140.122.64.169:514/udp` 送出流量已超過 5 天,協助排查是否為某設備的 syslog 轉發設定殘留(這個 IP 是新分配給 MPTS 用的,舊用途的殘留設定是最可能的解釋)。
+
 ### 升級(部署新版本)
 
 1. 部署前先確認 `docs/PROGRESS.md`/`CLAUDE.md` 是否有需要人工介入的 migration 或資料調整(例如新增必填欄位的資料回填)。
