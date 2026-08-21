@@ -115,7 +115,7 @@
 
 | # | 等級 | 控制措施 | 狀態 | CSL 現況與待辦 |
 | - | - | - | - | - |
-| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到安全版本。**2026-08-08 再次掃出 `pypdf 6.14.2` 的 2 個新公開 CVE(CVE-2026-71852、CVE-2026-71870),已升級到 `pypdf 6.15.0`**,`pip-audit` 重跑確認 0 已知漏洞。Pillow 現用於 JPG/PNG 上傳內容與尺寸驗證；pypdf 用於 PDF 上傳結構驗證及證明產製。每次升級後都重新產生 NTNU/Maryland 摘要版、詳細版(含跨頁)、Admin 匯出 PDF,用 Poppler 轉圖比對確認排版、加密權限旗標與升級前一致;完整測試套件亦全數通過。CI 的 `pip-audit` step 維持會擋 build(非 `continue-on-error`)。 |
+| 56 | 普 | 漏洞修復測試與定期更新 | ✅ | 2026-07-26 把 `pip-audit` 掛進 CI(`.github/workflows/ci.yml`),每次 push/PR 自動掃 `requirements.txt` 已安裝套件有沒有已知 CVE。掛上去當天就掃出 `Pillow 11.3.0`、`pypdf 6.10.0` 的已知漏洞,已升級到安全版本。**2026-08-08 再次掃出 `pypdf 6.14.2` 的 2 個新公開 CVE(CVE-2026-71852、CVE-2026-71870),已升級到 `pypdf 6.15.0`**,`pip-audit` 重跑確認 0 已知漏洞。Pillow 現用於 JPG/PNG 上傳內容與尺寸驗證；pypdf 用於 PDF 上傳結構驗證及證明產製。每次升級後都重新產生 NTNU/Maryland 摘要版、詳細版(含跨頁)、Admin 匯出 PDF,用 Poppler 轉圖比對確認排版、加密權限旗標與升級前一致;完整測試套件亦全數通過。CI 的 `pip-audit` step 維持會擋 build(非 `continue-on-error`)。**2026-08-21 CI 又擋下新一批漏洞:`Django 5.2.16` 的 `PYSEC-2026-3717`(GeoDjango WKT/WKB 深度巢狀幾何解析 DoS;本專案未使用 `django.contrib.gis`,理論上不可觸發,但仍升級)已升級到 `Django 5.2.17`;`sqlparse 0.5.5`(Django 內部間接依賴,先前未鎖版本)的 4 個演算法複雜度 DoS CVE(PYSEC-2026-3696/3697/3698/3699)已升級到 `sqlparse 0.6.0` 並首次於 `requirements.txt` 明確鎖定版本。`pip-audit` 重跑確認 0 已知漏洞,完整測試套件、`ruff`、`makemigrations --check`、`check --deploy` 皆通過。** |
 | 57 | 中 | 定期確認漏洞修復狀態 | ✅ | 2026-08-08 為 `.github/workflows/ci.yml` 新增 `schedule: cron: "0 3 * * 1"`(每週一 UTC 03:00),即使該週沒有任何 push/PR 觸發 CI,也會固定重新執行含 `pip-audit` 的完整流程,解決「新 CVE 出現但沒人 push 程式碼觸發 CI」的空窗;實際範例就是這次的 `pypdf` 新 CVE 是靠手動執行 `pip-audit` 才發現,凸顯排程掃描的必要性。通知接收人仍依賴 GitHub 預設的 Actions 失敗通知(送給觸發者/repo watcher),尚未指定專責窗口,屬管理程序而非程式碼缺口。 |
 | 58 | 普 | 發現入侵跡象應通報特定人員 | ❌ | 沒有正式的通報聯絡窗口/流程文件。 |
 | 59 | 中 | 監控偵測攻擊與未授權連線 | ❌ | VM 層級,沒有 WAF/IDS 之類的工具。 |
@@ -129,12 +129,13 @@
 
 | 套件 | 版本 | 用途 | 授權 |
 | --- | --- | --- | --- |
-| Django | 5.2.16 | Web 框架,本系統核心 | BSD-3-Clause |
+| Django | 5.2.17 | Web 框架,本系統核心 | BSD-3-Clause |
 | psycopg[binary] | 3.2.13 | PostgreSQL 資料庫驅動 | LGPL-3.0 |
-| Pillow | 12.3.0 | 宣告的依賴,但目前**沒有任何程式碼直接 `import PIL`**;資格文件/課堂紀錄附件的驗證(`tutoring/models.py::_validate_upload()`)只檢查副檔名與檔案大小,不會實際開啟或解析圖片內容(見 `docs/CODE_REVIEW_IMPROVEMENTS.md` 5.1)。是否為 Django/reportlab 等套件的間接需求尚未確認,暫不建議直接移除。 | HPND(類 MIT) |
+| Pillow | 12.3.0 | `tutoring/models.py::_validate_upload()` 用 `Image.open()`/`verify()` 驗證 JPG/PNG 上傳內容並限制解析尺寸(批次6,見 `docs/PROGRESS.md`);此表格先前誤植為「沒有任何程式碼直接 import PIL」,已於 2026-08-21 修正。 | HPND(類 MIT) |
 | reportlab | 4.4.9 | PDF 產生(時數證明疊字) | BSD-3-Clause(open-source 版) |
 | pypdf | 6.15.0 | PDF 合併(疊字內容併入底圖)、證明加密權限旗標 | BSD-3-Clause |
 | openpyxl | 3.1.5 | Excel 讀寫(名冊/時數匯入、範本產生) | MIT |
+| sqlparse | 0.6.0 | Django 內部用於 SQL 語法處理(Admin SQL 顯示等);原本是 Django 的間接依賴、版本未鎖定,2026-08-21 因 `pip-audit` 掃出多個 DoS 類 CVE(PYSEC-2026-3696/3697/3698/3699)才改為直接列在 `requirements.txt` 鎖定版本。 | BSD-3-Clause |
 
 間接依賴(Django/psycopg 等各自拉入的子套件)由 `pip` 自動解析,版本隨上述套件鎖定,未逐一列出;若需要完整清單可執行 `pip freeze` 產生。
 
