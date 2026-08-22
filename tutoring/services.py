@@ -218,11 +218,28 @@ def archive_expired_semesters(*, today=None):
 
 def synchronize_matching_state():
     now = timezone.now()
+    expiring = list(
+        MatchingInvitation.objects.filter(
+            status=InvitationStatus.PENDING, expires_at__lte=now
+        ).select_related("tutor", "tutee")
+    )
     expired_invitations = MatchingInvitation.objects.filter(
-        status=InvitationStatus.PENDING, expires_at__lte=now
+        pk__in=[invitation.pk for invitation in expiring]
     ).update(
         status=InvitationStatus.EXPIRED, responded_at=now
     )
+    for invitation in expiring:
+        AuditLog.record(
+            actor=None,
+            target_user=invitation.tutee,
+            event_type="INVITATION_EXPIRED",
+            description="配對邀請已過期 / Matching invitation expired",
+            metadata={
+                "invitation_id": invitation.pk,
+                "tutor": invitation.tutor.username,
+                "tutee": invitation.tutee.username,
+            },
+        )
     auto_releases = process_pending_pairing_releases(now=now)
     archived_semesters = archive_expired_semesters(today=timezone.localdate())
     ending_pairing_ids = list(
@@ -458,13 +475,21 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
         raise ValidationError("此 Tutor 待回覆邀請已達上限。 / This tutor has reached the pending invitation limit.")
     if _pending_invitation_count(tutee, semester) >= MAX_PENDING_INVITATIONS_PER_USER:
         raise ValidationError("此 Tutee 待回覆邀請已達上限。 / This tutee has reached the pending invitation limit.")
-    return MatchingInvitation.objects.create(
+    invitation = MatchingInvitation.objects.create(
         semester=semester,
         tutor=tutor,
         tutee=tutee,
         initiated_by=initiator,
         expires_at=timezone.now() + timedelta(days=INVITATION_VALID_DAYS),
     )
+    AuditLog.record(
+        actor=initiator,
+        target_user=tutee,
+        event_type="INVITATION_SENT",
+        description="配對邀請已送出 / Matching invitation sent",
+        metadata={"invitation_id": invitation.pk, "tutor": tutor.username, "tutee": tutee.username, "semester_id": semester.pk},
+    )
+    return invitation
 
 
 @transaction.atomic
@@ -483,6 +508,13 @@ def respond_to_invitation(*, invitation_id, responder, accept):
         invitation.status = InvitationStatus.REJECTED
         invitation.responded_at = now
         invitation.save(update_fields=["status", "responded_at", "updated_at"])
+        AuditLog.record(
+            actor=responder,
+            target_user=invitation.tutee,
+            event_type="INVITATION_REJECTED",
+            description="配對邀請已婉拒 / Matching invitation declined",
+            metadata={"invitation_id": invitation.pk, "tutor": invitation.tutor.username, "tutee": invitation.tutee.username},
+        )
         return None
     _validate_matching_window(invitation.semester)
     list(User.objects.select_for_update().filter(pk__in=[invitation.tutor_id, invitation.tutee_id]))
@@ -507,24 +539,50 @@ def respond_to_invitation(*, invitation_id, responder, accept):
     invitation.status = InvitationStatus.ACCEPTED
     invitation.responded_at = now
     invitation.save(update_fields=["status", "responded_at", "updated_at"])
-    MatchingInvitation.objects.filter(
-        semester=invitation.semester,
-        tutee=invitation.tutee,
-        status=InvitationStatus.PENDING,
-    ).exclude(pk=invitation.pk).update(status=InvitationStatus.CANCELLED, responded_at=now)
+    AuditLog.record(
+        actor=responder,
+        target_user=invitation.tutee,
+        event_type="INVITATION_ACCEPTED",
+        description="配對邀請已接受，配對成立 / Matching invitation accepted, pairing created",
+        metadata={"invitation_id": invitation.pk, "pairing_id": pairing.pk, "tutor": invitation.tutor.username, "tutee": invitation.tutee.username},
+    )
+    _auto_cancel_pending_invitations(
+        pending=MatchingInvitation.objects.filter(
+            semester=invitation.semester, tutee=invitation.tutee, status=InvitationStatus.PENDING,
+        ).exclude(pk=invitation.pk),
+        now=now,
+    )
     if not tutor_has_capacity(invitation.tutor, invitation.semester):
-        MatchingInvitation.objects.filter(
-            semester=invitation.semester,
-            tutor=invitation.tutor,
-            status=InvitationStatus.PENDING,
-        ).exclude(pk=invitation.pk).update(status=InvitationStatus.CANCELLED, responded_at=now)
+        _auto_cancel_pending_invitations(
+            pending=MatchingInvitation.objects.filter(
+                semester=invitation.semester, tutor=invitation.tutor, status=InvitationStatus.PENDING,
+            ).exclude(pk=invitation.pk),
+            now=now,
+        )
     return pairing
+
+
+def _auto_cancel_pending_invitations(*, pending, now):
+    """Cancel a queryset of now-moot pending invitations (side effect of another invitation
+    being accepted) and audit-log each one, instead of a bare bulk .update() with no trail."""
+    invitations = list(pending.select_related("tutor", "tutee"))
+    MatchingInvitation.objects.filter(pk__in=[invitation.pk for invitation in invitations]).update(
+        status=InvitationStatus.CANCELLED, responded_at=now
+    )
+    for invitation in invitations:
+        AuditLog.record(
+            actor=None,
+            target_user=invitation.tutee,
+            event_type="INVITATION_AUTO_CANCELLED",
+            description="配對邀請因另一筆邀請成立而自動取消 / Matching invitation automatically cancelled after another invitation was accepted",
+            metadata={"invitation_id": invitation.pk, "tutor": invitation.tutor.username, "tutee": invitation.tutee.username},
+        )
 
 
 @transaction.atomic
 def cancel_invitation(*, invitation_id, actor):
     synchronize_matching_state()
-    invitation = MatchingInvitation.objects.select_for_update().get(pk=invitation_id)
+    invitation = MatchingInvitation.objects.select_for_update().select_related("tutor", "tutee").get(pk=invitation_id)
     if invitation.initiated_by_id != actor.pk:
         raise ValidationError("只有發起人可以取消邀請。 / Only the initiator may cancel the invitation.")
     if invitation.status != InvitationStatus.PENDING:
@@ -532,6 +590,13 @@ def cancel_invitation(*, invitation_id, actor):
     invitation.status = InvitationStatus.CANCELLED
     invitation.responded_at = timezone.now()
     invitation.save(update_fields=["status", "responded_at", "updated_at"])
+    AuditLog.record(
+        actor=actor,
+        target_user=invitation.tutee,
+        event_type="INVITATION_CANCELLED",
+        description="配對邀請已取消 / Matching invitation cancelled",
+        metadata={"invitation_id": invitation.pk, "tutor": invitation.tutor.username, "tutee": invitation.tutee.username},
+    )
 
 
 # One extra active tutee, admin-assigned pairings only, and never for NTNU (item 12): the normal
@@ -604,7 +669,9 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     blocked_tutees = Pairing.objects.filter(semester=semester).filter(
         Q(status=PairingStatus.ACTIVE) | Q(tutor=tutor)
     ).values_list("tutee_id", flat=True)
-    queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).order_by("tutee_id")
+    queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).select_related(
+        "tutee__roster_entry"
+    ).order_by("tutee_id")
     tutor_roster_program = tutor.roster_entry.program if tutor.roster_entry_id else None
     if tutor_roster_program is None:
         queryset = queryset.filter(tutee__roster_entry__program__code="NTNU")
@@ -636,9 +703,18 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     return [anonymous_tutee_profile(profile) for profile in profiles]
 
 
+def _is_test_account(user):
+    """Whether `user`'s roster entry uses the project's established TEST- student ID
+    prefix (see docs/SECURITY_CHECKLIST.md's note on seed_test_roster.py using the same
+    convention). Only used to show a "TEST" hint on anonymous candidate cards during
+    manual QA — it never exposes the actual student ID, just a boolean derived from it."""
+    return bool(user.roster_entry_id) and user.roster_entry.student_id.startswith("TEST-")
+
+
 def anonymous_tutee_profile(profile):
     return {
         "user_id": profile.tutee_id,
+        "is_test": _is_test_account(profile.tutee),
         "gender": profile.get_gender_display(),
         "native_language": profile.native_language,
         "nationality": profile.nationality,
@@ -664,7 +740,7 @@ def anonymous_tutor_candidates(*, semester, tutee, filters=None):
     )
     queryset = TutorProfile.objects.filter(tutor_id__in=approved).exclude(
         Q(tutor_id__in=previous_tutors) | Q(tutor_id__in=full_tutors)
-    ).order_by("tutor_id")
+    ).select_related("tutor__roster_entry").order_by("tutor_id")
     tutee_program = tutee.roster_entry.program if tutee.roster_entry_id else None
     if tutee_program and tutee_program.code == "MARYLAND":
         queryset = queryset.filter(
@@ -696,6 +772,7 @@ def anonymous_tutor_candidates(*, semester, tutee, filters=None):
 def anonymous_tutor_profile(profile):
     return {
         "user_id": profile.tutor_id,
+        "is_test": _is_test_account(profile.tutor),
         "gender": profile.get_gender_display(),
         "native_language": profile.native_language,
         "nationality": profile.nationality,

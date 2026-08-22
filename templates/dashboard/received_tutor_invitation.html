@@ -3,7 +3,7 @@
     <summary>
       <span class="invitation-teacher-mark" aria-hidden="true">師</span>
       <span class="invitation-summary-copy">
-        <strong>華語老師 · {{ row.profile.gender }}</strong>
+        <strong>華語老師 · {{ row.profile.gender }}{% if row.profile.is_test %} · <span class="test-account-badge">TEST</span>{% endif %}</strong>
         <small>{{ row.profile.native_language }} · {{ row.profile.nationality }}<br>{{ row.expires_at|date:"m/d H:i" }} 到期 / Expires</small>
       </span>
       <span class="invitation-view-label">查看老師資料 <small>View profile</small><i aria-hidden="true"></i></span>

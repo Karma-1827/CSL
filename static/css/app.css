@@ -1970,11 +1970,14 @@ td small {
   font-size: 0.76rem;
   font-weight: 800;
 }
-.status-approved {
+.status-approved,
+.status-accepted {
   color: var(--success);
   background: var(--success-soft);
 }
-.status-rejected {
+.status-rejected,
+.status-cancelled,
+.status-expired {
   color: var(--danger);
   background: var(--danger-soft);
 }
@@ -2145,6 +2148,16 @@ td small {
   background: var(--ocean-100);
   font-size: 0.68rem;
   font-weight: 800;
+}
+.test-account-badge {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 .candidate-search-panel {
   position: relative;

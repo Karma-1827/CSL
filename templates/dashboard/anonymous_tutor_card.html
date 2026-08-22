@@ -1,6 +1,7 @@
 <article class="candidate-card">
   <div class="candidate-card-head">
     <span class="anonymous-badge">華語老師 / Chinese teacher</span>
+    {% if candidate.is_test %}<span class="test-account-badge">TEST 用 / Test</span>{% endif %}
     <strong>口語能力已通過 / Approved</strong>
   </div>
   <dl class="candidate-facts">

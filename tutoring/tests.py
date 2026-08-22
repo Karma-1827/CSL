@@ -68,6 +68,7 @@ from .services import (
     archive_expired_semesters,
     check_in,
     cancel_class_alert,
+    cancel_invitation,
     class_is_valid,
     confirm_counterpart,
     create_admin_pairing,
@@ -84,6 +85,7 @@ from .services import (
     submit_incident_report,
     submit_pairing_release_request,
     submit_class_record,
+    synchronize_matching_state,
     user_program,
     visible_class_document_programs,
     visible_class_documents,
@@ -493,6 +495,80 @@ class MatchingTests(MatchingFixtureTestCase):
         self.client.force_login(self.tutor)
         response = self.client.post(reverse("tutoring:cancel_invitation", args=[invitation.pk]))
         self.assertRedirects(response, reverse("accounts:dashboard") + "#invitations")
+
+    def test_send_invitation_writes_audit_log(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        log = AuditLog.objects.get(event_type="INVITATION_SENT")
+        self.assertEqual(log.actor, self.tutor)
+        self.assertEqual(log.target_user, self.tutee)
+        self.assertEqual(log.metadata["invitation_id"], invitation.pk)
+
+    def test_respond_invitation_accept_writes_audit_log(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        pairing = respond_to_invitation(invitation_id=invitation.pk, responder=self.tutee, accept=True)
+        log = AuditLog.objects.get(event_type="INVITATION_ACCEPTED")
+        self.assertEqual(log.actor, self.tutee)
+        self.assertEqual(log.target_user, self.tutee)
+        self.assertEqual(log.metadata["pairing_id"], pairing.pk)
+
+    def test_respond_invitation_reject_writes_audit_log(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        respond_to_invitation(invitation_id=invitation.pk, responder=self.tutee, accept=False)
+        log = AuditLog.objects.get(event_type="INVITATION_REJECTED")
+        self.assertEqual(log.actor, self.tutee)
+        self.assertEqual(log.metadata["invitation_id"], invitation.pk)
+
+    def test_cancel_invitation_writes_audit_log(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        cancel_invitation(invitation_id=invitation.pk, actor=self.tutor)
+        log = AuditLog.objects.get(event_type="INVITATION_CANCELLED")
+        self.assertEqual(log.actor, self.tutor)
+        self.assertEqual(log.metadata["invitation_id"], invitation.pk)
+
+    def test_expired_invitation_writes_audit_log_with_no_actor(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        invitation.expires_at = timezone.now() - timedelta(minutes=1)
+        invitation.save(update_fields=["expires_at"])
+        synchronize_matching_state()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "EXPIRED")
+        log = AuditLog.objects.get(event_type="INVITATION_EXPIRED")
+        self.assertIsNone(log.actor)
+        self.assertEqual(log.target_user, self.tutee)
+        self.assertEqual(log.metadata["invitation_id"], invitation.pk)
+
+    def test_accepting_invitation_auto_cancels_tutees_other_invitation_with_audit_log(self):
+        other_tutor = self.make_tutor("MULTI-INV-TUTOR", "另一位老師", "Other Tutor")
+        invitation_a = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        invitation_b = send_invitation(initiator=other_tutor, tutor_id=other_tutor.pk, tutee_id=self.tutee.pk)
+        respond_to_invitation(invitation_id=invitation_a.pk, responder=self.tutee, accept=True)
+        invitation_b.refresh_from_db()
+        self.assertEqual(invitation_b.status, InvitationStatus.CANCELLED)
+        log = AuditLog.objects.get(event_type="INVITATION_AUTO_CANCELLED")
+        self.assertIsNone(log.actor)
+        self.assertEqual(log.target_user, self.tutee)
+        self.assertEqual(log.metadata["invitation_id"], invitation_b.pk)
+
+    def test_dashboard_shows_resolved_invitations_in_history_not_pending_lists(self):
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        cancel_invitation(invitation_id=invitation.pk, actor=self.tutor)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["sent_invitations"], [])
+        history_statuses = [row["status"] for row in response.context["invitation_history"]]
+        self.assertIn("CANCELLED", history_statuses)
+        self.assertContains(response, "已取消 / Cancelled")
+
+    def test_candidate_cards_flag_test_prefixed_accounts(self):
+        """TEST- prefixed student IDs (the project's established convention for QA
+        fixtures, see docs/SECURITY_CHECKLIST.md's note on seed_test_roster.py) get an
+        is_test hint on their anonymous candidate card so testers can tell them apart
+        from real students — without exposing the actual student ID itself."""
+        test_tutee = self.make_tutee("TEST-CANDIDATE1", "測試學生", "Test Tutee", self.ntnu_program)
+        candidates = anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)
+        by_id = {c["user_id"]: c for c in candidates}
+        self.assertTrue(by_id[test_tutee.pk]["is_test"])
+        self.assertFalse(by_id[self.tutee.pk]["is_test"])
 
     def test_tutee_find_teacher_heading_stays_csl_teacher(self):
         self.client.force_login(self.maryland)

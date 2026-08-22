@@ -450,6 +450,18 @@ def dashboard(request):
                 "profile": anonymous_tutee_profile(invitation.tutee.tutee_profile),
             }
             (sent_rows if invitation.initiated_by_id == request.user.pk else received_rows).append(row)
+        invitation_history = [
+            {
+                "status_display": invitation.get_status_display(),
+                "status": invitation.status,
+                "responded_at": invitation.responded_at,
+                "profile": anonymous_tutee_profile(invitation.tutee.tutee_profile),
+            }
+            for invitation in MatchingInvitation.objects.filter(tutor=request.user)
+            .exclude(status=InvitationStatus.PENDING)
+            .select_related("tutee__tutee_profile")
+            .order_by("-responded_at", "-created_at")[:20]
+        ]
         can_match = matching_open and tutor_has_approved_qualification(request.user) and pairings.count() < MAX_ACTIVE_TUTEES_PER_TUTOR
         candidate_filters = {
             "gender": request.GET.get("tutee_gender", "").strip(),
@@ -483,6 +495,7 @@ def dashboard(request):
                 "tutee_slot_choices": TIME_SLOTS,
                 "sent_invitations": sent_rows,
                 "received_invitations": received_rows,
+                "invitation_history": invitation_history,
                 "pairing_release_reason_choices": PairingReleaseReason.choices,
             }
         )
@@ -502,6 +515,18 @@ def dashboard(request):
                 "profile": anonymous_tutor_profile(invitation.tutor.tutor_profile),
             }
             (sent_rows if invitation.initiated_by_id == request.user.pk else received_rows).append(row)
+        invitation_history = [
+            {
+                "status_display": invitation.get_status_display(),
+                "status": invitation.status,
+                "responded_at": invitation.responded_at,
+                "profile": anonymous_tutor_profile(invitation.tutor.tutor_profile),
+            }
+            for invitation in MatchingInvitation.objects.filter(tutee=request.user)
+            .exclude(status=InvitationStatus.PENDING)
+            .select_related("tutor__tutor_profile")
+            .order_by("-responded_at", "-created_at")[:20]
+        ]
         can_initiate_invitation = bool(
             request.user.roster_entry
             and request.user.roster_entry.program_id
@@ -532,6 +557,7 @@ def dashboard(request):
                 "tutor_slot_choices": TIME_SLOTS,
                 "sent_invitations": sent_rows,
                 "received_invitations": received_rows,
+                "invitation_history": invitation_history,
                 "pairing_release_reason_choices": PairingReleaseReason.choices,
             }
         )

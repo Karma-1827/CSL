@@ -1,6 +1,7 @@
 <article class="candidate-card">
   <div class="candidate-card-head">
     <span class="anonymous-badge">{% if tutee_matching_program %}{{ tutee_matching_program.name_zh }} / {{ tutee_matching_program.name_en }}{% else %}學生 / Student{% endif %}</span>
+    {% if candidate.is_test %}<span class="test-account-badge">TEST 用 / Test</span>{% endif %}
     <strong>{{ candidate.overall_level }}</strong>
   </div>
   <dl class="candidate-facts">
