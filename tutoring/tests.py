@@ -559,6 +559,21 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertIn("CANCELLED", history_statuses)
         self.assertContains(response, "已取消 / Cancelled")
 
+    def test_ntnu_tutee_dashboard_hides_permanently_empty_sent_invitation_card(self):
+        """NTNU tutees can never initiate invitations (allow_tutee_initiate_invitation=False),
+        so their "已發送的邀請 / Sent" card is permanently empty dead UI and should be hidden
+        entirely, unlike Maryland tutees who can send invitations."""
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertFalse(response.context["is_maryland"])
+        self.assertNotContains(response, "已發送的邀請")
+
+    def test_maryland_tutee_dashboard_shows_sent_invitation_card(self):
+        self.client.force_login(self.maryland)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertTrue(response.context["is_maryland"])
+        self.assertContains(response, "已發送的邀請")
+
     def test_candidate_cards_flag_test_prefixed_accounts(self):
         """TEST- prefixed student IDs (the project's established convention for QA
         fixtures, see docs/SECURITY_CHECKLIST.md's note on seed_test_roster.py) get an
