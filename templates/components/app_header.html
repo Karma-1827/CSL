@@ -13,7 +13,7 @@
         <span class="account-menu-chevron" aria-hidden="true"></span>
       </button>
       <div class="account-menu-popover" role="menu" hidden data-account-menu-popover>
-        <div class="account-menu-identity"><strong>{{ request.user.name_zh|default:request.user.username }}</strong><small>{{ request.user.username }}</small></div>
+        <div class="account-menu-identity"><strong>{{ request.user.bilingual_name }}</strong><small>{{ request.user.username }}</small></div>
         <a href="{% url 'accounts:profile' %}" role="menuitem"><span aria-hidden="true">○</span><b>個人資料<small>Profile</small></b></a>
         {% if class_documents_visible %}<a href="{% url 'accounts:class_documents' %}" role="menuitem"><span aria-hidden="true">▥</span><b>上課文件<small>Class documents</small></b></a>{% endif %}
         <a href="{% url 'accounts:handbook' %}" role="menuitem"><span aria-hidden="true">▤</span><b>使用手冊<small>User guide</small></b></a>

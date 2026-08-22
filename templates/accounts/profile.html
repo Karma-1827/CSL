@@ -10,10 +10,10 @@
     <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
 
     <section class="profile-hero">
-      <div class="profile-avatar-large" aria-hidden="true">{{ request.user.name_zh|default:request.user.username|slice:":1" }}</div>
+      <div class="profile-avatar-large" aria-hidden="true">{{ request.user.bilingual_name|slice:":1" }}</div>
       <div class="profile-hero-copy">
         <span class="section-kicker">MY PROFILE</span>
-        <h1>{{ request.user.name_zh|default:request.user.username }}{% if request.user.name_en %}<small>{{ request.user.name_en }}</small>{% endif %}</h1>
+        <h1>{% if request.user.name_zh %}{{ request.user.name_zh }}{% if request.user.name_en %}<small>{{ request.user.name_en }}</small>{% endif %}{% else %}{{ request.user.name_en|default:request.user.username }}{% endif %}</h1>
         <div class="profile-hero-tags">
           <span>{{ request.user.get_role_display }}</span>
           {% if roster and profile_kind == 'tutor' %}<span>{{ roster.get_education_level_display }}</span>{% endif %}

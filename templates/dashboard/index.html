@@ -11,8 +11,8 @@
     <div class="dashboard-layout">
       <aside class="dashboard-sidebar" aria-label="功能導覽 / Dashboard navigation">
         <div class="sidebar-profile">
-          <span class="sidebar-avatar" aria-hidden="true">{{ request.user.name_zh|default:request.user.username|slice:":1" }}</span>
-          <div><strong>{{ request.user.name_zh|default:request.user.username }}</strong><small>{{ request.user.get_role_display }}</small></div>
+          <span class="sidebar-avatar" aria-hidden="true">{{ request.user.bilingual_name|slice:":1" }}</span>
+          <div><strong>{{ request.user.bilingual_name }}</strong><small>{{ request.user.get_role_display }}</small></div>
         </div>
         <nav class="sidebar-nav">
           {% if request.user.role == 'ADMIN' %}
@@ -49,10 +49,10 @@
         <div class="sidebar-note"><span>匿名媒合 / Private matching</span><small>配對成立前不顯示個人身分。<br>Identity stays hidden until matched.</small></div>
       </aside>
       <div class="dashboard-workspace">
-    <section class="page-heading" data-dashboard-page-heading data-dashboard-role="{{ request.user.role }}" data-home-kicker="{% if request.user.role == 'ADMIN' %}DASHBOARD{% else %}HELLO{% endif %}" data-home-title="你好，{{ request.user.name_zh|default:request.user.username }}！">
+    <section class="page-heading" data-dashboard-page-heading data-dashboard-role="{{ request.user.role }}" data-home-kicker="{% if request.user.role == 'ADMIN' %}DASHBOARD{% else %}HELLO{% endif %}" data-home-title="你好，{{ request.user.bilingual_name }}！">
       <div>
         <div class="section-kicker" data-dashboard-page-kicker>{% if request.user.role == 'ADMIN' %}DASHBOARD{% else %}HELLO{% endif %}</div>
-        <h1 data-dashboard-page-title>你好，{{ request.user.name_zh|default:request.user.username }}！</h1>
+        <h1 data-dashboard-page-title>你好，{{ request.user.bilingual_name }}！</h1>
       </div>
       {% if current_semester %}
         <div class="semester-chip"><span>目前學期 / Current</span><strong>{{ current_semester }}</strong></div>

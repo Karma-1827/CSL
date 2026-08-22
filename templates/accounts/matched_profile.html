@@ -9,10 +9,10 @@
     <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
 
     <section class="profile-hero matched-profile-hero">
-      <div class="profile-avatar-large" aria-hidden="true">{{ counterpart.name_zh|default:counterpart.username|slice:":1" }}</div>
+      <div class="profile-avatar-large" aria-hidden="true">{{ counterpart.bilingual_name|slice:":1" }}</div>
       <div class="profile-hero-copy">
         <span class="section-kicker">MATCHED PROFILE</span>
-        <h1>{{ counterpart.name_zh|default:counterpart.username }}{% if counterpart.name_en %}<small>{{ counterpart.name_en }}</small>{% endif %}</h1>
+        <h1>{% if counterpart.name_zh %}{{ counterpart.name_zh }}{% if counterpart.name_en %}<small>{{ counterpart.name_en }}</small>{% endif %}{% else %}{{ counterpart.name_en|default:counterpart.username }}{% endif %}</h1>
         <div class="profile-hero-tags"><span>{{ counterpart.get_role_display }}</span><span>配對中 / Active match</span><span>{{ pairing.semester }}</span></div>
       </div>
       <div class="matched-profile-message"><span>聯絡對方 / Contact</span><a class="button matched-message-button" href="{% url 'tutoring:pairing_messages' pairing.pk %}">私訊 / Message</a></div>

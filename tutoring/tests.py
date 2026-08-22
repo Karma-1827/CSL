@@ -647,6 +647,18 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, reverse("tutoring:invite_tutee", args=[other.pk]))
         self.assertNotContains(response, reverse("tutoring:invite_tutee", args=[self.tutee.pk]))
 
+    def test_dashboard_greeting_falls_back_to_english_name_not_student_id(self):
+        """International students often have no Chinese name (RosterEntry.name_zh /
+        User.name_zh can be blank). The greeting and sidebar identity used to fall back
+        straight to request.user.username (the student ID) whenever name_zh was blank,
+        skipping name_en entirely — User.bilingual_name already has the right fallback
+        chain (name_zh, else name_en, else username) and should be used instead."""
+        no_chinese_name_tutee = self.make_tutee("NO-ZH-NAME", "", "English Only Name", self.ntnu_program)
+        self.client.force_login(no_chinese_name_tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "你好，English Only Name！")
+        self.assertNotContains(response, "你好，NO-ZH-NAME！")
+
     def test_maryland_dashboard_hides_tutor_identity(self):
         self.client.force_login(self.maryland)
         response = self.client.get(reverse("accounts:dashboard"))
