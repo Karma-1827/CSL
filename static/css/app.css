@@ -1853,7 +1853,8 @@ a {
   font-style: normal;
   font-weight: 750;
 }
-.dashboard-view > .panel + .panel {
+.dashboard-view > .panel + .panel,
+.dashboard-view > .invitation-stack + .panel {
   margin-top: 18px;
 }
 .dashboard-grid {
