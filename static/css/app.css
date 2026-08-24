@@ -3055,6 +3055,10 @@ td small {
   color: #963b3b;
   background: #f8e2e2;
 }
+.class-status.rejected {
+  color: #963b3b;
+  background: #f8e2e2;
+}
 .makeup-review-list {
   display: grid;
   gap: 11px;
