@@ -287,6 +287,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-08-25（十五）**：操作者 Claude Code。上一版 `77cb767` → 新版 `0495101`（補時數審核狀態標籤「待管理員審核」改成「等待管理員核准」,與「等待雙方確認」的用詞風格統一,詳見 CLAUDE.md 4.6 節與 commit message)。**含 migration**:`tutoring.0026_alter_makeupreview_status`(僅 choices 顯示文字變更,無資料表結構變動)。部署前備份:`/var/backups/mpts/20260825-022653`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常,並直接查詢正式資料庫確認現有補時數審核紀錄(session 16)`get_status_display()` 已顯示新文字。`git checkout --detach` 乾淨無衝突。
+
 - **2026-08-25（十四）**：操作者 Claude Code。上一版 `d402573` → 新版 `77cb767`（Tutee 課堂紀錄佐證連結改為選填、Tutor 維持必填；連帶修正課程詳情頁/Admin 課程詳情卡在雙方都缺連結與附件時的顯示文字，避免 Tutee 合法跳過選填欄位卻顯示暗示忘記上傳的「未上傳」字樣，詳見 CLAUDE.md 4.6 節與 commit message)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260825-020153`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常。`git checkout --detach` 乾淨無衝突。
 
 - **2026-08-25（十三）**：操作者 Claude Code。上一版 `990ea70` → 新版 `d402573`（課程詳情頁簽到/課堂紀錄按鈕文字：逾時補簽/補登時分別改顯示「補簽到 / Makeup check-in」「補填課堂紀錄 / Makeup record」,不再永遠顯示一般的「確認簽到」「送出紀錄」,詳見 commit message)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260825-014455`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常。`git checkout --detach` 乾淨無衝突。
