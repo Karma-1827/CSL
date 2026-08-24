@@ -1595,10 +1595,18 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get(reverse("tutoring:class_detail", args=[future_session.pk]))
         self.assertNotContains(response, "逾時補簽原因")
         self.assertNotContains(response, "逾時補登原因")
+        self.assertContains(response, "確認簽到 / Check in")
+        self.assertContains(response, "送出紀錄 / Submit record")
+        self.assertNotContains(response, "補簽到 / Makeup check-in")
+        self.assertNotContains(response, "補填課堂紀錄 / Makeup record")
 
         response = self.client.get(reverse("tutoring:class_detail", args=[overdue_session.pk]))
         self.assertContains(response, "逾時補簽原因")
         self.assertContains(response, "逾時補登原因")
+        self.assertContains(response, "補簽到 / Makeup check-in")
+        self.assertContains(response, "補填課堂紀錄 / Makeup record")
+        self.assertNotContains(response, "確認簽到 / Check in")
+        self.assertNotContains(response, "送出紀錄 / Submit record")
 
     def test_makeup_record_requires_mutual_confirmation_and_admin_approval(self):
         class_date = timezone.localdate()

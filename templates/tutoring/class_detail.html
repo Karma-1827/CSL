@@ -33,7 +33,7 @@
             <form action="{% url 'tutoring:class_check_in' session.pk %}" method="post" class="stack-form">
               {% csrf_token %}
               {% if checkin_requires_makeup_reason %}<label>逾時補簽原因 / Makeup reason<em class="required-chip">補簽必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補簽必填。 / Required for a late makeup check-in."></textarea></label>{% endif %}
-              <button class="button button-primary" type="submit">確認簽到 / Check in</button>
+              <button class="button button-primary" type="submit">{% if checkin_requires_makeup_reason %}補簽到 / Makeup check-in{% else %}確認簽到 / Check in{% endif %}</button>
               <p class="help-text">上課前 10 分鐘開放，一般簽到至課程結束後 30 分鐘。<br>Normal check-in opens 10 minutes before class and closes 30 minutes after.</p>
             </form>
           {% endif %}
@@ -69,7 +69,7 @@
             {% csrf_token %}
             {{ record_form.as_p }}
             {% if record_requires_makeup_reason %}<label class="makeup-reason-field">逾時補登原因 / Makeup reason<em class="required-chip">補登必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補登必填。 / Required for a late makeup record."></textarea></label>{% endif %}
-            <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% else %}送出紀錄 / Submit record{% endif %}</button>
+            <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% elif record_requires_makeup_reason %}補填課堂紀錄 / Makeup record{% else %}送出紀錄 / Submit record{% endif %}</button>
           </form>
         </section>
       </div>
