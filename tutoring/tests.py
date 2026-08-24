@@ -1685,6 +1685,57 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(history, "已核准")
         self.assertContains(history, "補課堂紀錄")
 
+    def test_tutor_and_tutee_schedule_badge_reflects_makeup_review_status_not_generic_waiting(self):
+        """Tutor/Tutee's own class list (class_schedule_group.html / class_history_list.html)
+        computes its status badge from is_official/my_record/my_attendance alone, without
+        looking at the actual MakeupReview status. Once both parties confirm a makeup class,
+        it should show the review's real "等待管理員核准" state, not the generic "等待雙方完成
+        / Waiting" text that never changes even after admin approval is the only thing left."""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(8), duration="1.0", now=self.aware(class_date, time(7)),
+        )[0]
+        check_time = self.aware(class_date, time(8, 30))
+        check_in(session_id=session.pk, participant=self.tutor, now=check_time)
+        check_in(session_id=session.pk, participant=self.tutee, now=check_time)
+        late = self.aware(class_date + timedelta(days=2), time(9))
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師補登"),
+            reason="忘記在期限內填寫", now=late,
+        )
+        submit_class_record(
+            session_id=session.pk, author=self.tutee, data=self.record_data("學生補登"),
+            reason="忘記在期限內填寫", now=late,
+        )
+
+        self.client.force_login(self.tutor)
+        before = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(before, "等待雙方完成 / Waiting")
+
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.makeup_review.refresh_from_db()
+        self.assertEqual(session.makeup_review.status, MakeupReviewStatus.PENDING)
+
+        after_tutor = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(after_tutor, "等待管理員核准")
+        self.assertNotContains(after_tutor, "等待雙方完成 / Waiting")
+
+        self.client.force_login(self.tutee)
+        after_tutee = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(after_tutee, "等待管理員核准")
+        self.assertNotContains(after_tutee, "等待雙方完成 / Waiting")
+
+        admin = User.objects.create_superuser(username="SCHEDULE-BADGE-ADMIN", password="Admin-password-2026")
+        review_makeup(session_id=session.pk, admin=admin, approve=False, note="資料不完整")
+        session.makeup_review.refresh_from_db()
+        self.assertEqual(session.makeup_review.status, MakeupReviewStatus.REJECTED)
+        self.client.force_login(self.tutor)
+        after_reject = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(after_reject, "未核准 / Rejected")
+        self.assertNotContains(after_reject, "等待雙方完成 / Waiting")
+
     def test_schedule_keeps_future_classes_and_moves_past_classes_to_hours_history(self):
         today = timezone.localdate()
         past = schedule_classes(
