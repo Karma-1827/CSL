@@ -1496,6 +1496,7 @@ class ClassWorkflowTests(TestCase):
         tutor_form = ClassRecordForm(author=self.tutor)
         self.assertNotIn("attachment", tutor_form.fields)
         self.assertIn("evidence_links", tutor_form.fields)
+        self.assertTrue(tutor_form.fields["evidence_links"].required)
         self.assertIn("當次上課佐證連結", tutor_form.fields["evidence_links"].help_text)
         self.assertIn("共用檢視權限", tutor_form.fields["evidence_links"].help_text)
         self.assertIn("administrators", tutor_form.fields["evidence_links"].help_text)
@@ -1504,10 +1505,10 @@ class ClassWorkflowTests(TestCase):
         tutee_form = ClassRecordForm(author=self.tutee)
         self.assertNotIn("attachment", tutee_form.fields)
         self.assertIn("evidence_links", tutee_form.fields)
-        self.assertEqual(
-            tutee_form.fields["evidence_links"].help_text,
-            tutor_form.fields["evidence_links"].help_text,
-        )
+        # Tutee's evidence links are optional; Tutor's remain required (see below).
+        self.assertFalse(tutee_form.fields["evidence_links"].required)
+        self.assertIn("選填", tutee_form.fields["evidence_links"].label)
+        self.assertIn("共用檢視權限", tutee_form.fields["evidence_links"].help_text)
 
     def test_tutor_record_requires_at_least_one_evidence_link(self):
         data = self.record_data("佐證連結測試")
@@ -1515,11 +1516,44 @@ class ClassWorkflowTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("evidence_links", form.errors)
 
-    def test_tutee_record_requires_at_least_one_evidence_link(self):
+    def test_tutee_record_evidence_link_is_optional(self):
         data = self.record_data("學生佐證連結測試")
         form = ClassRecordForm(data=data, author=self.tutee)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["evidence_links"], [])
+
+    def test_tutee_record_still_capped_at_five_evidence_links(self):
+        data = {
+            **self.record_data("學生佐證連結上限測試"),
+            "evidence_links": [f"https://drive.example.com/file{i}" for i in range(6)],
+        }
+        form = ClassRecordForm(data=data, author=self.tutee)
         self.assertFalse(form.is_valid())
-        self.assertIn("evidence_links", form.errors)
+        self.assertIn("最多只能提供 5 個佐證連結", str(form.errors["evidence_links"]))
+
+    def test_class_detail_shows_optional_placeholder_for_tutee_skipped_evidence_links(self):
+        """A tutee who legitimately skips the now-optional evidence links must not see the
+        legacy "未上傳 / Not uploaded" attachment wording, which would wrongly imply they
+        forgot a required upload."""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutee, now=now)
+        submit_class_record(session_id=session.pk, author=self.tutee, data=self.record_data("無佐證連結"), now=now)
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "未提供（選填）/ Not provided (optional)")
+        self.assertNotContains(response, "未上傳 / Not uploaded")
+
+        admin = User.objects.create_superuser(username="RECORD-EVIDENCE-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "未提供（選填）/ Not provided (optional)")
+        self.assertNotContains(response, "未上傳 / Not uploaded")
 
     def test_tutor_record_rejects_more_than_five_links(self):
         data = {

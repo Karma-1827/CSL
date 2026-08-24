@@ -85,8 +85,12 @@
             <div class="wide"><span>授課類型 / Skills practiced</span><div class="tag-list">{% for label in counterpart_record.skill_labels %}<b>{{ label }}</b>{% empty %}<em>未填寫 / Not provided</em>{% endfor %}</div></div>
             {% if counterpart_record.evidence_links %}
               <div class="wide"><span>佐證連結 / Evidence links</span><div class="evidence-link-view-list">{% for link in counterpart_record.evidence_links %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a>{% endfor %}</div></div>
+            {% elif counterpart_record.attachment %}
+              <div><span>附件 / Attachment</span><strong><a href="{% url 'tutoring:download_class_record_attachment' counterpart_record.pk %}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong></div>
+            {% elif counterpart_record.author.role == 'TUTEE' %}
+              <div><span>佐證連結 / Evidence links</span><strong>未提供（選填）/ Not provided (optional)</strong></div>
             {% else %}
-              <div><span>附件 / Attachment</span>{% if counterpart_record.attachment %}<strong><a href="{% url 'tutoring:download_class_record_attachment' counterpart_record.pk %}" target="_blank" rel="noopener">{{ counterpart_record.attachment_filename }}</a></strong>{% else %}<strong>未上傳 / Not uploaded</strong>{% endif %}</div>
+              <div><span>附件 / Attachment</span><strong>未上傳 / Not uploaded</strong></div>
             {% endif %}
           </div>
           <form action="{% url 'tutoring:class_confirm' session.pk %}" method="post" class="confirmation-form">

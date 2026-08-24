@@ -12,7 +12,7 @@
 - 安全問題三題必須互不相同:註冊表單會在每個重複題目欄位顯示雙語錯誤,資料庫另以 `three_distinct_security_questions` check constraint 防止繞過表單寫入重複題目。
 - 身份別新增「港澳生 / Hong Kong and Macao student」(`IdentityCategory.HONG_KONG_MACAO`),Tutor/Tutee 註冊下拉選單與 model choices 已同步。
 - 暱稱功能全面移除:刪除 `User.nickname`、註冊與 Profile 編輯欄位、個人資料/Admin/配對後畫面顯示及相關測試；Email 仍為必填聯絡資料。對應 migration 為 `accounts/0017_remove_user_nickname_and_more.py`。
-- Tutor 與 Tutee 的課堂紀錄統一使用 1–5 個必填 `https://` 佐證連結;雙方目前表單都不再顯示附件上傳。既有 `ClassRecord.attachment` 僅保留歷史資料相容與受保護下載,未刪除舊檔案。
+- Tutor 與 Tutee 的課堂紀錄統一使用最多 5 個 `https://` 佐證連結;雙方目前表單都不再顯示附件上傳。既有 `ClassRecord.attachment` 僅保留歷史資料相容與受保護下載,未刪除舊檔案。**2026-08-25 起 Tutor 仍必填至少 1 個,Tutee 改為選填(可 0 個)**,詳見 `CLAUDE.md` 4.6 節。
 - `ClassRecord.content`/`.remarks` 上限由 2000 改為 500 字元,model、表單 `maxlength` 與伺服器端驗證一致；課程詳情頁新增即時 `0/500` 字元計數(`static/js/character-count.js`)。對應 migration 為 `tutoring/0023_alter_classrecord_content_and_more.py`。
 - Admin 資料匯出改為五步:選擇合作計畫、選擇老師/學生/特定使用者、選擇隨計畫更新的學期或日期、選擇欄位、選擇輸出格式。選老師或學生時,下方名單只顯示對應身分且整類納入匯出;特定使用者可在所選計畫內跨身分勾選一位或多位。名單與學期選項會在前端隨計畫篩選,後端仍會驗證計畫資格並在報表查詢再次限制課程計畫,避免跨計畫資料混入。
 - 證明 PDF 套用新版共用模板與本機私有素材:中文內文使用華康儷宋 W3、粗體/標題使用 W7,英文使用 Helvetica Neue Condensed Bold；日期依台灣時區計算並在底部置中、加寬字距,右下角系戳放大為 110pt 並向左、向上調整。摘要版加大左右留白,詳細版每頁最多 6 筆,避免表格碰到底部日期與放大後的系戳。私有字型與系戳不進版控,缺少時使用原有開源字型且略過系戳。已重新產生中文摘要、中文詳細跨頁及英文摘要預覽,以 Poppler 逐頁檢查無遮擋。
