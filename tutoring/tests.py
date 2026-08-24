@@ -1734,6 +1734,7 @@ class ClassWorkflowTests(TestCase):
         self.client.force_login(self.tutor)
         after_reject = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(after_reject, "未核准 / Rejected")
+        self.assertContains(after_reject, 'class-status rejected')
         self.assertNotContains(after_reject, "等待雙方完成 / Waiting")
 
     def test_schedule_keeps_future_classes_and_moves_past_classes_to_hours_history(self):

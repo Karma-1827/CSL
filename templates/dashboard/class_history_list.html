@@ -6,7 +6,7 @@
       <div class="class-row-progress">
         {% if session.status == 'CANCELLED' %}<span class="class-status cancelled">已取消 / Cancelled</span>
         {% elif session.is_official %}<span class="class-status verified">有效成立 / Verified</span>
-        {% elif session.my_record and session.my_attendance and session.makeup_review and session.makeup_review.status != 'WAITING' %}<span class="class-status pending">{{ session.makeup_review.get_status_display }}</span>
+        {% elif session.my_record and session.my_attendance and session.makeup_review and session.makeup_review.status != 'WAITING' %}<span class="class-status {% if session.makeup_review.status == 'REJECTED' %}rejected{% else %}pending{% endif %}">{{ session.makeup_review.get_status_display }}</span>
         {% elif session.my_record and session.my_attendance %}<span class="class-status pending">等待雙方完成 / Waiting</span>
         {% elif session.my_attendance %}<span class="class-status pending">待填紀錄 / Record due</span>
         {% else %}<span class="class-status scheduled">已排課 / Scheduled</span>{% endif %}
