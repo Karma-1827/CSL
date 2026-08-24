@@ -287,6 +287,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-08-25（十四）**：操作者 Claude Code。上一版 `d402573` → 新版 `77cb767`（Tutee 課堂紀錄佐證連結改為選填、Tutor 維持必填；連帶修正課程詳情頁/Admin 課程詳情卡在雙方都缺連結與附件時的顯示文字，避免 Tutee 合法跳過選填欄位卻顯示暗示忘記上傳的「未上傳」字樣，詳見 CLAUDE.md 4.6 節與 commit message)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260825-020153`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常。`git checkout --detach` 乾淨無衝突。
+
 - **2026-08-25（十三）**：操作者 Claude Code。上一版 `990ea70` → 新版 `d402573`（課程詳情頁簽到/課堂紀錄按鈕文字：逾時補簽/補登時分別改顯示「補簽到 / Makeup check-in」「補填課堂紀錄 / Makeup record」,不再永遠顯示一般的「確認簽到」「送出紀錄」,詳見 commit message)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260825-014455`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常。`git checkout --detach` 乾淨無衝突。
 
 - **2026-08-22（十二）**：操作者 Claude Code。上一版 `28e4e2a` → 新版 `990ea70`（兩項調整一併部署:①NTNU 學生不可主動邀請,Dashboard「邀請管理」的「已發送的邀請 Sent」卡片對他們永遠是空的,比照既有 `is_maryland` 判斷整張隱藏,Maryland 學生不受影響,`678ae3f`；②「已發送的邀請」與「歷史紀錄」兩張卡片黏在一起,原因是 `.dashboard-view > .panel + .panel` 選擇器只認相鄰的 `.panel` 手足,但歷史紀錄前面接的是 `div.invitation-stack` 不是 `.panel`,吃不到規則,補上對應選擇器沿用同樣 18px 間距,`990ea70`)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260822-185340`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,新版 `app.css`(`?v=20260822-invitation-stack-history-gap`)確認可正常存取。`git checkout --detach` 乾淨無衝突。
