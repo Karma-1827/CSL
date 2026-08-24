@@ -1672,6 +1672,12 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, "補登詳情")
         self.assertContains(detail, "老師補登")
         self.assertContains(detail, "忘記在期限內填寫")
+        # Once both parties confirm, the review moves to PENDING and admins should see
+        # "waiting for admin approval" wording, not the earlier "waiting for mutual
+        # confirmation" state or a generic "pending review" label.
+        self.assertContains(detail, "等待管理員核准")
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "等待管理員核准")
         review_makeup(session_id=session.pk, admin=admin, approve=True)
         session.makeup_review.refresh_from_db()
         self.assertTrue(class_is_valid(session))

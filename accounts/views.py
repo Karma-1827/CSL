@@ -675,7 +675,7 @@ def dashboard(request):
                 review.category_label = "補課堂紀錄"
                 review.category_label_en = "Class record"
         status_definitions = (
-            (MakeupReviewStatus.PENDING, "待管理員審核", "Pending admin review", True),
+            (MakeupReviewStatus.PENDING, "等待管理員核准", "Waiting for admin approval", True),
             (MakeupReviewStatus.WAITING, "等待雙方確認", "Waiting for mutual confirmation", False),
             (MakeupReviewStatus.APPROVED, "已核准", "Approved", False),
             (MakeupReviewStatus.REJECTED, "未核准", "Rejected", False),

@@ -647,7 +647,7 @@ class ClassConfirmation(models.Model):
 
 class MakeupReviewStatus(models.TextChoices):
     WAITING = "WAITING", "等待雙方確認 / Waiting for mutual confirmation"
-    PENDING = "PENDING", "待管理員審核 / Pending admin review"
+    PENDING = "PENDING", "等待管理員核准 / Waiting for admin approval"
     APPROVED = "APPROVED", "已核准 / Approved"
     REJECTED = "REJECTED", "未核准 / Rejected"
 
