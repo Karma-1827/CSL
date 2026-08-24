@@ -287,6 +287,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-08-25（十七）**：操作者 Codex。上一版 `bd61b92` → 新版 `8ed33d1`（補時數申請遭管理員拒絕後，老師／學生課表與時數歷史卡片的「未核准 / Rejected」徽章改用既有紅色拒絕樣式，不再顯示黃色等待樣式；同時補上回歸測試）。無 migration、無相依套件變更。本機 316 項測試全部通過。部署前備份：`/var/backups/mpts/20260825-025650`。驗收：`https://mpts.tcsl.ntnu.edu.tw/` 回應 HTTP 200，`mpts-gunicorn.service` 與 `mpts-process-matching-state.timer` 均為 active，Gunicorn 近期無 error 等級日誌，VM 固定於 commit `8ed33d1daa6b714d0325311f323470d1f9f6940b`。
+
 - **2026-08-25（十六）**：操作者 Claude Code。上一版 `0495101` → 新版 `bd61b92`（修正老師/學生自己的課表與時數歷史卡片:補時數雙方確認後應進入「等待管理員核准」,但 `class_schedule_group.html`／`class_history_list.html` 只看 `is_official`/`my_record`/`my_attendance`,從未讀取實際 `MakeupReview` 狀態,導致核准前(甚至被拒絕後)永遠卡在通用的「等待雙方完成 / Waiting」文字;改為有 `makeup_review` 且非 WAITING 時直接顯示真實狀態文字,詳見 commit message)。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260825-024206`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常。`git checkout --detach` 乾淨無衝突。
 
 - **2026-08-25（十五）**：操作者 Claude Code。上一版 `77cb767` → 新版 `0495101`（補時數審核狀態標籤「待管理員審核」改成「等待管理員核准」,與「等待雙方確認」的用詞風格統一,詳見 CLAUDE.md 4.6 節與 commit message)。**含 migration**:`tutoring.0026_alter_makeupreview_status`(僅 choices 顯示文字變更,無資料表結構變動)。部署前備份:`/var/backups/mpts/20260825-022653`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常,並直接查詢正式資料庫確認現有補時數審核紀錄(session 16)`get_status_display()` 已顯示新文字。`git checkout --detach` 乾淨無衝突。
