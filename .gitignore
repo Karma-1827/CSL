@@ -28,6 +28,11 @@ assets/certificates/
 
 # 本機人工檢查用預覽與會議用二進位文件(PDF/DOCX),不是正式資料來源,也不適合放進版控
 output/
+outputs/
+
+# 給其他 AI agent 用的獨立寫作風格 skill,本身是另一個 repo 的完整 clone(含自己的 .git),
+# 不是本專案程式碼,刻意不進版控;AGENTS.md 的路徑指到這裡,只在有這份本機 clone 時生效。
+skills/
 
 # 測試時的暫存圖片
 tmp/pdfs/
