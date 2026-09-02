@@ -287,6 +287,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-03（十九）**：操作者 Claude Code。上一版 `a28e0c7` → 新版 `10122e5`（課堂紀錄欄位改版：`topic`/`content`/`remarks` 沿用原欄位只改標籤；移除選填的多選標籤欄位 `skills_practiced` 及對應的 Django Admin 篩選器,改為兩個新的必填文字欄位 `materials_used`「使用之教材、教具及設備」(200字內)與 `individual_progress`「個別學習情形」(500字內);另外新增管理員操作手冊、封測相關文件等素材,詳見 commit message)。**含 migration**:`tutoring.0027_remove_classrecord_skills_practiced_and_more`(移除欄位、新增 2 個必填欄位並回填既有 41 筆紀錄為明確的「舊紀錄無資料」提示文字,已於部署後直接查詢正式資料庫確認全部正確回填、`skills_practiced` 欄位已移除)。部署前備份:`/var/backups/mpts/20260903-015221`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200,`mpts-process-matching-state.timer` 運作正常。`git checkout --detach` 乾淨無衝突。
+
 - **2026-08-25（十八）**：操作者 Codex。上一版 `8ed33d1` → 新版 `a28e0c7`（補上 `.class-status.rejected` 的淡紅色膠囊底色，並更新 `app.css` 快取版本，修正正式站只有紅字、沒有紅色底的問題）。無 migration、無相依套件變更。部署前備份：`/var/backups/mpts/20260825-030135`。Gunicorn 重啟後第一次立即檢查曾短暫回應 502，約 24 秒後恢復 HTTP 200；後續確認 `mpts-gunicorn.service` 與 `mpts-process-matching-state.timer` 均為 active、近期無 error 等級日誌，正式 `staticfiles/css/app.css` 已包含 `background: #f8e2e2`，VM 固定於 commit `a28e0c7b037e752d33c4cb8a53f968dca0541864`。
 
 - **2026-08-25（十七）**：操作者 Codex。上一版 `bd61b92` → 新版 `8ed33d1`（補時數申請遭管理員拒絕後，老師／學生課表與時數歷史卡片的「未核准 / Rejected」徽章改用既有紅色拒絕樣式，不再顯示黃色等待樣式；同時補上回歸測試）。無 migration、無相依套件變更。本機 316 項測試全部通過。部署前備份：`/var/backups/mpts/20260825-025650`。驗收：`https://mpts.tcsl.ntnu.edu.tw/` 回應 HTTP 200，`mpts-gunicorn.service` 與 `mpts-process-matching-state.timer` 均為 active，Gunicorn 近期無 error 等級日誌，VM 固定於 commit `8ed33d1daa6b714d0325311f323470d1f9f6940b`。
