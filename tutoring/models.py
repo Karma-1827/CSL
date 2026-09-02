@@ -593,12 +593,10 @@ class ClassRecord(models.Model):
     content = models.TextField("本日教學範圍與流程 / Today's teaching scope and process", max_length=500)
     reflection = models.TextField("學習成果與回饋 / Outcome and reflection")
     materials_used = models.TextField(
-        "使用之教材、教具及設備 / Materials, teaching aids, and equipment used", max_length=200,
-        default="（此欄位為新增，舊紀錄無資料）/ (Added after this record was created; no data available)",
+        "使用之教材、教具及設備 / Materials, teaching aids, and equipment used", max_length=200, default="",
     )
     individual_progress = models.TextField(
-        "個別學習情形 / Individual learning progress", max_length=500,
-        default="（此欄位為新增，舊紀錄無資料）/ (Added after this record was created; no data available)",
+        "個別學習情形 / Individual learning progress", max_length=500, default="",
     )
     remarks = models.TextField(
         "心得回饋或針對個別學習情況之改善方法 / Reflections and feedback, or improvement methods for individual learning",

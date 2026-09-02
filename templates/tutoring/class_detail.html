@@ -82,8 +82,8 @@
             <div><span>上課地點 / Location</span><strong>{{ counterpart_record.location }}</strong></div>
             <div><span>本次教學目標 / Teaching goal</span><strong>{{ counterpart_record.topic }}</strong></div>
             <div class="wide"><span>本日教學範圍與流程 / Teaching scope and process</span><p>{{ counterpart_record.content|linebreaksbr }}</p></div>
-            <div class="wide"><span>使用之教材、教具及設備 / Materials and equipment used</span><p>{{ counterpart_record.materials_used|linebreaksbr }}</p></div>
-            <div class="wide"><span>個別學習情形 / Individual learning progress</span><p>{{ counterpart_record.individual_progress|linebreaksbr }}</p></div>
+            <div class="wide"><span>使用之教材、教具及設備 / Materials and equipment used</span><p>{% if counterpart_record.materials_used %}{{ counterpart_record.materials_used|linebreaksbr }}{% else %}<em>未提供（此紀錄建立於欄位新增前）/ Not provided (this record predates this field)</em>{% endif %}</p></div>
+            <div class="wide"><span>個別學習情形 / Individual learning progress</span><p>{% if counterpart_record.individual_progress %}{{ counterpart_record.individual_progress|linebreaksbr }}{% else %}<em>未提供（此紀錄建立於欄位新增前）/ Not provided (this record predates this field)</em>{% endif %}</p></div>
             {% if counterpart_record.evidence_links %}
               <div class="wide"><span>佐證連結 / Evidence links</span><div class="evidence-link-view-list">{% for link in counterpart_record.evidence_links %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a>{% endfor %}</div></div>
             {% elif counterpart_record.attachment %}

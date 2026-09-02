@@ -1342,6 +1342,30 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "課本第五課、圖卡教具")
         self.assertContains(response, "口說流暢度明顯提升，仍需加強聲調準確度")
 
+    def test_class_record_shows_predates_field_placeholder_when_legacy_row_left_blank(self):
+        """0028 clears the legacy backfill placeholder that 0027 wrote into old rows'
+        materials_used/individual_progress back to "" — the friendly message must come
+        from the template for empty values, not from data baked into the database."""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
+        submit_class_record(
+            session_id=session.pk, author=self.tutor,
+            data={**self.record_data("舊資料測試"), "materials_used": "", "individual_progress": ""},
+            now=normal_now,
+        )
+        record = ClassRecord.objects.get(session=session, author=self.tutor)
+        self.assertEqual(record.materials_used, "")
+        self.assertEqual(record.individual_progress, "")
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "未提供（此紀錄建立於欄位新增前）/ Not provided (this record predates this field)", count=2)
+
     def test_class_record_requires_materials_used_and_individual_progress(self):
         data = {**self.record_data("必填欄位測試")}
         del data["materials_used"]
