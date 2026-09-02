@@ -589,11 +589,21 @@ class ClassRecord(models.Model):
     session = models.ForeignKey(ClassSession, on_delete=models.CASCADE, related_name="class_records")
     author = models.ForeignKey(User, on_delete=models.PROTECT, related_name="class_records")
     location = models.CharField("上課地點 / Location", max_length=150)
-    topic = models.CharField("課堂主題 / Topic", max_length=200)
-    content = models.TextField("課堂內容 / Class content", max_length=500)
+    topic = models.CharField("本次教學目標 / Teaching goal for this session", max_length=200)
+    content = models.TextField("本日教學範圍與流程 / Today's teaching scope and process", max_length=500)
     reflection = models.TextField("學習成果與回饋 / Outcome and reflection")
-    skills_practiced = models.JSONField("授課類型 / Skills practiced", default=list, blank=True)
-    remarks = models.TextField("備註 / Remarks", max_length=500, blank=True)
+    materials_used = models.TextField(
+        "使用之教材、教具及設備 / Materials, teaching aids, and equipment used", max_length=200,
+        default="（此欄位為新增，舊紀錄無資料）/ (Added after this record was created; no data available)",
+    )
+    individual_progress = models.TextField(
+        "個別學習情形 / Individual learning progress", max_length=500,
+        default="（此欄位為新增，舊紀錄無資料）/ (Added after this record was created; no data available)",
+    )
+    remarks = models.TextField(
+        "心得回饋或針對個別學習情況之改善方法 / Reflections and feedback, or improvement methods for individual learning",
+        max_length=500, blank=True,
+    )
     attachment = models.FileField(
         "附件 / Attachment",
         upload_to=class_record_attachment_upload_to,

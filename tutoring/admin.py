@@ -1,6 +1,5 @@
 from django.contrib import admin
 
-from accounts.forms import SKILL_CHOICES
 from accounts.models import AuditLog
 
 from .models import (
@@ -114,23 +113,10 @@ class AttendanceAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_filter = ("is_makeup", "session__pairing__semester")
 
 
-class SkillsPracticedFilter(admin.SimpleListFilter):
-    title = "授課類型 / Skill practiced"
-    parameter_name = "skill"
-
-    def lookups(self, request, model_admin):
-        return SKILL_CHOICES
-
-    def queryset(self, request, queryset):
-        if self.value():
-            return queryset.filter(skills_practiced__contains=[self.value()])
-        return queryset
-
-
 @admin.register(ClassRecord)
 class ClassRecordAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ("session", "author", "topic", "skills_practiced", "submitted_at", "is_makeup")
-    list_filter = ("is_makeup", "session__pairing__semester", SkillsPracticedFilter)
+    list_display = ("session", "author", "topic", "submitted_at", "is_makeup")
+    list_filter = ("is_makeup", "session__pairing__semester")
     search_fields = ("author__username", "topic")
 
 

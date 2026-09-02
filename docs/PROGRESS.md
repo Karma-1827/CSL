@@ -16,6 +16,7 @@
 - `ClassRecord.content`/`.remarks` 上限由 2000 改為 500 字元,model、表單 `maxlength` 與伺服器端驗證一致；課程詳情頁新增即時 `0/500` 字元計數(`static/js/character-count.js`)。對應 migration 為 `tutoring/0023_alter_classrecord_content_and_more.py`。
 - Admin 資料匯出改為五步:選擇合作計畫、選擇老師/學生/特定使用者、選擇隨計畫更新的學期或日期、選擇欄位、選擇輸出格式。選老師或學生時,下方名單只顯示對應身分且整類納入匯出;特定使用者可在所選計畫內跨身分勾選一位或多位。名單與學期選項會在前端隨計畫篩選,後端仍會驗證計畫資格並在報表查詢再次限制課程計畫,避免跨計畫資料混入。
 - 證明 PDF 套用新版共用模板與本機私有素材:中文內文使用華康儷宋 W3、粗體/標題使用 W7,英文使用 Helvetica Neue Condensed Bold；日期依台灣時區計算並在底部置中、加寬字距,右下角系戳放大為 110pt 並向左、向上調整。摘要版加大左右留白,詳細版每頁最多 6 筆,避免表格碰到底部日期與放大後的系戳。私有字型與系戳不進版控,缺少時使用原有開源字型且略過系戳。已重新產生中文摘要、中文詳細跨頁及英文摘要預覽,以 Poppler 逐頁檢查無遮擋。
+- **2026-09 起課堂紀錄欄位改版**:`topic`/`content`/`remarks` 沿用原欄位只改標籤(依序為「本次教學目標」「本日教學範圍與流程」「心得回饋或針對個別學習情況之改善方法」);移除原本選填的多選標籤欄位 `skills_practiced`(連同 Django Admin 的 `SkillsPracticedFilter`),改為兩個新的必填文字欄位 `materials_used`「使用之教材、教具及設備」(200 字內)與 `individual_progress`「個別學習情形」(500 字內)。`SKILL_CHOICES`/`SKILL_LABELS` 保留供 Tutor 教學能力與 Tutee 加強項目使用,只是不再套用在課堂紀錄上。對應 migration 為 `tutoring/0027_remove_classrecord_skills_practiced_and_more.py`,既有舊紀錄的兩個新欄位回填為明確的「舊紀錄無資料」提示文字,不是空白。詳見 `CLAUDE.md` 4.6 節。
 
 下方提到「新增暱稱」、「只有 Tutor 使用佐證連結／Tutee 使用附件」或「課堂紀錄 2000 字」的段落,是當時版本的實作歷史,已被本節取代,不可當作現行需求。
 

@@ -1171,6 +1171,8 @@ class ClassWorkflowTests(TestCase):
             "topic": topic,
             "content": "會話與發音練習",
             "reflection": "完成本次練習並互相回饋",
+            "materials_used": "教科書第三課、口說練習卡",
+            "individual_progress": "發音有進步，句子長度可再增加",
             "remarks": "",
         }
 
@@ -1307,7 +1309,7 @@ class ClassWorkflowTests(TestCase):
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
 
-    def test_class_record_skills_practiced_saved_and_shown_to_counterpart_and_admin(self):
+    def test_class_record_materials_used_and_individual_progress_saved_and_shown_to_counterpart_and_admin(self):
         class_date = timezone.localdate()
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
@@ -1318,55 +1320,89 @@ class ClassWorkflowTests(TestCase):
         submit_class_record(
             session_id=session.pk,
             author=self.tutor,
-            data={**self.record_data("聽說練習"), "skills_practiced": ["LISTENING", "SPEAKING"]},
+            data={
+                **self.record_data("聽說練習"),
+                "materials_used": "課本第五課、圖卡教具",
+                "individual_progress": "口說流暢度明顯提升，仍需加強聲調準確度",
+            },
             now=normal_now,
         )
         record = ClassRecord.objects.get(session=session, author=self.tutor)
-        self.assertEqual(record.skills_practiced, ["LISTENING", "SPEAKING"])
+        self.assertEqual(record.materials_used, "課本第五課、圖卡教具")
+        self.assertEqual(record.individual_progress, "口說流暢度明顯提升，仍需加強聲調準確度")
 
         self.client.force_login(self.tutee)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertContains(response, "<b>聽力 / Listening</b>", html=False)
-        self.assertContains(response, "<b>口說 / Speaking</b>", html=False)
-        self.assertNotContains(response, "<b>寫作 / Writing</b>", html=False)
+        self.assertContains(response, "課本第五課、圖卡教具")
+        self.assertContains(response, "口說流暢度明顯提升，仍需加強聲調準確度")
 
-        admin = User.objects.create_superuser(username="RECORD-SKILL-ADMIN", password="Admin-password-2026")
+        admin = User.objects.create_superuser(username="RECORD-MATERIALS-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertContains(response, "<b>聽力 / Listening</b>", html=False)
-        self.assertContains(response, "<b>口說 / Speaking</b>", html=False)
-        self.assertNotContains(response, "<b>寫作 / Writing</b>", html=False)
+        self.assertContains(response, "課本第五課、圖卡教具")
+        self.assertContains(response, "口說流暢度明顯提升，仍需加強聲調準確度")
 
-        response = self.client.get("/system-admin/tutoring/classrecord/?skill=LISTENING")
-        self.assertContains(response, "聽說練習")
-        response = self.client.get("/system-admin/tutoring/classrecord/?skill=WRITING")
-        self.assertNotContains(response, "聽說練習")
+    def test_class_record_requires_materials_used_and_individual_progress(self):
+        data = {**self.record_data("必填欄位測試")}
+        del data["materials_used"]
+        del data["individual_progress"]
+        form = ClassRecordForm(data=data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("materials_used", form.errors)
+        self.assertIn("individual_progress", form.errors)
 
-    def test_class_record_content_and_remarks_enforce_500_char_limit(self):
-        at_limit_data = {
-            "location": "綜合大樓 / General Building", "topic": "課堂主題",
-            "content": "內" * 500, "remarks": "備" * 500,
+    def test_class_record_materials_used_enforces_200_char_limit(self):
+        data = {
+            **self.record_data("使用之教材上限測試"), "materials_used": "材" * 200,
             "evidence_links": ["https://example.com/evidence"],
         }
+        form = ClassRecordForm(data=data)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.fields["materials_used"].widget.attrs["maxlength"], "200")
+
+        over_limit_data = {
+            **self.record_data("使用之教材超過上限測試"), "materials_used": "材" * 201,
+            "evidence_links": ["https://example.com/evidence"],
+        }
+        over_limit_form = ClassRecordForm(data=over_limit_data)
+        self.assertFalse(over_limit_form.is_valid())
+        self.assertIn("materials_used", over_limit_form.errors)
+
+    def test_class_record_individual_progress_enforces_500_char_limit(self):
+        data = {
+            **self.record_data("個別學習情形上限測試"), "individual_progress": "況" * 500,
+            "evidence_links": ["https://example.com/evidence"],
+        }
+        form = ClassRecordForm(data=data)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.fields["individual_progress"].widget.attrs["maxlength"], "500")
+
+        over_limit_data = {
+            **self.record_data("個別學習情形超過上限測試"), "individual_progress": "況" * 501,
+            "evidence_links": ["https://example.com/evidence"],
+        }
+        over_limit_form = ClassRecordForm(data=over_limit_data)
+        self.assertFalse(over_limit_form.is_valid())
+        self.assertIn("individual_progress", over_limit_form.errors)
+
+    def test_class_record_content_and_remarks_enforce_500_char_limit(self):
+        base = {
+            "location": "綜合大樓 / General Building", "topic": "課堂主題",
+            "materials_used": "課本、教具", "individual_progress": "進度正常",
+            "evidence_links": ["https://example.com/evidence"],
+        }
+        at_limit_data = {**base, "content": "內" * 500, "remarks": "備" * 500}
         at_limit_form = ClassRecordForm(data=at_limit_data)
         self.assertTrue(at_limit_form.is_valid(), at_limit_form.errors)
         self.assertEqual(at_limit_form.fields["content"].widget.attrs["maxlength"], "500")
         self.assertEqual(at_limit_form.fields["content"].widget.attrs["data-character-count"], "500")
 
-        over_limit_data = {
-            "location": "綜合大樓 / General Building", "topic": "課堂主題",
-            "content": "內" * 501, "remarks": "",
-            "evidence_links": ["https://example.com/evidence"],
-        }
+        over_limit_data = {**base, "content": "內" * 501, "remarks": ""}
         over_limit_form = ClassRecordForm(data=over_limit_data)
         self.assertFalse(over_limit_form.is_valid())
         self.assertIn("content", over_limit_form.errors)
 
-        over_limit_remarks_data = {
-            "location": "綜合大樓 / General Building", "topic": "課堂主題",
-            "content": "課堂內容", "remarks": "備" * 501,
-            "evidence_links": ["https://example.com/evidence"],
-        }
+        over_limit_remarks_data = {**base, "content": "課堂內容", "remarks": "備" * 501}
         over_limit_remarks_form = ClassRecordForm(data=over_limit_remarks_data)
         self.assertFalse(over_limit_remarks_form.is_valid())
         self.assertIn("remarks", over_limit_remarks_form.errors)

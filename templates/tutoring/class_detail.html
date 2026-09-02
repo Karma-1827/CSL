@@ -80,9 +80,10 @@
           <div class="counterpart-record-grid">
             <div><span>簽到 / Attendance</span><strong>{{ counterpart_attendance.signed_at|date:"Y-m-d H:i" }}</strong>{% if counterpart_attendance.is_makeup %}<small>補簽到 / Makeup check-in</small>{% endif %}</div>
             <div><span>上課地點 / Location</span><strong>{{ counterpart_record.location }}</strong></div>
-            <div><span>課堂主題 / Topic</span><strong>{{ counterpart_record.topic }}</strong></div>
-            <div class="wide"><span>課堂內容 / Content</span><p>{{ counterpart_record.content|linebreaksbr }}</p></div>
-            <div class="wide"><span>授課類型 / Skills practiced</span><div class="tag-list">{% for label in counterpart_record.skill_labels %}<b>{{ label }}</b>{% empty %}<em>未填寫 / Not provided</em>{% endfor %}</div></div>
+            <div><span>本次教學目標 / Teaching goal</span><strong>{{ counterpart_record.topic }}</strong></div>
+            <div class="wide"><span>本日教學範圍與流程 / Teaching scope and process</span><p>{{ counterpart_record.content|linebreaksbr }}</p></div>
+            <div class="wide"><span>使用之教材、教具及設備 / Materials and equipment used</span><p>{{ counterpart_record.materials_used|linebreaksbr }}</p></div>
+            <div class="wide"><span>個別學習情形 / Individual learning progress</span><p>{{ counterpart_record.individual_progress|linebreaksbr }}</p></div>
             {% if counterpart_record.evidence_links %}
               <div class="wide"><span>佐證連結 / Evidence links</span><div class="evidence-link-view-list">{% for link in counterpart_record.evidence_links %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a>{% endfor %}</div></div>
             {% elif counterpart_record.attachment %}

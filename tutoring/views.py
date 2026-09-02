@@ -31,7 +31,6 @@ from .reporting import (
     user_has_hour_records,
 )
 from .services import (
-    SKILL_LABELS,
     cancel_class,
     cancel_class_alert,
     cancel_invitation,
@@ -528,9 +527,6 @@ def class_detail(request, pk):
         tutee_confirmation = next(
             (row for row in session.confirmations.all() if row.reviewer_id == session.pairing.tutee_id), None
         )
-        for record in (tutor_record, tutee_record):
-            if record:
-                record.skill_labels = [SKILL_LABELS.get(skill, skill) for skill in record.skills_practiced]
         return render(
             request,
             "tutoring/admin_class_detail.html",
@@ -549,8 +545,6 @@ def class_detail(request, pk):
     counterpart = session.pairing.tutee if request.user.pk == session.pairing.tutor_id else session.pairing.tutor
     own_record = next((row for row in session.class_records.all() if row.author_id == request.user.pk), None)
     counterpart_record = next((row for row in session.class_records.all() if row.author_id == counterpart.pk), None)
-    if counterpart_record:
-        counterpart_record.skill_labels = [SKILL_LABELS.get(skill, skill) for skill in counterpart_record.skills_practiced]
     own_attendance = next((row for row in session.attendances.all() if row.participant_id == request.user.pk), None)
     counterpart_attendance = next((row for row in session.attendances.all() if row.participant_id == counterpart.pk), None)
     own_confirmation = next((row for row in session.confirmations.all() if row.reviewer_id == request.user.pk), None)

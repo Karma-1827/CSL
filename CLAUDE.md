@@ -218,13 +218,13 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 
 1. 雙方各自簽到。
-2. 雙方各自填寫自己的課堂紀錄(地點、主題、內容、授課類型、備註及 1–5 個佐證連結)。
+2. 雙方各自填寫自己的課堂紀錄(地點、本次教學目標、本日教學範圍與流程、使用之教材教具及設備、個別學習情形、心得回饋或改善方法,及 1–5 個佐證連結)。
 3. 每人確認對方的簽到與課堂紀錄;可確認、要求修改或回報問題。
 4. 一般課程滿足條件後自動成為有效時數;Admin 不逐筆核准一般課。
 
 細節:
 
-- `ClassRecord.skills_practiced` 是選填的多選標籤(聽力/口說/閱讀/寫作,沿用 `accounts/forms.py::SKILL_CHOICES` 同一套分類,與 Tutor 教學能力、Tutee 加強項目共用同一詞彙),比照舊版「輔導類型」概念補回,方便 Admin 統計教學方式。不影響 `class_is_valid()` 的有效時數判定,單純是資料標籤。課程詳情頁(`class_detail.html`/`admin_record_card.html`)以標籤呈現;Django Admin 的 `ClassRecord` 清單另加 `SkillsPracticedFilter`(`tutoring/admin.py`),用 JSONField `contains` 查詢讓 Admin 依單一類型篩選/計數,沒有另外做自訂統計面板。
+- **2026-09 起課堂紀錄欄位改版**:`ClassRecord.topic`/`.content` 沿用原欄位只改標籤(`topic`→「本次教學目標 / Teaching goal for this session」、`content`→「本日教學範圍與流程 / Today's teaching scope and process」);`.remarks` 同樣沿用原欄位只改標籤為「心得回饋或針對個別學習情況之改善方法 / Reflections and feedback, or improvement methods for individual learning」,維持選填。原本選填的多選標籤欄位 `skills_practiced`(聽力/口說/閱讀/寫作)已移除,改為兩個新的必填文字欄位:`materials_used`「使用之教材、教具及設備」(200 字內)與全新的 `individual_progress`「個別學習情形」(500 字內)。Django Admin 的 `SkillsPracticedFilter` 與 `accounts/forms.py::SKILL_CHOICES` 依賴的篩選/統計功能已一併移除;`SKILL_CHOICES`/`SKILL_LABELS` 本身保留,因為 Tutor 教學能力與 Tutee「希望加強項目」仍在使用同一份詞彙,只是不再套用在課堂紀錄上。既有舊紀錄的 `materials_used`/`individual_progress` 由 migration(`tutoring/0027`)回填為「（此欄位為新增，舊紀錄無資料）/ (Added after this record was created; no data available)」,不是空白字串,方便畫面上與真正忘記填寫的情況區分。
 - `ClassRecord.attachment` 是 2026-08-10 前課堂紀錄附件的歷史相容欄位;目前 Tutor/Tutee 表單都不再提供附件上傳,但舊資料仍可透過受保護下載 view 查看,不得直接移除 model 欄位或刪除既有檔案。
 - **2026-08-10 起 Tutor 與 Tutee 課堂紀錄都改用外部佐證連結,不再使用附件上傳**。`ClassRecord.evidence_links` 是 JSONField(`list[str]`,`default=list`),`tutoring/forms.py::ClassRecordForm` 對雙方都提供同一個 `EvidenceLinksField`/`EvidenceLinksWidget`。
   - 驗證規則:最多 5 個,且每個都必須是合法的 `https://` 網址(`URLValidator(schemes=["https"])`),不限制網域(Google Drive、YouTube 只是範例,不是白名單)。超過 5 個與網址格式錯誤是自訂錯誤訊息。

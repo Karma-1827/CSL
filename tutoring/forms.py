@@ -6,7 +6,6 @@ from django.core.validators import URLValidator
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
-from accounts.forms import SKILL_CHOICES
 from accounts.models import PartnerProgram, Role, User
 
 from .models import (
@@ -166,16 +165,18 @@ class EvidenceLinksField(forms.Field):
 
 
 class ClassRecordForm(forms.ModelForm):
-    skills_practiced = forms.MultipleChoiceField(
-        label="授課類型 / Skills practiced", choices=SKILL_CHOICES, required=False, widget=forms.CheckboxSelectMultiple
-    )
     evidence_links = EvidenceLinksField(label="佐證連結 / Evidence links")
 
     class Meta:
         model = ClassRecord
-        fields = ("location", "topic", "content", "skills_practiced", "remarks", "attachment", "evidence_links")
+        fields = (
+            "location", "topic", "content", "materials_used", "individual_progress", "remarks",
+            "attachment", "evidence_links",
+        )
         widgets = {
             "content": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
+            "materials_used": forms.Textarea(attrs={"rows": 3, "maxlength": 200, "data-character-count": "200"}),
+            "individual_progress": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
             "remarks": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
             "attachment": forms.FileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         }
