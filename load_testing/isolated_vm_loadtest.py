@@ -273,7 +273,8 @@ def migrate_and_seed() -> dict[str, object]:
                 ClassRecord(
                     session=session, author=participant, location="Synthetic classroom",
                     topic="Synthetic lesson", content="Synthetic class content",
-                    reflection="", skills_practiced=["SPEAKING"], remarks="",
+                    reflection="", materials_used="Synthetic materials",
+                    individual_progress="Synthetic progress notes", remarks="",
                     evidence_links=["https://example.invalid/evidence"],
                 )
             )

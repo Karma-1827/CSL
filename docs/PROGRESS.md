@@ -4,6 +4,8 @@
 
 > 最後盤點日期:2026-08-17 —— V3/V3.1 核心項目完成,V4 進行中。2026-08-17 已完成一次上傳 VM 前驗收：291 項完整測試、Ruff、migration、`check --deploy`、`pip check`、`pip-audit`、`collectstatic` 與主要角色瀏覽器巡查均通過；詳細紀錄見 `docs/PRE_DEPLOYMENT_CHECK_2026-08-17.md`。系辦會議後 20 項需求(`docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md`)已全數完成(第一批 10 項 + 第二批 10 項),詳見下方「已完成」。20 項需求之外,另有使用者事後追加的名冊匯入卡片 UI 調整(以合作計畫為單位重新分組)。師大資訊中心弱掃前整改(`docs/VULNERABILITY_SCAN_IMPROVEMENTS.md`)批次 0-6、8 已完成並 push 至 `origin/main`;批次 7(註冊本人驗證)因涉及業務規則決策暫停待系辦回覆,批次 9(送掃前收尾)待批次 7 定案與實際 VM 到位後執行,詳見下方「已完成」該小節。
 > 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。本次盤點已實際執行 `python manage.py check`、`python manage.py makemigrations --check --dry-run` 與完整測試套件(均無異常);測試總數請直接執行 `python manage.py test` 取得目前準確數字。
+>
+> **2026-09-04 封測結束、準備正式上線前最後檢查**:320 項測試、`ruff`、`makemigrations --check --dry-run`、`check --deploy`(補齊 `POSTGRES_PASSWORD`/`DJANGO_ALLOWED_HOSTS` 才會真的跑 fail-closed 檢查,單純缺 `DJANGO_SECRET_KEY` 一項會在到達其餘檢查前就先拋錯)、`pip check`、`pip-audit` 均已重新執行。過程中發現並修正兩個問題:①`pip-audit` 掃出 `pypdf 6.15.0` 有 3 個新公開 CVE(CVE-2026-84309/84310/84311),已升級到 `pypdf 6.16.1`,重新產生中文詳細版、英文摘要版證明 PDF 並用 Poppler 轉圖人工比對,排版與加密權限旗標(`print:yes copy:no`)與升級前一致;②`tutoring/management/commands/seed_admin_demo.py` 與 `load_testing/isolated_vm_loadtest.py` 仍殘留課堂紀錄改版(`tutoring/0027`)已移除的 `skills_practiced` 欄位,執行會直接拋 `FieldError`,已改用現行的 `materials_used`/`individual_progress` 欄位——這兩支腳本平常不在測試套件覆蓋範圍內(demo seed 由防呆機制排除正式環境,load test 腳本則是獨立於 Django 測試之外),所以欄位改版當時沒被抓到,之後新增/移除 model 欄位時應留意這類「不跑在 CI 裡的輔助腳本」一併檢查。詳見 `docs/SECURITY_CHECKLIST.md` 第 56 項與 commit history。
 
 ## 已完成
 

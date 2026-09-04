@@ -314,12 +314,21 @@ class Command(BaseCommand):
         check_in(session_id=session.pk, participant=tutee, now=on_time + timedelta(minutes=5))
         submit_class_record(
             session_id=session.pk, author=tutor,
-            data={"location": "線上 Google Meet", "topic": "日常會話練習", "content": "練習點餐與問路的情境對話。", "skills_practiced": ["SPEAKING", "LISTENING"], "remarks": "學生表現積極，發音持續進步。"},
+            data={
+                "location": "線上 Google Meet", "topic": "日常會話練習", "content": "練習點餐與問路的情境對話。",
+                "materials_used": "自編對話講義、情境圖卡", "individual_progress": "能主動造句，發音清晰度提升。",
+                "remarks": "學生表現積極，發音持續進步。",
+                "evidence_links": ["https://drive.google.com/demo-tutor-record"],
+            },
             now=on_time + timedelta(minutes=10),
         )
         submit_class_record(
             session_id=session.pk, author=tutee,
-            data={"location": "線上 Google Meet", "topic": "日常會話練習", "content": "今天學到點餐跟問路怎麼說。", "skills_practiced": ["SPEAKING"], "remarks": "希望下次多練習聽力。"},
+            data={
+                "location": "線上 Google Meet", "topic": "日常會話練習", "content": "今天學到點餐跟問路怎麼說。",
+                "materials_used": "老師提供的對話講義", "individual_progress": "聽力理解仍需加強。",
+                "remarks": "希望下次多練習聽力。",
+            },
             now=on_time + timedelta(minutes=15),
         )
         confirm_counterpart(session_id=session.pk, reviewer=tutor, status=ConfirmationStatus.CONFIRMED)
@@ -330,7 +339,11 @@ class Command(BaseCommand):
         session = self._create_past_session(pairing=pairing, tutor=tutor, class_date=class_date, start_time=time(10, 0))
         check_in(session_id=session.pk, participant=tutor, reason="忘記在課堂結束後立即簽到，事後補簽。")
         check_in(session_id=session.pk, participant=tutee, reason="臨時斷線，事後補簽到。")
-        record_data = {"location": "線上 Google Meet", "topic": "聽力與口說練習", "content": "補交課堂紀錄。", "skills_practiced": ["LISTENING"], "remarks": ""}
+        record_data = {
+            "location": "線上 Google Meet", "topic": "聽力與口說練習", "content": "補交課堂紀錄。",
+            "materials_used": "線上聽力測驗題庫", "individual_progress": "補登紀錄，個別學習情形從略。",
+            "remarks": "", "evidence_links": ["https://drive.google.com/demo-makeup-record"],
+        }
         submit_class_record(session_id=session.pk, author=tutor, data=record_data, reason="延誤填寫，補交課堂紀錄。")
         submit_class_record(session_id=session.pk, author=tutee, data=record_data, reason="延誤填寫，補交課堂紀錄。")
         confirm_counterpart(session_id=session.pk, reviewer=tutor, status=ConfirmationStatus.CONFIRMED)
