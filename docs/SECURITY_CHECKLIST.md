@@ -101,7 +101,7 @@
 | 44 | 普 | 避免軟體常見漏洞(OWASP/XSS/注入) | ✅ | Django ORM 防 SQL 注入、模板引擎預設自動跳脫防 XSS、CSRF middleware 全站啟用。 |
 | 45 | 普 | 錯誤頁僅顯示簡短訊息 | ✅ | 2026-07-26 實際驗證:`accounts/tests.py::ProductionErrorPageTests` 在 `DEBUG=False` 下故意讓一個 view 拋例外,確認回應是 Django 內建的通用 500 頁面,不含 traceback、專案路徑或例外訊息內容。專案沒有自訂 `handler500`/`500.html`,行為即是 Django 框架預設保證。 |
 | 46 | 普 | 執行弱點掃描 | ❌ | 待資訊中心的網頁弱點掃描(申請虛擬主機開通網路連線的必要步驟之一,見 `rent_VM_notice.pdf`)。 |
-| 47 | 普 | 部署環境更新與修補 | 🟡 | 首次部署(2026-08-17)已用當時最新套件安裝;`apt` 曾提示核心版本(`6.8.0-106-generic`)需重開機才會套用,當時刻意延後,**2026-09-04 複查確認這個重開機需求仍然存在**(`/var/run/reboot-required` 仍在),已掛 3 週未處理,也還沒有排定的例行修補排程或維護窗口慣例。 |
+| 47 | 普 | 部署環境更新與修補 | 🟡 | 首次部署(2026-08-17)已用當時最新套件安裝;`apt` 曾提示核心版本(`6.8.0-106-generic`)需重開機才會套用,當時刻意延後。**2026-09-04 已完成重開機套用**:核心由 `6.8.0-106` 更新到 `6.8.0-138`(含 `libc6` 更新),`/var/run/reboot-required` 已清空;重開機前確認 gunicorn/nginx/postgresql/`mpts-process-matching-state.timer`/`ntpsec` 皆為開機自動啟動(`enabled`),重開機後五者皆正常自動起來,`ss -tlnp` 確認 111 埠(見第 12/48 項)未被重新拉起,`timedatectl` 確認 NTP 同步未受影響,正式站與 `/system-admin/login/` 皆回應 200。仍維持 🟡 而非 ✅ 的原因:這次是手動一次性處理,**還沒有排定的例行修補排程或維護窗口慣例**,下次核心/套件更新累積後仍需人工排時間重開機。 |
 | 48 | 普 | 識別並關閉不必要服務及埠口 | 🟡 | iptables 已限制 SSH 來源網段,對外僅開 80/443。**2026-09-04 發現並已修正**:111 埠(`rpcbind`)原本對外(`0.0.0.0:111`)監聽,查明是 `nfs-common` 套件的依賴(這台 VM 從未實際掛載過 NFS,見 `docs/DEPLOY.md`「備份與還原」),非手動安裝(`apt-mark showmanual` 未列出),已 `systemctl disable --now rpcbind.socket rpcbind.service` 停用,`ss -tlnp` 確認 111 埠不再監聽、確認未影響 gunicorn/nginx/postgresql 正常運作;套件本身未移除,之後真的要用 NFS 再重新啟用即可。**實際風險層級說明**:iptables INPUT 預設政策是 DROP 且原本就沒有放行 111 埠的規則,所以這個服務對外部來源其實原本就已被防火牆擋下,不是真的對整個網際網路開放;這次處理是縱深防禦(defense-in-depth)層級的收斂,不是補一個原本正在被利用的漏洞。仍未做正式的服務/埠口盤點文件。 |
 | 49 | 普 | 不使用預設密碼 | 🟡 | 本機開發用 PostgreSQL 帳密是 `qiangqiang`/無密碼(僅限本機);`POSTGRES_PASSWORD` 環境變數已支援自訂,正式環境部署時務必換成高強度密碼。 |
 | 50 | 普 | 執行系統源碼備份 | ✅ | Git + GitHub private remote(`https://github.com/Karma-1827/CSL.git`)。 |
@@ -176,6 +176,7 @@
 - 第 57 項:`.github/workflows/ci.yml` 新增每週一 `schedule` 排程,不再只靠 push/PR 觸發依賴掃描(2026-08-08)。
 - 第 21 項(2026-09-04):修正 `ntpsec` 設定衝突(重複的 `pool`/`server` 同一 IP、以及一條只解析到 IPv6 因而永遠連不上的來源),加入公開 NTP 池交叉驗證,`timedatectl status` 確認真正同步。
 - 第 12、48 項(部分,2026-09-04):停用對外監聽但從未使用過的 111 埠(`rpcbind`,`nfs-common` 的依賴,這台 VM 從未掛載 NFS)。
+- 第 47 項(部分,2026-09-04):重開機套用延遲 3 週的核心更新(`6.8.0-106`→`6.8.0-138`),五個核心服務皆確認開機自動恢復正常,正式站無中斷後遺症。
 
 ### 還可以直接改 Django 程式碼的(建議排入 V4 前期)
 
@@ -185,7 +186,7 @@
 
 - ~~第 21 項(NTP)~~:**2026-09-04 已修正**,見該項說明(修正 `ntp.conf` 設定衝突並加入公開來源交叉驗證;順手發現師大校內時間伺服器本身疑似有時鐘飄移,建議另行知會資訊中心)。
 - ~~第 12、48 項(111 埠/rpcbind 對外監聽)~~:**2026-09-04 已停用**(`rpcbind.socket`/`rpcbind.service`),`ss -tlnp` 確認不再監聽,未影響 gunicorn/nginx/postgresql。
-- **第 47 項(待套用的核心更新)**:已延遲 3 週,建議儘快找一個維護窗口重開機套用,重開機前先確認 gunicorn/nginx/postgresql 三個服務開機自動啟動(`systemctl is-enabled` 皆為 `enabled`)。
+- ~~第 47 項(待套用的核心更新)~~:**2026-09-04 已重開機套用**,見該項說明。仍待補的是例行修補排程/維護窗口慣例本身(這次是一次性人工處理)。
 - **第 18 項(日誌儲存容量規劃)**:評估 `AuditLog` 成長速度並確認系統碟仍有餘裕(這台 VM 曾因 iptables log 灌爆碟,見 `docs/DEPLOY.md`「事件紀錄」,值得順便重新檢查目前用量)。
 
 ### 需要資訊中心/校方資源才能做的(不是本機能決定)
