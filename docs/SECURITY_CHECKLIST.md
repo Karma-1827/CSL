@@ -46,7 +46,7 @@
 | 9 | 普 | 權限檢查於伺服器端完成 | ✅ | 所有權限判斷都在 view 層(`role_required`/`@login_required`),前端 JS 不做任何權限決策。 |
 | 10 | 普 | 監控遠端存取連線 | ❌ | VM 層級,待 SSH/Nginx access log 監控。 |
 | 11 | 普 | 遠端存取採加密機制 | ✅ | 2026-08-17 起正式環境已啟用 HTTPS(Let's Encrypt,`certbot.timer` 自動續約),`SECURE_SSL_REDIRECT`/HSTS 於 `DEBUG=False` 時生效,已用 `curl -I https://mpts.tcsl.ntnu.edu.tw/` 反覆驗證。 |
-| 12 | 普(調降) | 遠端存取來源應為預先定義之控制點 | 🟡 | iptables 已將 SSH 限縮至資訊中心提供的校內網段(見 `docs/DEPLOY.md`「事件紀錄」列出的網段清單),`/system-admin/` 的 Nginx 白名單為 `140.122.0.0/16`(整個師大網段,尚未收斂到資訊中心書面確認的更精確範圍,見 `docs/DEPLOY.md`「上線前仍待確認」)。**2026-09-04 複查發現一個未被文件記錄的缺口**:VM 的 111 埠(rpcbind,通常隨 NFS 相關套件一起安裝)目前對外(`0.0.0.0:111`)監聽中,且這台 VM 從未實際掛載資訊中心的 NFS 備份硬碟(見 `docs/DEPLOY.md`「備份與還原」),此服務很可能完全沒在使用卻對外開放,應確認後停用或至少限制來源。 |
+| 12 | 普(調降) | 遠端存取來源應為預先定義之控制點 | 🟡 | iptables 已將 SSH 限縮至資訊中心提供的校內網段(見 `docs/DEPLOY.md`「事件紀錄」列出的網段清單),`/system-admin/` 的 Nginx 白名單為 `140.122.0.0/16`(整個師大網段,尚未收斂到資訊中心書面確認的更精確範圍,見 `docs/DEPLOY.md`「上線前仍待確認」),仍是 🟡 而非 ✅ 的原因。2026-09-04 發現並已處理的 111 埠(rpcbind)對外監聽問題見第 48 項。 |
 
 ## 事件日誌與可歸責性(11 項)
 
@@ -60,7 +60,7 @@
 | 18 | 普 | 配置足夠日誌儲存容量 | ❌ | VM 層級,PostgreSQL 儲存空間規劃需納入 `AuditLog` 成長評估。 |
 | 19 | 普 | 日誌處理失效時應有適當回應 | ✅ | 2026-07-26 新增 `AuditLog.record()` classmethod(取代所有原本的 `AuditLog.objects.create()` 呼叫點),用 nested `transaction.atomic()` 包住寫入,失敗時只回滾這筆 insert、記錄到 `logging.getLogger("csl.audit")`,不會讓稽核寫入失敗連帶弄壞呼叫端原本的交易或讓使用者操作跟著失敗。已用 mock 模擬寫入失敗、驗證外層交易不受影響(`accounts/tests.py::AuditLogResilienceTests`)。 |
 | 20 | 普 | 使用內部時鐘產生時戳,對應 UTC/GMT | ✅ | `USE_TZ=True`,資料庫存 UTC,顯示時依 `Asia/Taipei` 轉換。 |
-| 21 | 普(調降) | 系統時鐘應定期與基準時間源同步 | ❌ | 2026-09-04 實測確認:`systemd-timesyncd` 為 `inactive`,`timedatectl status` 回報 `System clock synchronized: no`。VM 層級,待設定 NTP(`rent_VM_notice.pdf` 已列為必要項目);修正本身很簡單(啟用 `systemd-timesyncd` 或改用資訊中心指定的 NTP 來源),只是尚未做。 |
+| 21 | 普(調降) | 系統時鐘應定期與基準時間源同步 | ✅ | 2026-09-04 已修正並實測確認。原本 `ntpsec.service`(此 VM 用 ntpsec 取代 `systemd-timesyncd`)已啟用但從未真正同步過(`ntpq` 顯示 `stratum=16`/`leap_alarm`)。根因有二:①`ntp.conf` 同時用 `pool 140.122.8.254` 與 `server 140.122.8.254` 重複設定同一個 IP,造成關聯衝突;②另一條 `pool time.stdtime.gov.tw` 只解析到 IPv6 位址,而這台 VM 的 IPv6 在核心層停用(見 `docs/DEPLOY.md`「首次部署實際踩過的坑」),永遠連不上。修正為只保留 `server 140.122.8.254 iburst` 單一直連設定,並新增 `pool tw.pool.ntp.org`/`pool time.cloudflare.com` 兩個公開來源(舊設定備份於 `/etc/ntpsec/ntp.conf.bak-20260904`)。**修正過程中另外發現 `140.122.8.254`(資訊中心指定的校內時間伺服器)單獨查詢時回報約 32 分鐘的時間偏差、`refid` 指向自己的未受控本地時鐘(`127.127.1.0`,stratum 9)**,懷疑該伺服器本身時鐘有問題;加入多個公開來源後 `ntpd` 的選源演算法正確以其他來源為準、將這台伺服器排除,`timedatectl status` 現在確認 `System clock synchronized: yes` 且 `ntpq -c rv` 顯示真實的 `stratum=3`/次秒等級 offset,不是假訊號。**建議之後知會資訊中心該時間伺服器本身可能有時鐘飄移的問題**,不是我方能修正的範圍。 |
 | 22 | 普 | 日誌存取僅限授權使用者 | ✅ | `AuditLogAdmin` 設定 `has_add_permission`/`has_change_permission` 皆為 `False`(唯讀),且只有 `is_staff=True` 的帳號能進 Django Admin;一般 Tutor/Tutee 建立時不會被設為 `is_staff`。 |
 | 23 | 中 | 日誌完整性確保機制(雜湊等) | ❌ | `AuditLog` 是一般 PostgreSQL 資料表,沒有雜湊鏈或防竄改保護。 |
 
@@ -102,7 +102,7 @@
 | 45 | 普 | 錯誤頁僅顯示簡短訊息 | ✅ | 2026-07-26 實際驗證:`accounts/tests.py::ProductionErrorPageTests` 在 `DEBUG=False` 下故意讓一個 view 拋例外,確認回應是 Django 內建的通用 500 頁面,不含 traceback、專案路徑或例外訊息內容。專案沒有自訂 `handler500`/`500.html`,行為即是 Django 框架預設保證。 |
 | 46 | 普 | 執行弱點掃描 | ❌ | 待資訊中心的網頁弱點掃描(申請虛擬主機開通網路連線的必要步驟之一,見 `rent_VM_notice.pdf`)。 |
 | 47 | 普 | 部署環境更新與修補 | 🟡 | 首次部署(2026-08-17)已用當時最新套件安裝;`apt` 曾提示核心版本(`6.8.0-106-generic`)需重開機才會套用,當時刻意延後,**2026-09-04 複查確認這個重開機需求仍然存在**(`/var/run/reboot-required` 仍在),已掛 3 週未處理,也還沒有排定的例行修補排程或維護窗口慣例。 |
-| 48 | 普 | 識別並關閉不必要服務及埠口 | 🟡 | iptables 已限制 SSH 來源網段,對外僅開 80/443;**2026-09-04 複查發現 111 埠(rpcbind)仍對外監聽**(見第 12 項說明),從未做過正式的服務/埠口盤點文件。 |
+| 48 | 普 | 識別並關閉不必要服務及埠口 | 🟡 | iptables 已限制 SSH 來源網段,對外僅開 80/443。**2026-09-04 發現並已修正**:111 埠(`rpcbind`)原本對外(`0.0.0.0:111`)監聽,查明是 `nfs-common` 套件的依賴(這台 VM 從未實際掛載過 NFS,見 `docs/DEPLOY.md`「備份與還原」),非手動安裝(`apt-mark showmanual` 未列出),已 `systemctl disable --now rpcbind.socket rpcbind.service` 停用,`ss -tlnp` 確認 111 埠不再監聽、確認未影響 gunicorn/nginx/postgresql 正常運作;套件本身未移除,之後真的要用 NFS 再重新啟用即可。**實際風險層級說明**:iptables INPUT 預設政策是 DROP 且原本就沒有放行 111 埠的規則,所以這個服務對外部來源其實原本就已被防火牆擋下,不是真的對整個網際網路開放;這次處理是縱深防禦(defense-in-depth)層級的收斂,不是補一個原本正在被利用的漏洞。仍未做正式的服務/埠口盤點文件。 |
 | 49 | 普 | 不使用預設密碼 | 🟡 | 本機開發用 PostgreSQL 帳密是 `qiangqiang`/無密碼(僅限本機);`POSTGRES_PASSWORD` 環境變數已支援自訂,正式環境部署時務必換成高強度密碼。 |
 | 50 | 普 | 執行系統源碼備份 | ✅ | Git + GitHub private remote(`https://github.com/Karma-1827/CSL.git`)。 |
 | 51 | 中 | 維運階段執行版本控制與變更管理 | ✅ | Git,所有變更皆有 commit 紀錄可追溯。 |
@@ -156,7 +156,7 @@
 
 ## 總結與行動優先序
 
-統計(共 62 項,2026-09-04 依正式 VM 上線後實際複查更新):✅ 符合 24、🟡 部分符合 17、❌ 未實施 17、⬜ 不適用 4。
+統計(共 62 項,2026-09-04 依正式 VM 上線後實際複查與當日修復更新):✅ 符合 25、🟡 部分符合 17、❌ 未實施 16、⬜ 不適用 4。
 
 **2026-09-04 複查更新(VM 自 2026-08-17 上線後,本文件多處狀態未同步回頭更新,這次一併修正並新增兩項複查中發現的缺口)**:
 - 第 11、31 項由 🟡 升級為 ✅:HTTPS 已在正式環境強制啟用(Let's Encrypt,自動續約),先前文字仍寫著「待 V4 部署」是舊版盤點(2026-07-31)留下的過時描述。
@@ -174,6 +174,8 @@
 - 第 15 項:Django Admin 後台的新增/修改/刪除透過 `post_save` 訊號鏡射進 `AuditLog`,補齊原本只有內建 `LogEntry`、查不到我們自己稽核表的缺口。
 - 第 56 項:升級 `Pillow`(11.3.0→12.3.0)與 `pypdf`(6.10.0→6.14.2→6.15.0,2026-08-08 再次升級修復 CVE-2026-71852/CVE-2026-71870)修復 `pip-audit` 掃出的所有已知 CVE,`pip-audit` 重跑確認乾淨,CI 步驟維持會擋 build。
 - 第 57 項:`.github/workflows/ci.yml` 新增每週一 `schedule` 排程,不再只靠 push/PR 觸發依賴掃描(2026-08-08)。
+- 第 21 項(2026-09-04):修正 `ntpsec` 設定衝突(重複的 `pool`/`server` 同一 IP、以及一條只解析到 IPv6 因而永遠連不上的來源),加入公開 NTP 池交叉驗證,`timedatectl status` 確認真正同步。
+- 第 12、48 項(部分,2026-09-04):停用對外監聽但從未使用過的 111 埠(`rpcbind`,`nfs-common` 的依賴,這台 VM 從未掛載 NFS)。
 
 ### 還可以直接改 Django 程式碼的(建議排入 V4 前期)
 
@@ -181,9 +183,9 @@
 
 ### VM/維運層級,可直接動手處理(不需先問系辦)
 
-- **第 21 項(NTP)**:`systemd-timesyncd` 目前是 `inactive`,啟用即可,幾分鐘的事。
+- ~~第 21 項(NTP)~~:**2026-09-04 已修正**,見該項說明(修正 `ntp.conf` 設定衝突並加入公開來源交叉驗證;順手發現師大校內時間伺服器本身疑似有時鐘飄移,建議另行知會資訊中心)。
+- ~~第 12、48 項(111 埠/rpcbind 對外監聽)~~:**2026-09-04 已停用**(`rpcbind.socket`/`rpcbind.service`),`ss -tlnp` 確認不再監聽,未影響 gunicorn/nginx/postgresql。
 - **第 47 項(待套用的核心更新)**:已延遲 3 週,建議儘快找一個維護窗口重開機套用,重開機前先確認 gunicorn/nginx/postgresql 三個服務開機自動啟動(`systemctl is-enabled` 皆為 `enabled`)。
-- **第 12、48 項(111 埠/rpcbind 對外監聽)**:先確認是否真的用不到(這台 VM 從未掛載 NFS),用不到就停用該服務(`systemctl disable --now rpcbind` 之類,依實際套件而定);如果之後真的要掛 NFS 備份,再限制來源 IP 而非全網開放。
 - **第 18 項(日誌儲存容量規劃)**:評估 `AuditLog` 成長速度並確認系統碟仍有餘裕(這台 VM 曾因 iptables log 灌爆碟,見 `docs/DEPLOY.md`「事件紀錄」,值得順便重新檢查目前用量)。
 
 ### 需要資訊中心/校方資源才能做的(不是本機能決定)
