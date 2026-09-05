@@ -108,7 +108,7 @@
         {% endif %}
 
         {% if edit_form %}
-          <section class="profile-card" id="edit-profile">
+          <section class="profile-card is-editable" id="edit-profile">
             <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>姓名與學號如需更正請聯絡系辦；以下欄位可自行更新，儲存後立即生效。<br>Name and student ID require the department office to correct; the fields below take effect immediately.</p></div>
             <form method="post" action="{% url 'accounts:update_profile' %}" class="profile-registration-form" novalidate>
               {% csrf_token %}

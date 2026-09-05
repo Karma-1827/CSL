@@ -12,6 +12,15 @@
 > - P1-02(密碼錯誤訊息不夠清楚):新增 `accounts/password_validation.py`,把 `AUTH_PASSWORD_VALIDATORS` 的四個 Django 內建驗證器包一層——實際比對邏輯完全不變(內部呼叫 `super().validate()`),只把失敗訊息換成中英雙語、可操作的文字,同時涵蓋註冊(`RegistrationLookupForm`)與忘記密碼重設(`BilingualSetPasswordForm`,繼承 Django `SetPasswordForm`)兩個呼叫點。密碼欄位旁的規則說明文字(`PASSWORD_RULES_HELP_TEXT`)也同步列出完整規則,不只是原本的部分提示。「紅框+欄位下方錯誤原因」這個視覺呈現其實已有共用元件 `templates/components/form_field.html`(`.has-error`/`.field-error`)在用,這次沒有變動;色彩對比是否需要進一步調整留待之後有設計輸入再處理,不在這次範圍內。
 > - 順手移除 `accounts/forms.py::RegistrationForm`——比對後確認是已被 `RegistrationLookupForm` 取代、完全沒有任何呼叫端在用的死程式碼。
 > - 新增 6 個回歸測試(4 個密碼訊息、1 個忘記密碼重設訊息、1 個已核准文件不被覆蓋),326 項測試全數通過。**尚未做實機瀏覽器驗證**(本次無可用瀏覽器工具),已改用 curl/test client 檢查渲染出的 HTML 內容(`data-*` 屬性、help text、靜態頁面皆正確),但顏色對比、JS 攔截送出的實際互動效果未經肉眼確認,建議之後找機會補做。
+>
+> **2026-09-06 老師端封閉測試回饋修正(第二批,P1-02 色彩對比後續 + P2-02/P2-04)**——本機反覆用 `python manage.py runserver` 搭配使用者肉眼檢視、逐輪調整,無瀏覽器自動化工具,細節見 commit history:
+> - **一般文字酒紅色與錯誤紅色太接近**:比對後決定只把「一般內文墨色」(`--navy`/`--deep-ink`)改成接近黑色,大標題(`h1`/`h2`/`h3`)與品牌強調色(`--blue`/`--ocean-800`,按鈕、eyebrow 小標籤、狀態徽章圓點)維持酒紅色不動。改動範圍刻意**只限定在登入後的頁面**(`.app-shell` 這個 CSS scope 底下才覆寫變數),登入/註冊/忘記密碼等公開頁面(`.auth-page`)完全不受影響,維持原本配色。
+> - 依此原則逐一核對並修正多處寫死酒紅色的個別元件(不是靠變數自動套用,是分別找出來改):我的課表「已排課/Scheduled」徽章與「查看課程/View」、私訊「開啟對話/Open」、Tutor/Tutee 首頁「查看資料/View profile」。「我的課表」的已排/有效時數數字則是反向操作——改成跟「累積時數總覽」一致的酒紅色(這兩處原本就不一致,以後者為準)。
+> - 課程收合(`+`/`−`)符號改成 `▾`/`▴`,`.review-status-group`/`.schedule-group` 共用同一條 CSS 規則,兩處一起生效。
+> - P2-02:側欄文字 `0.76rem`→`0.82rem`(反覆試過 `1rem`/`0.85rem` 後定案)、按鈕最低高度 `42px` 維持不變(曾試過 `44px`/`43px`,最後定案沿用原值)、私訊頁「查看資料」按鈕移除 `button-small` 改用一般按鈕大小、個人資料頁「編輯個人資料」卡片加左側酒紅色邊框＋淡色底以區別於上方唯讀資訊卡。
+> - P2-04:課程卡片改成把 `<a class="class-row">` 拆成外層 `<div>` + 兩段 `<a class="class-row-link">`(分別包住日期跟狀態/查看課程),中間「時間 · 時數」那一行改成純文字容器,不再包在連結裡——目的是能在同一行插入可另外點擊的「修改 / Reschedule」「取消 / Cancel」小標籤(初版做法是右上角 `⋯` 選單,使用者看過後要求改成直接內嵌顯示,已改掉)。這兩個標籤**只在 Tutor 本人尚未簽到且課程未取消時顯示**,對齊 `tutoring/services.py` 既有的「已有簽到或紀錄不可自行改」規則;點擊後導到 `class_detail` 頁面並帶 `#reschedule`/`#cancel` anchor,新增 `static/js/open-details-from-hash.js` 依網址片段自動展開對應的 `<details>` 並捲動過去,原本內嵌在該頁的表單完全沒動。過程中發現新標籤沒設 `line-height`(繼承全站預設 1.55)導致比旁邊文字高、把整張卡片撐大,已改為 `line-height: 1.3` 修正。
+> - `class_history_list.html` 為求標記與 `class_schedule_group.html` 一致也做了同樣的結構調整,但因該頁列出的多是已完成/已取消課程,「修改/取消」標籤實務上很少真的出現。
+> - 326 項測試全數通過,`ruff`/`makemigrations --check` 皆乾淨。同樣**沒有實機瀏覽器驗證**,全靠使用者自己在本機 `runserver` 上肉眼確認每一輪調整,是這次的驗收方式,非自動化測試覆蓋。
 
 ## 已完成
 

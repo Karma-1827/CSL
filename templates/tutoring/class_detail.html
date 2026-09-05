@@ -103,7 +103,7 @@
       </section>
 
       {% if request.user.role == 'TUTOR' %}
-        <details class="panel edit-details"><summary>修改上課時間 / Reschedule class</summary>
+        <details class="panel edit-details" id="reschedule"><summary>修改上課時間 / Reschedule class</summary>
           <form action="{% url 'tutoring:class_reschedule' session.pk %}" method="post" class="schedule-form class-edit-form">
             {% csrf_token %}
             <label>{{ reschedule_form.class_date.label }}{{ reschedule_form.class_date }}</label>
@@ -114,7 +114,7 @@
           </form>
           <p class="help-text">未簽到且沒有紀錄的課程，可在原課程結束後三週內移到未來。<br>A class without activity may be moved to the future within three weeks.</p>
         </details>
-        <details class="panel danger-details"><summary>取消這堂課 / Cancel this class</summary><form action="{% url 'tutoring:class_cancel' session.pk %}" method="post" class="stack-form">{% csrf_token %}<label>取消原因 / Reason<textarea name="reason" rows="3" required></textarea></label><button class="button button-danger" type="submit">確認取消 / Confirm cancellation</button></form></details>
+        <details class="panel danger-details" id="cancel"><summary>取消這堂課 / Cancel this class</summary><form action="{% url 'tutoring:class_cancel' session.pk %}" method="post" class="stack-form">{% csrf_token %}<label>取消原因 / Reason<textarea name="reason" rows="3" required></textarea></label><button class="button button-danger" type="submit">確認取消 / Confirm cancellation</button></form></details>
       {% endif %}
     {% else %}
       <section class="panel"><div class="empty-state">此課程已取消。 / This class has been cancelled.</div></section>
@@ -124,4 +124,5 @@
 </div>
 <script src="{% static 'js/class-record-links.js' %}?v=20260810-1" defer></script>
 <script src="{% static 'js/character-count.js' %}?v=20260810-1" defer></script>
+<script src="{% static 'js/open-details-from-hash.js' %}?v=20260906-1" defer></script>
 {% endblock %}
