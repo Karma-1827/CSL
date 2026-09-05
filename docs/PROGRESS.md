@@ -22,6 +22,8 @@
 > - `class_history_list.html` 為求標記與 `class_schedule_group.html` 一致也做了同樣的結構調整,但因該頁列出的多是已完成/已取消課程,「修改/取消」標籤實務上很少真的出現。
 > - 326 項測試全數通過,`ruff`/`makemigrations --check` 皆乾淨。同樣**沒有實機瀏覽器驗證**,全靠使用者自己在本機 `runserver` 上肉眼確認每一輪調整,是這次的驗收方式,非自動化測試覆蓋。
 > - **P2-05 補完**:課程詳情頁「目前確認結果」(`.review-result`)先前是不分狀態的灰底黑字,已依 `ClassConfirmation.status`(`CONFIRMED`/`REVISION`/`ISSUE`)分別套用綠/黃/紅,與 `.class-status` 共用同一組色碼,不是另外發明一套。
+> - **P1-03(密碼與安全問題答案顯示/隱藏)**:新增 `static/js/password-toggle.js`,在 `templates/base.html` 全站載入,對頁面上每個 `input[type=password]` 自動包一層 wrapper 並插入「顯示/隱藏」按鈕——不用逐一修改登入、註冊、忘記密碼等各處模板。預設仍是隱藏(`type=password`),點擊後才切換成 `type=text`;Django 的 `PasswordInput` 本來就不會把既有值回填進 HTML(`render()` 固定輸出空 `value`),所以這個切換不會讓答案意外出現在網頁原始碼或日誌裡。
+> - **D-01(母語新增粵語)**:`static/js/profile-options.js` 的 `LANGUAGE_CODES` 加入 `yue`,並在 `languageOverrides` 明確指定顯示文字為「粵語 (Cantonese)」(跟既有 `日文 (Japanese)`/`韓文 (Korean)` 同一種「中文名稱 (English name)」格式,不是報告裡提到的另一種「中文 / English」斜線寫法,以現有慣例為準)。排列位置放在 `zh` 之後、`en` 之前,跟其他常用語言一樣置頂。因為註冊、個人資料編輯、候選人篩選三處的母語下拉選單都共用同一份 `profile-options.js` 產生選項,改這一個檔案就同步套用到三處,不用個別修改。用 Node 實際執行 `Intl.DisplayNames` 確認 `yue` 在中文/英文都能正確解析為「粵語」/「Cantonese」。
 
 ## 已完成
 

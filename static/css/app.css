@@ -282,6 +282,39 @@ a {
   font-weight: 650;
   white-space: pre-line;
 }
+/* 封測老師端回饋 P1-03 (2026-09): 密碼與三個安全問題答案的顯示/隱藏切換，
+   由 static/js/password-toggle.js 在載入時自動包住每個 input[type=password]，
+   不用逐一改模板。預設仍是隱藏(type=password)，只有點擊後才顯示。 */
+.password-toggle-wrap {
+  position: relative;
+  display: block;
+}
+.password-toggle-wrap input {
+  padding-right: 78px;
+}
+.password-toggle-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.password-toggle-button:hover {
+  color: var(--navy);
+  background: var(--slate-100);
+}
+.password-toggle-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 .password-help-row {
   margin: -3px 0 7px;
   text-align: right;
