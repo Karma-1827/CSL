@@ -176,6 +176,47 @@ class RegistrationTests(TestCase):
         self.assertContains(response, "此欄位為必填欄位")
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
 
+    def test_registration_rejects_common_password_with_bilingual_message(self):
+        """封測老師端回饋 P1-02 (2026-09): Django's stock validator messages are English-
+        only and give no actionable rule text; accounts.password_validation wraps each
+        built-in validator to raise a bilingual message instead, without touching the
+        underlying pass/fail logic itself."""
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "TEST1001", "registration_identity": "LOCAL", "password1": "qwertyuiop", "password2": "qwertyuiop"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "這個密碼太常見")
+        self.assertContains(response, "This password is too common")
+        self.assertFalse(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
+
+    def test_registration_rejects_numeric_only_password_with_bilingual_message(self):
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "TEST1001", "registration_identity": "LOCAL", "password1": "58204716930", "password2": "58204716930"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密碼不能只有數字")
+        self.assertContains(response, "cannot be entirely numeric")
+
+    def test_registration_rejects_too_short_password_with_bilingual_message(self):
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "TEST1001", "registration_identity": "LOCAL", "password1": "Ab1", "password2": "Ab1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密碼至少需要 10 個字元")
+        self.assertContains(response, "at least 10 characters long")
+
+    def test_registration_rejects_password_too_similar_to_student_id(self):
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "TEST1001", "registration_identity": "LOCAL", "password1": "TEST1001test", "password2": "TEST1001test"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密碼與您的學號")
+        self.assertContains(response, "too similar to your student ID")
+
     def test_retired_security_question_rejected_at_registration(self):
         data = self.registration_data | {"question_1": "Q4"}
         self.client.post(
@@ -423,6 +464,28 @@ class AccountRecoveryTests(TestCase):
         self.assertRedirects(response, reverse("accounts:login"))
         user = User.objects.get(username="TEST1001")
         self.assertTrue(user.check_password("A-brand-new-password-2026"))
+
+    def test_recovered_password_reset_rejects_common_password_with_bilingual_message(self):
+        """封測老師端回饋 P1-02 (2026-09): BilingualSetPasswordForm inherits Django's
+        SetPasswordForm, which calls the same AUTH_PASSWORD_VALIDATORS as registration —
+        confirming the bilingual wrapper also covers this second call site."""
+        verify_data = {
+            "student_id": "TEST1001",
+            "answer_1": "Alpha answer",
+            "answer_2": "Beta answer",
+            "answer_3": "Gamma answer",
+            "action": "verify",
+        }
+        self.lookup_then_verify(verify_data)
+        response = self.client.post(
+            reverse("accounts:set_recovered_password"),
+            {"new_password1": "qwertyuiop", "new_password2": "qwertyuiop"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "這個密碼太常見")
+        self.assertContains(response, "This password is too common")
+        user = User.objects.get(username="TEST1001")
+        self.assertFalse(user.check_password("qwertyuiop"))
 
     def test_existing_retired_question_still_works_for_recovery(self):
         user = User.objects.get(username="TEST1001")
@@ -862,6 +925,24 @@ class QualificationTests(TestCase):
         response = self.client.post(reverse("accounts:upload_qualification"), {"file": oversized})
         self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
         self.assertFalse(QualificationDocument.objects.filter(tutor=self.tutor).exists())
+
+    def test_oversized_upload_does_not_touch_an_already_approved_document(self):
+        """封測老師端回饋 P1-01 (2026-09): a rejected re-upload must never overwrite or
+        clear an existing APPROVED document — QualificationUploadForm.is_valid() being
+        False means .save() is simply never called, so this should already hold, but it
+        was never actually asserted from the "already approved" angle before."""
+        document = self.upload_and_get_document()
+        document.status = QualificationStatus.APPROVED
+        document.save(update_fields=["status"])
+        original_name = document.file.name
+        oversized = SimpleUploadedFile(
+            "too_big.pdf", minimal_pdf_bytes() + b"0" * 1_000_001, content_type="application/pdf"
+        )
+        response = self.client.post(reverse("accounts:upload_qualification"), {"file": oversized})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.APPROVED)
+        self.assertEqual(document.file.name, original_name)
 
     def test_tutee_cannot_upload_qualification(self):
         tutee = User.objects.create_user(username="TUTEE1", password="Tutee-password-2026", role=Role.TUTEE)

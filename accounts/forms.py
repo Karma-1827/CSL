@@ -165,95 +165,6 @@ class ThrottledAdminAuthenticationForm(AdminAuthenticationForm):
         return cleaned
 
 
-class RegistrationForm(forms.Form):
-    student_id = forms.CharField(
-        label="學號 / Student ID",
-        max_length=24,
-        widget=forms.TextInput(attrs={"autocomplete": "username", "placeholder": "例如 / Example: 612840001"}),
-    )
-    password1 = forms.CharField(
-        label="設定密碼 / Create password",
-        strip=False,
-        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
-        help_text="至少 10 個字元，避免使用常見密碼。\nUse at least 10 characters and avoid common passwords.",
-    )
-    password2 = forms.CharField(
-        label="再次輸入密碼 / Confirm password",
-        strip=False,
-        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
-    )
-    question_1 = forms.ChoiceField(label="安全問題一 / Security question 1", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
-    answer_1 = forms.CharField(label="答案一 / Answer 1", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_2 = forms.ChoiceField(label="安全問題二 / Security question 2", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
-    answer_2 = forms.CharField(label="答案二 / Answer 2", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    question_3 = forms.ChoiceField(label="安全問題三 / Security question 3", choices=SecurityQuestionAnswer.ACTIVE_QUESTION_CHOICES)
-    answer_3 = forms.CharField(label="答案三 / Answer 3", min_length=3, widget=forms.PasswordInput(attrs={"autocomplete": "off"}))
-    agree = forms.BooleanField(
-        label="我確認資料正確，並同意依系統目的使用。 / I confirm the information and consent to its use for this system.",
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        add_form_classes(self)
-        self.fields["agree"].widget.attrs["class"] = "form-check-input"
-        self.fields["question_1"].initial = "Q1"
-        self.fields["question_2"].initial = "Q2"
-        self.fields["question_3"].initial = "Q3"
-
-    def clean_student_id(self):
-        student_id = self.cleaned_data["student_id"].strip().upper()
-        try:
-            roster = RosterEntry.objects.get(student_id=student_id, is_enabled=True)
-        except RosterEntry.DoesNotExist:
-            raise ValidationError("找不到註冊學號，請聯絡系辦。\nStudent ID not found. Please contact the department office.")
-        if roster.is_claimed or User.objects.filter(username=student_id).exists():
-            raise ValidationError("此學號已完成註冊。 / This student ID has already been registered.")
-        return student_id
-
-    def clean(self):
-        cleaned = super().clean()
-        questions = [cleaned.get(f"question_{index}") for index in range(1, 4)]
-        if all(questions) and len(set(questions)) != 3:
-            self.add_error("question_3", "三題不可重複。 / Please choose three different questions.")
-        password1 = cleaned.get("password1")
-        password2 = cleaned.get("password2")
-        if password1 and password2:
-            if password1 != password2:
-                self.add_error("password2", "兩次密碼不一致。 / The two passwords do not match.")
-            else:
-                provisional = User(username=cleaned.get("student_id", ""))
-                try:
-                    password_validation.validate_password(password1, provisional)
-                except ValidationError as error:
-                    self.add_error("password1", error)
-        return cleaned
-
-    @transaction.atomic
-    def save(self):
-        roster = RosterEntry.objects.select_for_update().get(student_id=self.cleaned_data["student_id"])
-        if roster.is_claimed or User.objects.filter(username=roster.student_id).exists():
-            raise ValidationError("此學號已完成註冊。 / This student ID has already been registered.")
-        user = User.objects.create_user(
-            username=roster.student_id,
-            password=self.cleaned_data["password1"],
-            role=roster.role,
-            roster_entry=roster,
-            name_zh=roster.name_zh,
-            name_en=roster.name_en,
-        )
-        questions = SecurityQuestionAnswer(
-            user=user,
-            question_1=self.cleaned_data["question_1"],
-            question_2=self.cleaned_data["question_2"],
-            question_3=self.cleaned_data["question_3"],
-        )
-        questions.set_answers([self.cleaned_data["answer_1"], self.cleaned_data["answer_2"], self.cleaned_data["answer_3"]])
-        questions.save()
-        roster.claimed_at = timezone.now()
-        roster.save(update_fields=["claimed_at", "updated_at"])
-        return user
-
-
 DAYS = [
     ("MON", "星期一 / Monday"),
     ("TUE", "星期二 / Tuesday"),
@@ -312,6 +223,13 @@ def roster_registration_identity(roster):
     return roster.identity_category
 
 
+PASSWORD_RULES_HELP_TEXT = (
+    "密碼需至少 10 個字元，且不可全為數字、不可是常見密碼，也不可與您的學號、姓名或 Email 太相似。\n"
+    "Your password must be at least 10 characters, cannot be entirely numeric or a common password, "
+    "and cannot be too similar to your student ID, name, or email."
+)
+
+
 class RegistrationLookupForm(forms.Form):
     student_id = forms.CharField(
         label="學號 / Student ID",
@@ -326,7 +244,7 @@ class RegistrationLookupForm(forms.Form):
         label="設定密碼 / Create password",
         strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
-        help_text="至少 10 個字元，避免使用常見密碼。\nUse at least 10 characters and avoid common passwords.",
+        help_text=PASSWORD_RULES_HELP_TEXT,
     )
     password2 = forms.CharField(
         label="再次輸入密碼 / Confirm password",
@@ -680,7 +598,9 @@ class RecoveryVerificationForm(forms.Form):
 
 class BilingualSetPasswordForm(SetPasswordForm):
     new_password1 = forms.CharField(
-        label="新密碼 / New password", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
+        label="新密碼 / New password", strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+        help_text=PASSWORD_RULES_HELP_TEXT,
     )
     new_password2 = forms.CharField(
         label="再次輸入新密碼 / Confirm new password", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
@@ -695,7 +615,19 @@ class QualificationUploadForm(forms.ModelForm):
     class Meta:
         model = QualificationDocument
         fields = ["file"]
-        widgets = {"file": forms.ClearableFileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"})}
+        widgets = {
+            "file": forms.ClearableFileInput(attrs={
+                "accept": ".pdf,.jpg,.jpeg,.png",
+                # Lets static/js/file-size-check.js reject an oversized file before it's
+                # ever uploaded (封測老師端回饋 P1-01, 2026-09): a 40 MB PDF used to sit
+                # uploading for a while before the server's 1 MB check finally rejected
+                # it. The number here must stay in sync with validate_qualification_file()
+                # in tutoring/models.py — that server-side check is the real enforcement,
+                # this is just an early, friendlier warning.
+                "data-max-file-bytes": "1000000",
+                "data-max-file-size-label": "1 MB",
+            }),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

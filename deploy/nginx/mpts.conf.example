@@ -74,6 +74,13 @@ server {
     # validate_class_document_file); a little headroom above that for request overhead.
     client_max_body_size 12m;
 
+    # 封測老師端回饋 P1-01 (2026-09): an over-limit upload used to just hang until the
+    # whole file finished transferring. Nginx already rejects on Content-Length before
+    # that happens; the only real gap was that the default 413 response looked broken.
+    # static/errors/413.html ships through collectstatic like any other static file, so
+    # it's served by the /static/ location below — no separate location block needed.
+    error_page 413 /static/errors/413.html;
+
     access_log /var/log/nginx/mpts_access.log;
     error_log  /var/log/nginx/mpts_error.log;
 

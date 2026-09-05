@@ -102,10 +102,10 @@ CACHES = {
 }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "accounts.password_validation.BilingualUserAttributeSimilarityValidator"},
+    {"NAME": "accounts.password_validation.BilingualMinimumLengthValidator", "OPTIONS": {"min_length": 10}},
+    {"NAME": "accounts.password_validation.BilingualCommonPasswordValidator"},
+    {"NAME": "accounts.password_validation.BilingualNumericPasswordValidator"},
 ]
 
 LANGUAGE_CODE = "zh-hant"

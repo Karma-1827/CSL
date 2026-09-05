@@ -6,6 +6,12 @@
 > 下列數字(migrations、tests 數量)是盤點當下的快照,**每次開發前建議重新跑一次確認**,見 `CLAUDE.md` 的「文件維護與同步機制」一節。本次盤點已實際執行 `python manage.py check`、`python manage.py makemigrations --check --dry-run` 與完整測試套件(均無異常);測試總數請直接執行 `python manage.py test` 取得目前準確數字。
 >
 > **2026-09-04 封測結束、準備正式上線前最後檢查**:320 項測試、`ruff`、`makemigrations --check --dry-run`、`check --deploy`(補齊 `POSTGRES_PASSWORD`/`DJANGO_ALLOWED_HOSTS` 才會真的跑 fail-closed 檢查,單純缺 `DJANGO_SECRET_KEY` 一項會在到達其餘檢查前就先拋錯)、`pip check`、`pip-audit` 均已重新執行。過程中發現並修正兩個問題:①`pip-audit` 掃出 `pypdf 6.15.0` 有 3 個新公開 CVE(CVE-2026-84309/84310/84311),已升級到 `pypdf 6.16.1`,重新產生中文詳細版、英文摘要版證明 PDF 並用 Poppler 轉圖人工比對,排版與加密權限旗標(`print:yes copy:no`)與升級前一致;②`tutoring/management/commands/seed_admin_demo.py` 與 `load_testing/isolated_vm_loadtest.py` 仍殘留課堂紀錄改版(`tutoring/0027`)已移除的 `skills_practiced` 欄位,執行會直接拋 `FieldError`,已改用現行的 `materials_used`/`individual_progress` 欄位——這兩支腳本平常不在測試套件覆蓋範圍內(demo seed 由防呆機制排除正式環境,load test 腳本則是獨立於 Django 測試之外),所以欄位改版當時沒被抓到,之後新增/移除 model 欄位時應留意這類「不跑在 CI 裡的輔助腳本」一併檢查。詳見 `docs/SECURITY_CHECKLIST.md` 第 56 項與 commit history。
+>
+> **2026-09-06 老師端封閉測試回饋修正(第一批,見 `docs/CLOSED_BETA_TEACHER_RESULTS_2026-09.md`)**:
+> - P1-01(超大口語能力證明上傳卡住):新增 `static/js/file-size-check.js`(`data-max-file-bytes`/`data-max-file-size-label` 驅動,選檔案時或送出前即時擋下超過 1 MB 的檔案,不用等整個檔案傳完才知道被拒絕)。確認正式 VM 的 Nginx `client_max_body_size 12m` 其實一直都有生效(用 `ss`/讀取 `/etc/nginx/mpts.conf` 確認),缺的只是友善的 413 錯誤頁,已新增 `static/errors/413.html`(隨 `collectstatic` 進 `/static/`,不需要額外的 Nginx `location` 區塊)並在 `deploy/nginx/mpts.conf.example` 加上 `error_page 413 /static/errors/413.html;`。另外確認「上傳失敗不得覆蓋已核准文件」這條驗收標準其實原本就成立(`QualificationUploadForm.is_valid()` 為 `False` 時根本不會呼叫 `.save()`),新增回歸測試鎖住,而非新寫防呆邏輯。
+> - P1-02(密碼錯誤訊息不夠清楚):新增 `accounts/password_validation.py`,把 `AUTH_PASSWORD_VALIDATORS` 的四個 Django 內建驗證器包一層——實際比對邏輯完全不變(內部呼叫 `super().validate()`),只把失敗訊息換成中英雙語、可操作的文字,同時涵蓋註冊(`RegistrationLookupForm`)與忘記密碼重設(`BilingualSetPasswordForm`,繼承 Django `SetPasswordForm`)兩個呼叫點。密碼欄位旁的規則說明文字(`PASSWORD_RULES_HELP_TEXT`)也同步列出完整規則,不只是原本的部分提示。「紅框+欄位下方錯誤原因」這個視覺呈現其實已有共用元件 `templates/components/form_field.html`(`.has-error`/`.field-error`)在用,這次沒有變動;色彩對比是否需要進一步調整留待之後有設計輸入再處理,不在這次範圍內。
+> - 順手移除 `accounts/forms.py::RegistrationForm`——比對後確認是已被 `RegistrationLookupForm` 取代、完全沒有任何呼叫端在用的死程式碼。
+> - 新增 6 個回歸測試(4 個密碼訊息、1 個忘記密碼重設訊息、1 個已核准文件不被覆蓋),326 項測試全數通過。**尚未做實機瀏覽器驗證**(本次無可用瀏覽器工具),已改用 curl/test client 檢查渲染出的 HTML 內容(`data-*` 屬性、help text、靜態頁面皆正確),但顏色對比、JS 攔截送出的實際互動效果未經肉眼確認,建議之後找機會補做。
 
 ## 已完成
 
