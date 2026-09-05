@@ -76,15 +76,26 @@ server {
 
     # 封測老師端回饋 P1-01 (2026-09): an over-limit upload used to just hang until the
     # whole file finished transferring. Nginx already rejects on Content-Length before
-    # that happens; the only real gap was that the default 413 response looked broken.
-    # static/errors/413.html ships through collectstatic like any other static file, so
-    # it's served by the /static/ location below — no separate location block needed.
+    # that happens; the gap was that the default 413 response looked broken.
     error_page 413 /static/errors/413.html;
 
     access_log /var/log/nginx/mpts_access.log;
     error_log  /var/log/nginx/mpts_error.log;
 
     location = /favicon.ico { access_log off; log_not_found off; }
+
+    # Exact-match location takes priority over the /static/ prefix location below, and
+    # exists solely to work around a real nginx bug (trac.nginx.org/nginx/ticket/1152,
+    # confirmed against this exact site 2026-09-06): over HTTP/2, nginx's internal
+    # redirect to an error_page doesn't clear the original request's Content-Length, so
+    # the oversized-body check re-triggers on the redirected request too and nginx falls
+    # back to its own hardcoded 413 page instead of ours. `client_max_body_size 0` here
+    # (meaning "no limit") only affects this one GET-only error page, not real uploads —
+    # the real client_max_body_size 12m above is untouched for every other path.
+    location = /static/errors/413.html {
+        client_max_body_size 0;
+        alias TODO/opt/mpts/staticfiles/errors/413.html;
+    }
 
     # Matches STATIC_ROOT in config/settings.py. Re-run collectstatic and reload nginx
     # (not required, just to pick up new files — nginx reads the directory live) after
