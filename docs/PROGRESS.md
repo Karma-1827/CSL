@@ -21,6 +21,7 @@
 > - P2-04:課程卡片改成把 `<a class="class-row">` 拆成外層 `<div>` + 兩段 `<a class="class-row-link">`(分別包住日期跟狀態/查看課程),中間「時間 · 時數」那一行改成純文字容器,不再包在連結裡——目的是能在同一行插入可另外點擊的「修改 / Reschedule」「取消 / Cancel」小標籤(初版做法是右上角 `⋯` 選單,使用者看過後要求改成直接內嵌顯示,已改掉)。這兩個標籤**只在 Tutor 本人尚未簽到且課程未取消時顯示**,對齊 `tutoring/services.py` 既有的「已有簽到或紀錄不可自行改」規則;點擊後導到 `class_detail` 頁面並帶 `#reschedule`/`#cancel` anchor,新增 `static/js/open-details-from-hash.js` 依網址片段自動展開對應的 `<details>` 並捲動過去,原本內嵌在該頁的表單完全沒動。過程中發現新標籤沒設 `line-height`(繼承全站預設 1.55)導致比旁邊文字高、把整張卡片撐大,已改為 `line-height: 1.3` 修正。
 > - `class_history_list.html` 為求標記與 `class_schedule_group.html` 一致也做了同樣的結構調整,但因該頁列出的多是已完成/已取消課程,「修改/取消」標籤實務上很少真的出現。
 > - 326 項測試全數通過,`ruff`/`makemigrations --check` 皆乾淨。同樣**沒有實機瀏覽器驗證**,全靠使用者自己在本機 `runserver` 上肉眼確認每一輪調整,是這次的驗收方式,非自動化測試覆蓋。
+> - **P2-05 補完**:課程詳情頁「目前確認結果」(`.review-result`)先前是不分狀態的灰底黑字,已依 `ClassConfirmation.status`(`CONFIRMED`/`REVISION`/`ISSUE`)分別套用綠/黃/紅,與 `.class-status` 共用同一組色碼,不是另外發明一套。
 
 ## 已完成
 

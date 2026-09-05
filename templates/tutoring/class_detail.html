@@ -98,7 +98,7 @@
             {% csrf_token %}<label>說明 / Note<textarea name="note" rows="3" placeholder="要求修改或回報問題時請填寫。 / Required for revision or issue reports."></textarea></label>
             <div class="inline-actions"><button class="button button-success" name="status" value="CONFIRMED">確認無誤 / Confirm</button><button class="button button-secondary" name="status" value="REVISION">請對方修改 / Request revision</button><button class="button button-danger" name="status" value="ISSUE">回報問題 / Report issue</button></div>
           </form>
-          {% if own_confirmation %}<p class="review-result">目前確認結果：{{ own_confirmation.get_status_display }}{% if own_confirmation.note %}<br>{{ own_confirmation.note }}{% endif %}</p>{% endif %}
+          {% if own_confirmation %}<p class="review-result review-result-{{ own_confirmation.status|lower }}">目前確認結果：{{ own_confirmation.get_status_display }}{% if own_confirmation.note %}<br>{{ own_confirmation.note }}{% endif %}</p>{% endif %}
         {% else %}<div class="empty-state">對方尚未同時完成簽到與課堂紀錄。<br>Your partner has not completed both attendance and class record.</div>{% endif %}
       </section>
 
