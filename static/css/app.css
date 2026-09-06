@@ -266,8 +266,16 @@ a {
   border-color: var(--blue);
   box-shadow: 0 0 0 4px rgba(63, 114, 175, 0.14);
 }
+/* 封測老師端回饋 P1-02 (2026-09,補做): 先前只做了雙語訊息跟密碼規則,
+   紅框跟錯誤文字本身沒有真的加強醒目程度——這裡才是實際補上。 */
 .has-error .form-control {
+  border-width: 2px;
   border-color: var(--danger);
+  background: var(--danger-soft);
+}
+.has-error .form-control:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px rgba(163, 58, 58, 0.18);
 }
 .help-text {
   margin: 6px 0 0;
@@ -276,11 +284,22 @@ a {
   white-space: pre-line;
 }
 .field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin: 6px 0 0;
+  padding: 7px 10px;
+  border-radius: 8px;
   color: var(--danger);
-  font-size: 0.78rem;
-  font-weight: 650;
+  background: var(--danger-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
   white-space: pre-line;
+}
+.field-error::before {
+  content: "⚠";
+  flex: 0 0 auto;
+  line-height: 1.3;
 }
 /* 封測老師端回饋 P1-03 (2026-09): 密碼與三個安全問題答案的顯示/隱藏切換，
    由 static/js/password-toggle.js 在載入時自動包住每個 input[type=password]，
