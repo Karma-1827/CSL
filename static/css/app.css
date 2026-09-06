@@ -600,9 +600,15 @@ a {
   accent-color: var(--blue);
 }
 .choice-field.has-error ul {
-  padding: 8px;
-  border: 1px solid var(--danger);
+  padding: 7px;
+  border: 2px solid var(--danger);
   border-radius: 10px;
+  background: var(--danger-soft);
+}
+.rating-field.has-error {
+  border-width: 2px;
+  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 .choice-field > .form-note {
   margin-top: 10px;
@@ -2958,7 +2964,7 @@ td small {
 }
 .schedule-form label,
 .stack-form label,
-.stack-form p,
+.stack-form p:not(.field-error),
 .confirmation-form label {
   display: grid;
   gap: 6px;
@@ -3545,7 +3551,7 @@ td small {
   display: grid;
   gap: 13px;
 }
-.stack-form p {
+.stack-form p:not(.field-error) {
   margin: 0;
 }
 .stack-form .helptext {
