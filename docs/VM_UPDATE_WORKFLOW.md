@@ -287,6 +287,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-06（二十六）**：操作者 Claude Code(依使用者指示執行)。上一版 `31ddfd2` → 新版 `2f37a63`（P1-02 補做：先前只做了雙語訊息跟密碼規則，紅框與錯誤文字本身的醒目程度沒有實質調整，使用者指出後這次補上——`.has-error .form-control` 邊框加粗到 2px 加淡紅底色，`.field-error` 改成有底色的提示框加 `⚠` 前綴，詳見 `docs/PROGRESS.md`）。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260906-155440`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200；另外直接對正式站觸發一次真實的註冊密碼驗證錯誤（常見密碼），確認 `form-group has-error` 與新樣式的 `field-error` 都正確渲染。`journalctl` 無新增 error(既有 gunicorn `Control server error` 訊息無關)。`git checkout --detach` 乾淨無衝突。
+
 - **2026-09-06（二十五）**：操作者 Claude Code(依使用者指示執行)。上一版 `cc7a370` → 新版 `31ddfd2`（P1-03：新增 `static/js/password-toggle.js`，全站對每個 `input[type=password]` 自動加上顯示/隱藏按鈕；D-01：`static/js/profile-options.js` 母語選單新增粵語，詳見 `docs/PROGRESS.md`）。無 migration、無相依套件變更；新增一個靜態檔案。部署前備份:`/var/backups/mpts/20260906-032920`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200，`app.css`/`password-toggle.js`/`profile-options.js`（含 `yue: "粵語 (Cantonese)"`）皆已用 curl 對正式站確認，`journalctl` 無新增 error(既有 gunicorn `Control server error` 訊息無關)。`git checkout --detach` 乾淨無衝突。
 
 - **2026-09-06（二十四）**：操作者 Claude Code(依使用者指示執行)。上一版 `f333466` → 新版 `cc7a370`（P2-05 補完：課程詳情頁「目前確認結果」`.review-result` 依 `ClassConfirmation.status` 分別上綠/黃/紅，與 `.class-status` 共用同一組色碼，詳見 `docs/PROGRESS.md`）。無 migration、無相依套件變更。部署前備份:`/var/backups/mpts/20260906-032044`。驗收:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200，`app.css` 版本號與 `.review-result-confirmed` 規則皆已用 curl 對正式站確認，`journalctl` 無新增 error(既有 gunicorn `Control server error` 訊息無關)。`git checkout --detach` 乾淨無衝突。
