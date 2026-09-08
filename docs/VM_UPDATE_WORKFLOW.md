@@ -361,3 +361,12 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
   - 已完成的權限隔離驗證(帳號未登入時保護頁面導回登入頁、各帳號可開啟自己的首頁與個人資料頁、資格文件僅本人與 Admin 可下載、彼此虛構 Email 不互相外流)全數通過,細節見完成回報。
   - 過程使用的臨時 `sudoers.d/90-mpts-deploy-tmp` NOPASSWD 授權(使用者事先在自己的終端機開設)已於完成後移除,`sudo -n -l` 確認已恢復需要密碼。`git status`、`mpts-gunicorn.service`、`journalctl` 均無非預期變化。
   - **待辦(留給使用者)**:確認是否/何時建立正式 NTNU、MARYLAND 學期,學期到位後再繼續完成 5.3 配對與 5.4 測試資料;掃描完成後依文件第九節停用帳號、更換密碼,複掃確認不需要後再依外鍵順序清除。
+
+- **2026-09-08(續)**：使用者確認正式學期期間為 2026-09-14～2026-12-31,並指示「直接用吧」——這同時是系辦真正要用的第一個正式學期,不是只為掃描建的假期間。操作者 Claude Code(依使用者指示執行)。
+  - 備份:`/var/backups/mpts/20260908-145718`。
+  - 建立 2 筆正式 `Semester`(id 5 NTNU、id 6 MARYLAND,皆 2026-09-14～2026-12-31、`is_active=True`),寫法比照 `save_semester()` 的建立路徑(`full_clean()` + `AuditLog.record(event_type="SEMESTER_CREATED")`,actor 為正式 `admin` 帳號)。
+  - 用 `tutoring.services.create_admin_pairing()` 建立兩組配對:`TEST-SCAN-TUTOR-NTNU`×`TEST-SCAN-TUTEE-NTNU`(pairing 12,學期 5)、`TEST-SCAN-TUTOR-MD`×`TEST-SCAN-TUTEE-MD`(pairing 13,學期 6)。
+  - 5.4 節最低限度可操作資料(改為集中建置,不逐項重複):兩組配對各排一堂未來課程(`schedule_classes()`);Maryland 配對一則不含個資的私訊;NTNU 配對一堂**已完成、經補登審核核准**的過去課程(session 57,2026-09-14 09:00),雙方簽到、雙方課堂紀錄(Tutor 端含 1 個 `https://example.com` 測試佐證連結;Tutee 端故意 0 個佐證連結、但附上一份標明「僅供網站弱點掃描測試附件」的合法 PDF 到舊版附件欄位)、雙方互相確認、管理員核准補登,`class_is_valid()` 已確認為 `True`。
+  - **時間戳記特別說明**:選定的學期從 9/14 才開始,晚於執行當下的真實日期(9/8),因此排課用 `schedule_classes()` 本身的「必須排在未來」限制,天然只能排在 9/14 之後——這對兩堂「未來課程」沒有影響,但代表用同一個限制無法生出「已經發生」的過去課程可測。這堂過去課程改為直接以 ORM + `full_clean()` 建立 `ClassSession`(日期訂在學期第一天 9/14,略過的只是排課服務對「不可回填」的介面層限制,不是資格/配對/稽核規則),再對 `check_in()`/`submit_class_record()` 這兩個本來就支援 `now` 參數的服務函式,傳入一個模擬時鐘(2026-09-16 12:00)觸發補簽到/補課堂紀錄流程——所有補登門檻、次數上限與審核流程都是用這個模擬時鐘正常跑過,不是繞過規則。副作用是這堂課的 `signed_at`/`submitted_at` 時間戳記(2026-09-16)會早於本次操作的真實系統時間(2026-09-08),之後若有人查資料庫發現這點屬於已知、刻意的掃描測試資料特徵,不是資料異常。
+  - 驗證:直接以四個帳號的真實登入 session 對 `/matching/classes/<id>/`、`/matching/pairings/<id>/messages/` 做過端到端存取測試——配對雙方可開啟、非配對方回應 404;Maryland 配對訊息內容只有配對雙方看得到。另發現且確認為**預期行為非缺陷**:因為 `active_semester()` 只回傳「今天落在起訖區間內」的學期,今天(9/8)還沒到 9/14,四個帳號的 Dashboard「目前配對／我的課表」卡片目前都還是空的(要等 9/14 才會顯示);但用直接連結開課程詳情頁、訊息頁都正常運作且權限隔離正確——**如果資訊中心排的正式掃描時間在 9/14 之前執行,爬蟲若只靠 Dashboard 導覽可能爬不到這些深層頁面,建議掃描排在 9/14(含)之後,或另外把這幾個直接連結交給資訊中心**。
+  - 服務與日誌檢查:`git status` 僅有既存的 `.cache/`/`staticfiles/` 未追蹤目錄(非本次改動);`mpts-gunicorn.service`/`mpts-process-matching-state.timer` 皆 active;`journalctl` 排除既有的 gunicorn `Control server error` 訊息與外部機器人探測 `/logs/error.log` 的雜訊(與本次操作無關)後,沒有任何 traceback/critical 等級紀錄。臨時 sudo 授權已於完成後移除並確認恢復需要密碼。
