@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}使用手冊 / User guide{% endblock %}
 
@@ -11,30 +12,837 @@
       <div><span class="section-kicker">USER GUIDE · V3.1</span><h1>使用手冊 <small>User guide</small></h1><p>依照您的使用身分，整理目前系統可使用的主要功能。<br>A role-based guide to the features currently available in the system.</p></div>
       <span class="guide-role">{{ request.user.get_role_display }}</span>
     </section>
-    <section class="guide-grid">
-      {% if request.user.role == 'TUTOR' %}
-        <article class="guide-card"><span>01</span><h2>個人資料與口語能力 <small>Profile & oral proficiency</small></h2><p>確認個人資料、教學履歷、上課時間與口語能力證明的審核狀態；口語能力審核通過後才能配對。</p><p>Review your profile, teaching information, availability, and oral proficiency status. Matching opens once your oral proficiency is approved.</p></article>
-        <article class="guide-card"><span>02</span><h2>尋找學生 <small>Find students</small></h2><p>瀏覽配對所需的匿名學習資料，並向合適的學生發出邀請；配對前不會顯示姓名、學號或聯絡方式。</p><p>Browse anonymous learning profiles and invite a suitable student. Identity details stay hidden until a match is made.</p></article>
-        <article class="guide-card"><span>03</span><h2>篩選候選學生 <small>Filter students</small></h2><p>可用性別、華語程度、母語、加強項目、星期與時段縮小候選名單；點擊「搜尋條件」展開篩選面板。</p><p>Narrow the candidate list by gender, Chinese level, native language, target skills, weekday, and time slot via the collapsible search filter panel.</p></article>
-        <article class="guide-card"><span>04</span><h2>邀請與配對 <small>Invitations & matching</small></h2><p>邀請五天內有效；雙方同意後即建立配對。每學期可同時輔導兩位學生，待回覆邀請上限 3 筆。</p><p>Invitations are valid for five days. A match begins after both sides agree; up to two students may be active at once, with a cap of three pending invitations.</p></article>
-        <article class="guide-card"><span>05</span><h2>排課 <small>Scheduling classes</small></h2><p>只有老師可以排課、修改或取消；每堂 0.5–2 小時，分鐘須為 5 的倍數，可設定每週重複。每組配對每週上限 2 小時、每學期上限 32 小時，個人每學期上限 64 小時。</p><p>Only teachers can create, edit, or cancel classes. Each session is 0.5–2 hours in 5-minute increments and may repeat weekly, subject to weekly/semester hour quotas.</p></article>
-        <article class="guide-card"><span>06</span><h2>簽到與課堂紀錄 <small>Check-in & class records</small></h2><p>上課前 10 分鐘開放簽到；雙方各自填寫課堂紀錄，可標記本次練習的聽說讀寫項目。</p><ol><li>提供 1–5 個當次上課佐證連結，例如上課畫面截圖、教材、作業或錄影。</li><li>確認分享權限（共用檢視權限），讓對方及管理者可直接查看。</li><li>實習／輔導階段結束後至少 10 天再刪除或下架；查核時無法查看，該堂時數可能不予採計。</li></ol><p>Both participants submit their own class record and 1–5 evidence links. Make sure the links can be viewed by your partner and administrators, and keep them available for at least 10 days after the practicum or tutoring stage ends.</p></article>
-        <article class="guide-card"><span>07</span><h2>雙方確認與補登 <small>Mutual confirmation & makeup</small></h2><p>需確認對方的簽到與紀錄才算完成；逾時簽到或補寫紀錄須填寫原因，且需經 Admin 核准才計入有效時數。</p><p>Both sides must confirm each other's check-in and record. Late check-ins or records require a reason and admin approval before counting as verified hours.</p></article>
-        <article class="guide-card"><span>08</span><h2>私訊 <small>Messages</small></h2><p>配對成立後可與學生私訊；「私訊」頁籤會顯示未讀數、最後一則訊息與時間，依最近活動排序。解除配對後仍可查看歷史對話。</p><p>Message your matched student directly. The messages tab shows unread counts, last message previews, and timestamps, sorted by recent activity; past conversations remain viewable after a release.</p></article>
-        <article class="guide-card"><span>09</span><h2>課堂通報與異常回報 <small>Class alerts & incident reports</small></h2><p>上課時間內可送出即時通報（如聯絡不到對方）；任何時候都可對已上過的課提出異常回報（如場地、進度或人身安全問題）供 Admin 留存紀錄。</p><p>Send an urgent alert during class time (e.g. unreachable partner), or file an incident report anytime after a class for issues like venue, progress, or safety concerns.</p></article>
-        <article class="guide-card"><span>10</span><h2>解除配對 <small>Pairing release</small></h2><p>可從目前配對提出解除申請；部分原因 48 小時未處理會自動解除，行為或其他問題則由管理員審核。</p><p>Request a release from the current match. Eligible reasons auto-release after 48 hours; conduct and other concerns require review.</p></article>
-        <article class="guide-card"><span>11</span><h2>時數與證明下載 <small>Hours & certificates</small></h2><p>本學期結束後第 3 天開放下載本學期證明；已結束的學期隨時可下載。可選擇整學期或自訂日期範圍，並選擇摘要版或詳細版 PDF。</p><p>This semester's certificate becomes downloadable on day 3 after it ends; past semesters are always available. Choose the date range and a summary or detailed PDF.</p></article>
-      {% elif request.user.role == 'TUTEE' %}
-        <article class="guide-card"><span>01</span><h2>個人與學習資料 <small>Profile & learning needs</small></h2><p>確認基本資料、華語程度、希望加強項目與可上課時間。</p><p>Review your basic details, Chinese level, target skills, and availability.</p></article>
-        <article class="guide-card"><span>02</span><h2>收到邀請 <small>Received invitations</small></h2><p>在邀請到期前查看匿名老師資料，選擇接受或婉拒。</p><p>Review the anonymous teacher profile and respond before the invitation expires.</p></article>
-        <article class="guide-card"><span>03</span><h2>配對與解除 <small>Matching & release</small></h2><p>同一時間只能與一位老師配對；解除後可找新老師，但同學期不會再次配對到原老師。</p><p>Only one teacher may be active at a time. After release, you may find a new teacher but cannot rematch with the same teacher that semester.</p></article>
-        {% if is_maryland %}<article class="guide-card"><span>04</span><h2>主動尋找老師 <small>Find a teacher</small></h2><p>合作計畫學生可瀏覽匿名老師資料並主動發出邀請；可用性別、母語、星期與時段縮小候選名單。</p><p>Partner-program students may browse anonymous teacher profiles and send invitations, narrowing the list by gender, native language, weekday, and time slot.</p></article>{% endif %}
-        <article class="guide-card"><span>05</span><h2>課程與簽到 <small>Classes & check-in</small></h2><p>課程由老師安排，您會在「我的課程」看到排定的時間；上課前 10 分鐘可簽到，課堂開始後可填寫自己的課堂紀錄並選擇性上傳附件。</p><p>Your teacher schedules classes, visible under "My classes." Check in up to 10 minutes early, and submit your own class record (with an optional attachment) once class has started.</p></article>
-        <article class="guide-card"><span>06</span><h2>雙方確認與補登 <small>Mutual confirmation & makeup</small></h2><p>需確認老師的簽到與紀錄才算完成；逾時簽到或補寫紀錄須填寫原因，且需經 Admin 核准才計入有效時數。</p><p>You must confirm your teacher's check-in and record. Late check-ins or records require a reason and admin approval before counting as verified hours.</p></article>
-        <article class="guide-card"><span>07</span><h2>私訊 <small>Messages</small></h2><p>配對成立後可與老師私訊；「私訊」頁籤會顯示未讀數、最後一則訊息與時間。解除配對後仍可查看歷史對話。</p><p>Message your matched teacher directly. The messages tab shows unread counts and last message previews; past conversations remain viewable after a release.</p></article>
-        <article class="guide-card"><span>08</span><h2>課堂通報與異常回報 <small>Class alerts & incident reports</small></h2><p>上課時間內可送出即時通報（如聯絡不到老師）；任何時候都可對已上過的課提出異常回報供 Admin 留存紀錄。</p><p>Send an urgent alert during class time (e.g. unreachable teacher), or file an incident report anytime after a class for Admin to record.</p></article>
-        <article class="guide-card"><span>09</span><h2>時數與證明下載 <small>Hours & certificates</small></h2><p>若所屬合作計畫開放下載，本學期結束後第 3 天可下載本學期證明；已結束的學期隨時可下載，格式與老師相同。</p><p>If your program allows hour downloads, this semester's certificate becomes available on day 3 after it ends; past semesters are always downloadable, in the same format as teachers.</p></article>
-      {% else %}
+
+    {% if request.user.role == 'TUTOR' %}
+      <div class="profile-layout">
+        <aside class="profile-section-nav" aria-label="手冊章節 / Manual sections">
+          <span>老師操作手冊 / Teacher manual</span>
+          <a href="#t1">一、使用前先了解<small>Before you start</small></a>
+          <a href="#t2">二、第一次註冊<small>First-time registration</small></a>
+          <a href="#t3">三、登入、登出與忘記密碼<small>Sign in, sign out & password reset</small></a>
+          <a href="#t4">四、老師介面導覽<small>Teacher interface tour</small></a>
+          <a href="#t5">五、口語能力證明<small>Oral proficiency document</small></a>
+          <a href="#t6">六、尋找學生與邀請配對<small>Finding students & invitations</small></a>
+          <a href="#t7">七、配對成立後<small>After a match is made</small></a>
+          <a href="#t8">八、建立與管理課程<small>Creating & managing classes</small></a>
+          <a href="#t9">九、簽到與課堂紀錄<small>Check-in & class records</small></a>
+          <a href="#t10">十、補簽到與補課堂紀錄<small>Late check-ins & records</small></a>
+          <a href="#t11">十一、輔導時數與證明<small>Hours & certificates</small></a>
+          <a href="#t12">十二、合作計畫上課文件<small>Class documents</small></a>
+          <a href="#t13">十三、常見問題<small>FAQ</small></a>
+        </aside>
+
+        <div class="profile-content">
+          <section class="profile-card manual-section" id="t1">
+            <h2>一、使用前先了解 <small>Before you start</small></h2>
+            <h3>1.1 適用對象 <small>Who this guide is for</small></h3>
+            <p>本手冊中的「老師」是指系統畫面顯示為「老師 / Teacher」的使用者，包括：</p>
+            <p>In this guide, "teacher" refers to any account the system displays as "老師 / Teacher," including:</p>
+            <ul>
+              <li>參與師大外籍生華語輔導計畫的華語輔導老師。<br>Chinese tutors in the NTNU international-student tutoring program.</li>
+              <li>參與馬里蘭大學合作計畫的華語老師。<br>Chinese teachers in the University of Maryland partner program.</li>
+              <li>由系辦安排至其他合作計畫的華語老師。<br>Teachers the department office assigns to other partner programs.</li>
+            </ul>
+            <p>各計畫可使用的媒合、文件及證明功能不完全相同。畫面沒有出現某個選單時，通常代表該帳號所屬計畫不使用該功能，不一定是系統故障。</p>
+            <p>Matching, document, and certificate features differ by program. If a menu doesn't appear, it usually means your program doesn't use that feature — not that something is broken.</p>
+            <h3>1.2 開始前請準備 <small>Before you begin</small></h3>
+            <ul>
+              <li>系辦提供或確認過的學號。<br>A student ID provided or confirmed by the department office.</li>
+              <li>名冊上的身分別，例如本地生、僑生、港澳生、陸生、外籍生或馬里蘭學生。<br>Your identity category on the roster, e.g. local, overseas Chinese, Hong Kong/Macao, mainland Chinese, international, or Maryland student.</li>
+              <li>可正常收信的 Email。<br>A working email address.</li>
+              <li>口語能力證明檔案，格式依上傳頁說明辦理。<br>An oral proficiency document, in the format described on the upload page.</li>
+              <li>自己能記住的三組安全問題與答案。<br>Three security questions and answers you'll remember.</li>
+            </ul>
+            <p>學號與身分別必須和系辦匯入的名冊一致，否則無法註冊。英文字母大小寫不影響學號辨識，但仍建議依正式學號格式輸入。</p>
+            <p>Your student ID and identity category must match the department's roster, or registration will fail. Letter case doesn't affect ID matching, but entering it in the official format is still recommended.</p>
+            <h3>1.3 個資與帳號安全 <small>Privacy & account security</small></h3>
+            <ul>
+              <li>不要共用帳號或密碼。<br>Never share your account or password.</li>
+              <li>不要把密碼、安全問題答案或未公開的學生資料傳給他人。<br>Never send your password, security answers, or private student information to anyone else.</li>
+              <li>使用公用電腦後務必登出並關閉瀏覽器。<br>Always sign out and close the browser after using a shared computer.</li>
+              <li>課堂佐證連結只開放給配對對象與管理人員查看，不要設為公開搜尋。<br>Class evidence links should only be viewable by your matched partner and administrators — never make them publicly searchable.</li>
+            </ul>
+          </section>
+
+          <section class="profile-card manual-section" id="t2">
+            <h2>二、第一次註冊 <small>First-time registration</small></h2>
+            <h3>2.1 開啟註冊頁 <small>Open the registration page</small></h3>
+            <ol>
+              <li>開啟正式系統首頁。<br>Open the production site's homepage.</li>
+              <li>按「我要註冊 / Register」。<br>Click "我要註冊 / Register."</li>
+              <li>選擇「老師 / Teacher」。<br>Choose "老師 / Teacher."</li>
+            </ol>
+            <img src="{% static 'img/handbook/teacher/register.png' %}" alt="老師帳號註冊頁 / Teacher registration page">
+            <h3>2.2 建立帳號 <small>Create your account</small></h3>
+            <ol>
+              <li>輸入學號。<br>Enter your student ID.</li>
+              <li>選擇與名冊相同的身分別。<br>Select the identity category matching the roster.</li>
+              <li>設定至少 10 個字元的密碼。<br>Set a password at least 10 characters long.</li>
+              <li>再輸入一次相同密碼。<br>Enter the same password again.</li>
+              <li>按「註冊並填寫個人資料 / Register and continue」。<br>Click "註冊並填寫個人資料 / Register and continue."</li>
+            </ol>
+            <p>如果系統顯示資料不符，先檢查學號及身分別。仍無法註冊時，請將學號、選擇的身分別及錯誤畫面交給管理員確認名冊，不要反覆嘗試不同身分別。</p>
+            <p>If the system reports a mismatch, double-check your student ID and identity category first. If registration still fails, give your student ID, the identity category you selected, and a screenshot of the error to an administrator to check the roster — don't keep guessing different categories.</p>
+            <h3>2.3 確認名冊資料 <small>Confirm your roster record</small></h3>
+            <p>系統會顯示學號與角色。確認資料正確後繼續填寫；若角色不是「老師 / Teacher」，請停止註冊並聯絡管理員。</p>
+            <p>The system displays your student ID and role. Continue only after confirming they're correct; if the role isn't "老師 / Teacher," stop and contact an administrator.</p>
+            <h3>2.4 填寫個人與教學資料 <small>Complete your profile & teaching information</small></h3>
+            <p>依畫面欄位填寫或選擇資料。必填欄位未完成時，系統會在欄位附近顯示提示。</p>
+            <p>Fill in or select each field as prompted. If a required field is missing, the system shows a message near that field.</p>
+            <p>填寫時請注意：</p>
+            <p>Please note while filling this in:</p>
+            <ul>
+              <li>姓名請使用正式資料，不要填暱稱。<br>Use your official name, not a nickname.</li>
+              <li>Email 請填可正常收信的信箱。<br>Enter an email address you actually check.</li>
+              <li>教學能力評估請依自己的實際情況選擇。<br>Rate your teaching abilities honestly.</li>
+              <li>可上課時間會顯示在匿名媒合資料中，請填寫真正能配合的時段。<br>Your availability appears in anonymous matching data, so list only times you can actually keep.</li>
+            </ul>
+            <h3>2.5 設定安全問題 <small>Set your security questions</small></h3>
+            <ol>
+              <li>選擇三個不同的安全問題；已選過的問題不能重複選擇。<br>Choose three different security questions; a question already chosen can't be selected again.</li>
+              <li>每題填寫至少 3 個字元的答案。<br>Enter an answer at least 3 characters long for each.</li>
+              <li>記住答案的文字、空格與寫法，忘記密碼時會用來驗證身分。<br>Remember the exact wording, spacing, and spelling — these answers verify your identity if you forget your password.</li>
+            </ol>
+            <p>安全問題答案不應使用密碼，也不要選擇別人容易從社群網站猜到的內容。</p>
+            <p>Don't reuse your password as a security answer, and avoid answers others could easily guess from your social media.</p>
+            <h3>2.6 上傳口語能力證明 <small>Upload your oral proficiency document</small></h3>
+            <p>依畫面說明選擇檔案並上傳。完成註冊後，文件會進入管理員審核流程；審核通過前仍可登入及查看資料，但不能開始尋找學生。</p>
+            <p>Choose and upload a file as instructed on screen. After registration, it enters the administrator review queue; you can still sign in and view your data before approval, but can't start browsing students yet.</p>
+            <h3>2.7 完成註冊 <small>Finish registration</small></h3>
+            <p>確認個人資料、教學資料、安全問題、口語能力證明及可上課時間後，勾選同意事項並送出。註冊完成後會直接進入老師使用介面。</p>
+            <p>After reviewing your profile, teaching information, security questions, oral proficiency document, and availability, check the consent box and submit. You'll land directly in the teacher interface once registration is complete.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t3">
+            <h2>三、登入、登出與忘記密碼 <small>Sign in, sign out & password reset</small></h2>
+            <h3>3.1 登入 <small>Sign in</small></h3>
+            <ol>
+              <li>開啟正式系統首頁。<br>Open the production site's homepage.</li>
+              <li>輸入學號及密碼。<br>Enter your student ID and password.</li>
+              <li>按「登入 / Sign in」。<br>Click "登入 / Sign in."</li>
+            </ol>
+            <p>若登入失敗，先確認鍵盤大小寫及密碼。連續輸入錯誤時，系統可能暫時限制登入，請稍後再試，不要持續重複送出。</p>
+            <p>If sign-in fails, check Caps Lock and your password first. Repeated failed attempts may trigger a temporary lockout — wait and try again rather than resubmitting repeatedly.</p>
+            <h3>3.2 登出 <small>Sign out</small></h3>
+            <p>按右上角「登出 / Sign out」。確認回到登入頁後再關閉瀏覽器。</p>
+            <p>Click "登出 / Sign out" in the top right. Confirm you're back on the sign-in page before closing the browser.</p>
+            <h3>3.3 忘記密碼 <small>Forgot password</small></h3>
+            <ol>
+              <li>在登入頁按「忘記密碼 / Forgot password」。<br>On the sign-in page, click "忘記密碼 / Forgot password."</li>
+              <li>輸入學號並繼續。<br>Enter your student ID and continue.</li>
+              <li>回答註冊時設定的三個安全問題。<br>Answer the three security questions you set during registration.</li>
+              <li>驗證成功後設定新密碼，並再次輸入確認。<br>Once verified, set a new password and enter it again to confirm.</li>
+              <li>回到登入頁，以新密碼登入。<br>Return to the sign-in page and sign in with the new password.</li>
+            </ol>
+            <p>系統不會顯示原密碼。若忘記安全問題答案，請聯絡管理員處理，不要將可能的答案交給他人代試。</p>
+            <p>The system never shows your original password. If you've forgotten your security answers, contact an administrator — don't hand your possible answers to someone else to try.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t4">
+            <h2>四、老師介面導覽 <small>Teacher interface tour</small></h2>
+            <p>登入後，左側功能選單是主要操作入口。</p>
+            <p>After signing in, the left-hand menu is your main entry point for every feature.</p>
+            <img src="{% static 'img/handbook/teacher/dashboard-nav.png' %}" alt="老師首頁與左側功能選單 / Teacher dashboard and sidebar menu">
+            <table>
+              <thead><tr><th>功能 / Menu item</th><th>用途 / Purpose</th></tr></thead>
+              <tbody>
+                <tr><td>我的首頁<br>Overview</td><td>查看目前學期、配對、邀請及近期課程<br>View the current semester, matches, invitations, and upcoming classes</td></tr>
+                <tr><td>我的課表<br>Schedule</td><td>查看課程日期、時間、狀態及進入課堂頁<br>View class dates, times, status, and open the class page</td></tr>
+                <tr><td>輔導時數<br>Hours</td><td>查看有效、待處理或未核准的時數，下載證明<br>Check verified, pending, or rejected hours, and download certificates</td></tr>
+                <tr><td>私訊<br>Messages</td><td>與目前或歷史配對學生查看訊息<br>Message current or past matched students</td></tr>
+                <tr><td>尋找學生<br>Find students</td><td>依計畫與條件查看匿名學生資料並送出邀請<br>Browse anonymous student profiles by program and filter, and send invitations</td></tr>
+                <tr><td>邀請管理<br>Invitations</td><td>查看收到、送出、已接受、婉拒、取消或過期的邀請<br>Track received, sent, accepted, declined, cancelled, or expired invitations</td></tr>
+                <tr><td>口語能力證明<br>Oral proficiency</td><td>查看文件狀態、審核意見及重新送審<br>Check document status, review notes, and resubmit</td></tr>
+              </tbody>
+            </table>
+            <p>按右上角姓名可開啟個人資料頁。若姓名、Email、教學資料或可上課時間有變更，請從個人資料頁進入編輯。</p>
+            <p>Click your name in the top right to open your profile page. Update your name, email, teaching information, or availability from there.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t5">
+            <h2>五、口語能力證明 <small>Oral proficiency document</small></h2>
+            <h3>5.1 查看審核狀態 <small>Check review status</small></h3>
+            <p>按左側「口語能力證明 / Oral proficiency」。常見狀態如下：</p>
+            <p>Click "口語能力證明 / Oral proficiency" in the sidebar. Common statuses:</p>
+            <table>
+              <thead><tr><th>狀態 / Status</th><th>代表意義 / Meaning</th><th>下一步 / Next step</th></tr></thead>
+              <tbody>
+                <tr><td>待審核<br>Pending review</td><td>文件已送出，管理員尚未完成審核<br>Submitted, awaiting administrator review</td><td>等待審核<br>Wait for review</td></tr>
+                <tr><td>已通過<br>Approved</td><td>文件符合規定<br>The document meets requirements</td><td>可進行學生媒合<br>You may begin matching with students</td></tr>
+                <tr><td>需補件／未通過<br>Revision needed / rejected</td><td>文件或內容需要修正<br>The document or its content needs correction</td><td>查看審核意見後重新上傳<br>Review the feedback, then re-upload</td></tr>
+              </tbody>
+            </table>
+            <img src="{% static 'img/handbook/teacher/qualification.png' %}" alt="口語能力證明頁 / Oral proficiency page">
+            <h3>5.2 重新送審 <small>Resubmit</small></h3>
+            <ol>
+              <li>查看管理員留下的審核說明。<br>Read the administrator's review notes.</li>
+              <li>依說明準備正確檔案。<br>Prepare the correct file as instructed.</li>
+              <li>選擇新檔案。<br>Choose the new file.</li>
+              <li>按「重新送審 / Resubmit」。<br>Click "重新送審 / Resubmit."</li>
+            </ol>
+            <p>重新送出後狀態會回到待審核。審核標準與可接受文件，以頁面說明及管理員通知為準。</p>
+            <p>The status returns to pending review after resubmission. The review criteria and accepted document types follow the on-screen instructions and administrator notices.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t6">
+            <h2>六、尋找學生與邀請配對 <small>Finding students & invitations</small></h2>
+            <h3>6.1 開放條件 <small>Eligibility conditions</small></h3>
+            <p>老師須同時符合以下條件，才會看到可邀請的學生：</p>
+            <p>A teacher must meet all of the following to see invitable students:</p>
+            <ul>
+              <li>已完成註冊及個人資料。<br>Registration and profile are complete.</li>
+              <li>口語能力證明已通過。<br>The oral proficiency document is approved.</li>
+              <li>目前計畫及學期已開放媒合。<br>The current program and semester are open for matching.</li>
+              <li>尚有配對名額。<br>You still have an open matching slot.</li>
+            </ul>
+            <p>若畫面沒有學生，可能是目前沒有符合條件且尚未配對的學生，不代表系統一定有問題。</p>
+            <p>If no students appear, there may simply be no eligible, unmatched students right now — it doesn't necessarily mean something is wrong.</p>
+            <h3>6.2 查看匿名學生資料 <small>Browse anonymous student profiles</small></h3>
+            <p>按「尋找學生 / Find students」。配對成立前，系統只顯示學習需求、程度、語言、可上課時間等媒合資料，不顯示姓名、學號及 Email。</p>
+            <p>Click "尋找學生 / Find students." Before a match is made, the system shows only matching data — learning needs, level, language, and availability — never a name, student ID, or email.</p>
+            <img src="{% static 'img/handbook/teacher/find-students.png' %}" alt="尋找學生頁 / Find students page">
+            <p>老師只能看到自己可服務計畫中的學生：</p>
+            <p>A teacher only sees students in the program(s) they're eligible to serve:</p>
+            <ul>
+              <li>一般華語輔導老師看到師大外籍生計畫的學生。<br>General Chinese tutors see NTNU international-student program students.</li>
+              <li>馬里蘭計畫老師看到馬里蘭計畫學生。<br>Maryland program teachers see Maryland program students.</li>
+              <li>其他合作計畫依名冊與系統設定顯示。<br>Other partner programs follow the roster and system configuration.</li>
+            </ul>
+            <p>可按「搜尋條件 / Search filters」縮小結果，例如華語程度、加強項目、性別、母語、日期及時段。</p>
+            <p>Use "搜尋條件 / Search filters" to narrow results by Chinese level, target skills, gender, native language, weekday, and time slot.</p>
+            <h3>6.3 送出邀請 <small>Send an invitation</small></h3>
+            <ol>
+              <li>閱讀學生匿名資料。<br>Review the student's anonymous profile.</li>
+              <li>確認學習需求與時間大致可以配合。<br>Confirm the learning needs and schedule are broadly compatible.</li>
+              <li>按「邀請學生 / Invite student」。<br>Click "邀請學生 / Invite student."</li>
+              <li>到「邀請管理」查看等待回覆狀態。<br>Check "邀請管理 / Invitations" for the pending status.</li>
+            </ol>
+            <p>邀請有效期限為 5 天。每位使用者同一學期最多同時有 3 筆待回覆邀請；同一組已有待回覆邀請時，不能重複送出。</p>
+            <p>Invitations are valid for 5 days. Each user may have at most 3 pending invitations per semester, and you can't send a second invitation to the same person while one is already pending.</p>
+            <h3>6.4 取消尚未回覆的邀請 <small>Cancel a pending invitation</small></h3>
+            <p>發起邀請的人可在「邀請管理」取消尚未回覆的邀請。取消後若仍有媒合名額，可重新選擇其他對象。</p>
+            <p>Whoever sent the invitation can cancel it from "邀請管理 / Invitations" before it's answered. If you still have an open slot afterward, you may invite someone else.</p>
+            <h3>6.5 收到學生邀請 <small>Receiving a student's invitation</small></h3>
+            <p>只有所屬計畫允許學生主動邀請時，老師才會收到學生送出的邀請；目前主要適用於馬里蘭計畫。</p>
+            <p>Teachers only receive student-initiated invitations if their program allows it — currently mainly the Maryland program.</p>
+            <ol>
+              <li>按「邀請管理」。<br>Click "邀請管理 / Invitations."</li>
+              <li>查看收到的邀請與匿名資料。<br>Review the received invitation and anonymous profile.</li>
+              <li>選擇接受或婉拒。<br>Choose to accept or decline.</li>
+            </ol>
+            <p>接受後配對立即成立，雙方才會看到姓名、學號及 Email。一般自行媒合流程中，一位老師同一學期最多有 2 位進行中的學生；名額已滿時，系統不再接受新的自行媒合邀請。</p>
+            <p>Accepting creates the match immediately, and only then do both sides see names, student IDs, and emails. Under the ordinary self-matching flow, a teacher may have up to 2 active students per semester; once full, the system stops accepting new self-matched invitations.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t7">
+            <h2>七、配對成立後 <small>After a match is made</small></h2>
+            <h3>7.1 查看學生資料 <small>View your student's profile</small></h3>
+            <p>回到「我的首頁」，在「目前配對」查看學生。點「查看資料 / View profile」可查看配對後開放的基本資料。</p>
+            <p>Go back to "我的首頁 / Overview" and find your student under "目前配對 / Current matches." Click "查看資料 / View profile" to see the details unlocked after matching.</p>
+            <h3>7.2 使用私訊 <small>Using messages</small></h3>
+            <ol>
+              <li>按左側「私訊 / Messages」，或在配對卡片按「私訊 / Message」。<br>Click "私訊 / Messages" in the sidebar, or "私訊 / Message" on the match card.</li>
+              <li>選擇學生。<br>Select the student.</li>
+              <li>輸入訊息並送出。<br>Type your message and send it.</li>
+            </ol>
+            <p>私訊適合確認上課時間、地點與一般課務事項。緊急事件或安全問題不要只留在私訊中，應另外聯絡管理員。</p>
+            <p>Messages are meant for confirming class times, locations, and routine matters. For emergencies or safety concerns, always contact an administrator directly instead of relying on messages alone.</p>
+            <h3>7.3 申請解除配對 <small>Requesting a pairing release</small></h3>
+            <p>在配對卡片找到「解除配對 / Release pairing」，選擇原因並送出。</p>
+            <p>Find "解除配對 / Release pairing" on the match card, choose a reason, and submit.</p>
+            <ul>
+              <li>未出席、失去聯絡或時間無法配合：管理員 48 小時內未處理時，系統會自動解除。<br>No-show, unreachable, or scheduling conflict: the system auto-releases the pairing if an administrator hasn't acted within 48 hours.</li>
+              <li>態度或行為問題、其他原因：必須填寫說明，並等待管理員審核。<br>Conduct issues or other reasons: you must provide an explanation and wait for administrator review.</li>
+            </ul>
+            <p>申請送出後，在系統顯示配對已解除前，請不要自行假設配對已經終止。解除後，已建立的歷史課程與訊息仍會保留供查閱。</p>
+            <p>After submitting, don't assume the pairing has ended until the system confirms it. Once released, existing class history and messages remain viewable.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t8">
+            <h2>八、建立與管理課程 <small>Creating & managing classes</small></h2>
+            <h3>8.1 建立單次課程 <small>Create a single class</small></h3>
+            <ol>
+              <li>按「我的課表 / Schedule」。<br>Click "我的課表 / Schedule."</li>
+              <li>找到建立課程區塊。<br>Find the "create a class" section.</li>
+              <li>選擇學生、上課日期、開始時間及時數。<br>Select the student, class date, start time, and duration.</li>
+              <li>按「建立課程 / Create class」。<br>Click "建立課程 / Create class."</li>
+            </ol>
+            <p>排課規則：</p>
+            <p>Scheduling rules:</p>
+            <table>
+              <thead><tr><th>項目 / Item</th><th>系統規則 / Rule</th></tr></thead>
+              <tbody>
+                <tr><td>課程時數<br>Class duration</td><td>0.5、1、1.5 或 2 小時<br>0.5, 1, 1.5, or 2 hours</td></tr>
+                <tr><td>開始時間<br>Start time</td><td>分鐘須為 5 分鐘的倍數<br>Minutes must be a multiple of 5</td></tr>
+                <tr><td>上課日期<br>Class date</td><td>必須在該計畫學期內，且新課程須排在未來<br>Must fall within the program's semester, and a new class must be in the future</td></tr>
+                <tr><td>同一組每週<br>Per pair, per week</td><td>最多 2 小時<br>Up to 2 hours</td></tr>
+                <tr><td>同一組每學期<br>Per pair, per semester</td><td>最多 32 小時<br>Up to 32 hours</td></tr>
+                <tr><td>老師每學期<br>Per teacher, per semester</td><td>最多 64 小時<br>Up to 64 hours</td></tr>
+              </tbody>
+            </table>
+            <img src="{% static 'img/handbook/teacher/create-class.png' %}" alt="建立課程頁 / Create class page">
+            <h3>8.2 建立每週重複課程 <small>Repeat weekly</small></h3>
+            <p>建立課程時勾選「每週重複 / Repeat weekly」，再選擇重複結束日。系統會逐週建立課程，直到指定日期或學期結束日；只要其中一堂超過時數上限，整次建立就不會完成。</p>
+            <p>When creating a class, check "每週重複 / Repeat weekly" and pick an end date. The system creates one class per week up to that date or the semester's end, whichever comes first; if any single occurrence would exceed an hour quota, the whole batch fails to create.</p>
+            <h3>8.3 修改課程 <small>Reschedule a class</small></h3>
+            <ol>
+              <li>在課表點「查看課程 / View class」（或直接點課程旁的「修改」標籤）。<br>On the schedule, click "查看課程 / View class" (or click the "修改 / Reschedule" tag next to the class directly).</li>
+              <li>往下找到修改區塊。<br>Scroll down to the reschedule section.</li>
+              <li>選擇新日期、時間及時數。<br>Choose the new date, time, and duration.</li>
+              <li>重複課程可選擇只修改本堂，或修改本堂及之後的課程。<br>For a repeating class, choose to edit just this occurrence, or this one and all future occurrences.</li>
+              <li>儲存後回到課表確認變更。<br>Save, then return to the schedule to confirm the change.</li>
+            </ol>
+            <p>修改後的課程必須在未來、學期期間內，且仍符合每週與每學期時數限制。課程已有簽到或紀錄時不能自行修改；課程結束超過 3 週也不能修改，需聯絡管理員確認。</p>
+            <p>The rescheduled class must still be in the future, within the semester, and within the weekly/semester hour limits. A class with any check-in or record can no longer be self-edited; a class more than 3 weeks past its end also can't be edited — contact an administrator instead.</p>
+            <h3>8.4 取消課程 <small>Cancel a class</small></h3>
+            <ol>
+              <li>在課表開啟該堂課（或直接點課程旁的「取消」標籤）。<br>Open the class from the schedule (or click the "取消 / Cancel" tag next to it directly).</li>
+              <li>找到取消課程區塊。<br>Find the cancel-class section.</li>
+              <li>填寫取消原因並送出。<br>Enter a cancellation reason and submit.</li>
+              <li>回到課表確認課程狀態。<br>Return to the schedule to confirm the status.</li>
+            </ol>
+            <p>已有簽到或課堂紀錄的課程不能自行取消；課程結束超過 3 週也不能取消。</p>
+            <p>A class with any check-in or class record can't be self-cancelled; a class more than 3 weeks past its end also can't be cancelled.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t9">
+            <h2>九、上課當天：簽到與課堂紀錄 <small>Class day: check-in & class records</small></h2>
+            <h3>9.1 進入課堂頁 <small>Open the class page</small></h3>
+            <p>從「我的首頁」或「我的課表」找到課程，按「查看課程 / View」。課堂頁會依序顯示雙方簽到、課堂紀錄、互相確認及審核狀態。</p>
+            <p>Find the class from "我的首頁 / Overview" or "我的課表 / Schedule," then click "查看課程 / View." The class page shows both sides' check-in, class record, mutual confirmation, and review status in order.</p>
+            <h3>9.2 簽到 <small>Check-in</small></h3>
+            <ul>
+              <li>上課前 10 分鐘開始開放簽到。<br>Check-in opens 10 minutes before class starts.</li>
+              <li>課程結束後 30 分鐘內仍屬一般簽到。<br>Checking in within 30 minutes after class ends still counts as an ordinary check-in.</li>
+              <li>超過課程結束 30 分鐘才簽到，會改為補簽到，必須填寫原因。<br>Checking in more than 30 minutes after class ends becomes a late check-in, which requires a reason.</li>
+            </ul>
+            <p>按「確認簽到 / Check in」後，確認畫面顯示已完成簽到。老師與學生都要使用自己的帳號簽到，不能由一方代簽。</p>
+            <p>After clicking "確認簽到 / Check in," confirm the screen shows check-in complete. Both the teacher and student must check in with their own account — one side may not check in for the other.</p>
+            <h3>9.3 課堂進行中通報 <small>Reporting during class</small></h3>
+            <p>上課期間若對方未出席或無法聯絡，可在課堂頁使用即時通報。這項功能只在課程進行時間內開放，送出後管理員會看到通報紀錄。</p>
+            <p>If your partner doesn't show up or can't be reached during class, use the real-time alert on the class page. It's only available during the class's scheduled time; once submitted, an administrator sees the alert on record.</p>
+            <p>若涉及人身安全或緊急事件，請先使用校方或緊急聯絡方式處理，不要等待系統回覆。</p>
+            <p>For personal safety or emergencies, use official or emergency contact channels first — don't wait on a system response.</p>
+            <h3>9.4 填寫老師課堂紀錄 <small>Writing your class record (teacher)</small></h3>
+            <p>課程開始後即可填寫。依畫面完成上課地點、教學目標、教學範圍與流程、教材、個別學習情形及心得等欄位。畫面會顯示字數計數，請勿超過欄位上限。</p>
+            <p>You can fill this in once class has started. Complete the location, teaching goal, scope and process, materials used, individual progress, and reflections fields as shown. The screen displays a live character count — stay within each field's limit.</p>
+            <p>老師每堂課必須提供 1–5 個 <code>https://</code> 佐證連結，例如：</p>
+            <p>Teachers must provide 1–5 <code>https://</code> evidence links per class, for example:</p>
+            <ul>
+              <li>上課畫面截圖<br>Screenshots of the class</li>
+              <li>教材或簡報<br>Teaching materials or slides</li>
+              <li>作業或學習紀錄<br>Assignments or learning records</li>
+              <li>上課錄影<br>Class recordings</li>
+            </ul>
+            <p>請確認連結已開啟共用檢視權限，讓學生與管理員可以直接查看。佐證資料應保留至本次實習或輔導階段結束後至少 10 天；查核時無法開啟，該堂時數可能不予採計。</p>
+            <p>Make sure sharing permissions let your student and administrators view the links directly. Keep the evidence available for at least 10 days after this practicum or tutoring stage ends; if a link can't be opened during an audit, that class's hours may not be counted.</p>
+            <img src="{% static 'img/handbook/teacher/class-record.png' %}" alt="老師課堂紀錄頁 / Teacher class record page">
+            <h3>9.5 確認學生資料 <small>Confirming your student's record</small></h3>
+            <p>學生完成簽到與課堂紀錄後，老師可查看並選擇：</p>
+            <p>Once the student has completed check-in and their class record, the teacher can review and choose:</p>
+            <ul>
+              <li>資料正確：確認學生的簽到與紀錄。<br>Correct: confirm the student's check-in and record.</li>
+              <li>需要修改：填寫原因，請學生修正。<br>Needs revision: enter a reason and ask the student to fix it.</li>
+              <li>回報問題：填寫問題內容，交由管理員查看。<br>Report an issue: describe the problem for an administrator to review.</li>
+            </ul>
+            <p>學生修改紀錄後，原確認會失效，老師需要重新檢查及確認。</p>
+            <p>If the student edits their record afterward, any existing confirmation is cleared, and the teacher must review and confirm it again.</p>
+            <h3>9.6 有效時數成立條件 <small>Conditions for verified hours</small></h3>
+            <p>一堂課必須同時符合下列條件，才會列入有效時數：</p>
+            <p>A class only counts as verified hours once all of the following are true:</p>
+            <ol>
+              <li>老師與學生都完成簽到。<br>Both the teacher and student have checked in.</li>
+              <li>老師與學生都提交課堂紀錄。<br>Both have submitted a class record.</li>
+              <li>雙方都確認對方的簽到與紀錄。<br>Each side has confirmed the other's check-in and record.</li>
+              <li>若有補簽到或補課堂紀錄，管理員已核准補登。<br>If there's a late check-in or late record, an administrator has approved it.</li>
+            </ol>
+            <p>只完成單方資料、仍待對方確認或補登未核准，都不會列入有效時數。</p>
+            <p>A class with only one side's data, still awaiting confirmation, or with an unapproved late entry, is not counted as verified hours.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t10">
+            <h2>十、補簽到與補課堂紀錄 <small>Late check-ins & records</small></h2>
+            <h3>10.1 什麼情況會成為補登 <small>When does an entry become "late"?</small></h3>
+            <table>
+              <thead><tr><th>操作 / Action</th><th>一般期限 / Normal window</th><th>超過後 / If missed</th></tr></thead>
+              <tbody>
+                <tr><td>簽到<br>Check-in</td><td>課程結束後 30 分鐘內<br>Within 30 minutes after class ends</td><td>成為補簽到，需填原因<br>Becomes a late check-in; a reason is required</td></tr>
+                <tr><td>課堂紀錄<br>Class record</td><td>課程結束後 24 小時內<br>Within 24 hours after class ends</td><td>新增時成為補課堂紀錄，需填原因<br>Becomes a late record when first submitted; a reason is required</td></tr>
+              </tbody>
+            </table>
+            <p>補登最後期限以課堂頁顯示為準；超過該學期補登期限後，系統不再接受補登。</p>
+            <p>The final deadline for a late entry is whatever the class page shows; once the semester's late-entry deadline passes, the system no longer accepts one.</p>
+            <h3>10.2 補登次數 <small>Late-entry limits</small></h3>
+            <p>每位使用者每學期最多：</p>
+            <p>Per user, per semester, at most:</p>
+            <ul>
+              <li>補簽到 5 次。<br>5 late check-ins.</li>
+              <li>補課堂紀錄 5 次。<br>5 late class records.</li>
+            </ul>
+            <p>兩種次數分開計算。</p>
+            <p>The two counts are tracked separately.</p>
+            <h3>10.3 補登流程 <small>Late-entry process</small></h3>
+            <ol>
+              <li>從「輔導時數」找到過去課程，按「查看課程」。<br>Find the past class under "輔導時數 / Hours" and click "查看課程 / View class."</li>
+              <li>完成補簽到或補課堂紀錄並填寫原因。<br>Complete the late check-in or record and enter a reason.</li>
+              <li>等待對方完成資料與互相確認。<br>Wait for your partner to complete their data and for mutual confirmation.</li>
+              <li>雙方確認完成後，等待管理員審核。<br>Once both sides confirm, wait for administrator review.</li>
+              <li>回到「輔導時數」查看結果。<br>Check the result under "輔導時數 / Hours."</li>
+            </ol>
+            <p>狀態顯示「未核准 / Rejected」時，該堂不列入有效時數。若認為結果有誤，請提供課程日期、配對對象及畫面給管理員查核，不要重複送出不同內容。</p>
+            <p>A "未核准 / Rejected" status means that class doesn't count as verified hours. If you believe this is wrong, give an administrator the class date, matched partner, and a screenshot to check — don't keep resubmitting different content.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t11">
+            <h2>十一、輔導時數與證明 <small>Hours & certificates</small></h2>
+            <h3>11.1 查看時數 <small>Check your hours</small></h3>
+            <p>按左側「輔導時數 / Hours」。頁面會列出課程及狀態，例如有效成立、待完成、待審核或未核准。</p>
+            <p>Click "輔導時數 / Hours" in the sidebar. The page lists classes and their status — verified, pending, awaiting review, or rejected.</p>
+            <img src="{% static 'img/handbook/teacher/hours.png' %}" alt="輔導時數頁 / Hours page">
+            <p>若總時數與預期不同，先逐堂檢查雙方是否完成簽到、紀錄及確認；有補登時再確認管理員是否已核准。</p>
+            <p>If the total doesn't match your expectation, check each class for both sides' check-in, record, and confirmation first, then confirm whether any late entries have been approved.</p>
+            <h3>11.2 預覽與下載證明 <small>Preview & download a certificate</small></h3>
+            <p>有有效時數後，可在下載區：</p>
+            <p>Once you have verified hours, in the download area you can:</p>
+            <ol>
+              <li>選擇合作計畫。<br>Select the partner program.</li>
+              <li>選擇學期，或自訂日期範圍。<br>Choose a semester, or set a custom date range.</li>
+              <li>選擇中文或英文。<br>Choose Chinese or English.</li>
+              <li>選擇摘要版或詳細版；詳細版可再選擇要顯示的欄位。<br>Choose the summary or detailed version; the detailed version lets you pick which fields to show.</li>
+              <li>先按預覽確認內容，再下載 PDF。<br>Preview it to confirm the content, then download the PDF.</li>
+            </ol>
+            <p>目前學期的證明會在學期結束後第 3 天開放下載。過去學期若已有有效時數，可依頁面提供的期間下載。證明名稱與內容會依合作計畫不同，例如實習證明或語言交換服務證明。</p>
+            <p>The current semester's certificate becomes downloadable on the 3rd day after the semester ends. Past semesters with verified hours can be downloaded anytime within the range the page offers. The certificate's title and content vary by partner program, e.g. a practicum certificate or a language-exchange service certificate.</p>
+            <h3>11.3 證明資料錯誤 <small>Errors on a certificate</small></h3>
+            <p>若姓名、學號、計畫、日期或時數有誤，不要自行修改 PDF。請先確認個人資料與課程狀態，再將錯誤項目、課程日期及畫面交給管理員查核。</p>
+            <p>If your name, student ID, program, dates, or hours are wrong, never edit the PDF yourself. Check your profile and class status first, then give an administrator the incorrect item, class date, and a screenshot to verify.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t12">
+            <h2>十二、合作計畫上課文件 <small>Class documents</small></h2>
+            <p>只有所屬計畫已啟用此功能時，網站上方才會顯示「上課文件 / Class documents」。目前主要提供馬里蘭計畫使用。</p>
+            <p>"上課文件 / Class documents" only appears at the top of the site if your program has this feature enabled — currently mainly for the Maryland program.</p>
+            <ol>
+              <li>點網站上方「上課文件」。<br>Click "上課文件 / Class documents" at the top of the site.</li>
+              <li>查看文件名稱、適用計畫及學期。<br>Check the document's title, applicable program, and semester.</li>
+              <li>按下載並依文件內容上課。<br>Download it and teach according to its content.</li>
+            </ol>
+            <p>文件只能供計畫內部使用，不要轉傳至公開網站或不相關的人員。</p>
+            <p>These documents are for program-internal use only — never repost them publicly or share them with unrelated people.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="t13">
+            <h2>十三、常見問題 <small>FAQ</small></h2>
+            <h3>13.1 看不到「尋找學生」或沒有學生卡片 <small>No "Find students," or no student cards</small></h3>
+            <p>依序確認：</p>
+            <p>Check, in order:</p>
+            <ol>
+              <li>口語能力證明是否已通過。<br>Whether your oral proficiency document is approved.</li>
+              <li>目前是否有開放中的計畫與學期。<br>Whether a program and semester are currently open.</li>
+              <li>是否已達 2 位進行中學生上限。<br>Whether you've reached the 2-active-student limit.</li>
+              <li>是否已有 3 筆待回覆邀請。<br>Whether you already have 3 pending invitations.</li>
+              <li>目前是否有符合計畫與條件、且尚未配對的學生。<br>Whether any eligible, unmatched student currently exists.</li>
+            </ol>
+            <h3>13.2 無法修改或取消課程 <small>Can't reschedule or cancel a class</small></h3>
+            <p>常見原因包括：課程已有簽到或紀錄、修改後時間不是未來、超過時數上限、日期超出學期，或課程結束已超過 3 週。依畫面錯誤訊息調整；已有課務資料時請聯絡管理員。</p>
+            <p>Common causes: the class already has a check-in or record, the new time isn't in the future, an hour limit would be exceeded, the date falls outside the semester, or the class ended more than 3 weeks ago. Adjust based on the on-screen error, or contact an administrator if class data already exists.</p>
+            <h3>13.3 課程沒有列入有效時數 <small>A class isn't counted as verified hours</small></h3>
+            <p>一堂課需要雙方簽到、雙方課堂紀錄、雙方互相確認；補登還要經管理員核准。任何一項未完成，都不會列入有效時數。</p>
+            <p>A class needs both sides' check-ins, both class records, and mutual confirmation; a late entry also needs administrator approval. Missing any of these means it won't count as verified hours.</p>
+            <h3>13.4 頁面顯示 CSRF 驗證失敗 <small>The page shows a CSRF validation failure</small></h3>
+            <p>這通常是頁面開啟太久，或在另一個分頁重新登入後，舊頁面的安全驗證已失效。重新整理頁面，再從系統內重新操作；不要重複送出舊分頁中的表單。</p>
+            <p>This usually means the page has been open too long, or you signed in again in another tab and the old page's security token expired. Refresh the page and try again from within the system — don't resubmit a form from a stale tab.</p>
+            <h3>13.5 聯絡管理員時要提供什麼 <small>What to send an administrator</small></h3>
+            <p>請提供：</p>
+            <p>Please provide:</p>
+            <ul>
+              <li>學號。<br>Your student ID.</li>
+              <li>發生日期與時間。<br>The date and time it happened.</li>
+              <li>使用的功能與操作步驟。<br>The feature you were using and the steps you took.</li>
+              <li>畫面上的完整錯誤訊息。<br>The full on-screen error message.</li>
+              <li>不含密碼、安全問題答案的畫面截圖。<br>A screenshot with no password or security answers visible.</li>
+            </ul>
+            <p>不要在訊息或截圖中附上密碼及安全問題答案。</p>
+            <p>Never include your password or security answers in a message or screenshot.</p>
+          </section>
+        </div>
+      </div>
+
+    {% elif request.user.role == 'TUTEE' %}
+      <div class="profile-layout">
+        <aside class="profile-section-nav" aria-label="手冊章節 / Manual sections">
+          <span>學生操作手冊 / Student manual</span>
+          <a href="#s1">一、使用前先了解<small>Before you start</small></a>
+          <a href="#s2">二、第一次註冊<small>First-time registration</small></a>
+          <a href="#s3">三、登入、登出與忘記密碼<small>Sign in, sign out & password reset</small></a>
+          <a href="#s4">四、學生介面導覽<small>Student interface tour</small></a>
+          <a href="#s5">五、老師配對<small>Teacher matching</small></a>
+          <a href="#s6">六、私訊與解除配對<small>Messages & pairing release</small></a>
+          <a href="#s7">七、查看課表與課程異動<small>Schedule & class changes</small></a>
+          <a href="#s8">八、簽到與課堂紀錄<small>Check-in & class records</small></a>
+          <a href="#s9">九、補簽到與補課堂紀錄<small>Late check-ins & records</small></a>
+          <a href="#s10">十、輔導紀錄與證明<small>History & certificates</small></a>
+          <a href="#s11">十一、合作計畫上課文件<small>Class documents</small></a>
+          <a href="#s12">十二、常見問題<small>FAQ</small></a>
+        </aside>
+
+        <div class="profile-content">
+          <section class="profile-card manual-section" id="s1">
+            <h2>一、使用前先了解 <small>Before you start</small></h2>
+            <h3>1.1 適用對象 <small>Who this guide is for</small></h3>
+            <p>本手冊中的「學生」是指系統畫面顯示為「學生 / Student」的使用者，包括師大外籍生、馬里蘭大學學生及其他合作計畫學生。</p>
+            <p>In this guide, "student" refers to any account the system displays as "學生 / Student," including NTNU international students, University of Maryland students, and students in other partner programs.</p>
+            <p>各計畫的媒合方式、上課文件與證明名稱不完全相同。畫面沒有出現某個選單時，通常代表該帳號所屬計畫不使用該功能，不一定是系統故障。</p>
+            <p>Matching methods, class documents, and certificate names differ by program. If a menu doesn't appear, it usually means your program doesn't use that feature — not that something is broken.</p>
+            <h3>1.2 開始前請準備 <small>Before you begin</small></h3>
+            <ul>
+              <li>系辦提供或確認過的學號。<br>A student ID provided or confirmed by the department office.</li>
+              <li>名冊上的身分別，例如本地生、僑生、港澳生、陸生、外籍生或馬里蘭學生。<br>Your identity category on the roster, e.g. local, overseas Chinese, Hong Kong/Macao, mainland Chinese, international, or Maryland student.</li>
+              <li>可正常收信的 Email。<br>A working email address.</li>
+              <li>自己能記住的三組安全問題與答案。<br>Three security questions and answers you'll remember.</li>
+              <li>自己的華語程度、學習需求及可上課時間。<br>Your Chinese level, learning needs, and availability.</li>
+            </ul>
+            <p>學號與身分別必須和系辦匯入的名冊一致，否則無法註冊。英文字母大小寫不影響學號辨識，但仍建議依正式學號格式輸入。</p>
+            <p>Your student ID and identity category must match the department's roster, or registration will fail. Letter case doesn't affect ID matching, but entering it in the official format is still recommended.</p>
+            <h3>1.3 個資與帳號安全 <small>Privacy & account security</small></h3>
+            <ul>
+              <li>不要共用帳號或密碼。<br>Never share your account or password.</li>
+              <li>不要把密碼及安全問題答案傳給他人。<br>Never send your password or security answers to anyone else.</li>
+              <li>使用公用電腦後務必登出並關閉瀏覽器。<br>Always sign out and close the browser after using a shared computer.</li>
+              <li>課堂佐證連結只開放給配對老師與管理人員查看，不要設為公開搜尋。<br>Class evidence links should only be viewable by your matched teacher and administrators — never make them publicly searchable.</li>
+            </ul>
+          </section>
+
+          <section class="profile-card manual-section" id="s2">
+            <h2>二、第一次註冊 <small>First-time registration</small></h2>
+            <h3>2.1 開啟註冊頁 <small>Open the registration page</small></h3>
+            <ol>
+              <li>開啟正式系統首頁。<br>Open the production site's homepage.</li>
+              <li>按「我要註冊 / Register」。<br>Click "我要註冊 / Register."</li>
+              <li>選擇「學生 / Student」。<br>Choose "學生 / Student."</li>
+            </ol>
+            <img src="{% static 'img/handbook/student/register.png' %}" alt="學生帳號註冊頁 / Student registration page">
+            <h3>2.2 建立帳號 <small>Create your account</small></h3>
+            <ol>
+              <li>輸入學號。<br>Enter your student ID.</li>
+              <li>選擇與名冊相同的身分別。<br>Select the identity category matching the roster.</li>
+              <li>設定至少 10 個字元的密碼。<br>Set a password at least 10 characters long.</li>
+              <li>再輸入一次相同密碼。<br>Enter the same password again.</li>
+              <li>按「註冊並填寫個人資料 / Register and continue」。<br>Click "註冊並填寫個人資料 / Register and continue."</li>
+            </ol>
+            <p>如果系統顯示資料不符，先檢查學號及身分別。仍無法註冊時，請將學號、選擇的身分別及錯誤畫面交給管理員確認名冊，不要反覆嘗試不同身分別。</p>
+            <p>If the system reports a mismatch, double-check your student ID and identity category first. If registration still fails, give your student ID, the identity category you selected, and a screenshot of the error to an administrator to check the roster — don't keep guessing different categories.</p>
+            <h3>2.3 確認名冊資料 <small>Confirm your roster record</small></h3>
+            <p>系統會顯示學號、角色與計畫資料。確認角色為「學生 / Student」且資料正確後再繼續；若資料錯誤，請停止註冊並聯絡管理員。</p>
+            <p>The system displays your student ID, role, and program. Continue only after confirming the role is "學生 / Student" and everything is correct; if anything is wrong, stop and contact an administrator.</p>
+            <h3>2.4 填寫個人與學習資料 <small>Complete your profile & learning information</small></h3>
+            <p>依畫面欄位填寫或選擇資料。必填欄位未完成時，系統會在欄位附近顯示提示。</p>
+            <p>Fill in or select each field as prompted. If a required field is missing, the system shows a message near that field.</p>
+            <p>填寫時請注意：</p>
+            <p>Please note while filling this in:</p>
+            <ul>
+              <li>英文姓名為必填；沒有中文姓名時可留空。<br>English name is required; leave the Chinese name blank if you don't have one.</li>
+              <li>姓名請使用正式資料，不要填暱稱。<br>Use your official name, not a nickname.</li>
+              <li>Email 請填可正常收信的信箱。<br>Enter an email address you actually check.</li>
+              <li>華語程度、想加強的項目與可上課時間會顯示在匿名媒合資料中，請依實際情況填寫。<br>Your Chinese level, target skills, and availability appear in anonymous matching data, so fill them in accurately.</li>
+            </ul>
+            <h3>2.5 設定安全問題 <small>Set your security questions</small></h3>
+            <ol>
+              <li>選擇三個不同的安全問題；已選過的問題不能重複選擇。<br>Choose three different security questions; a question already chosen can't be selected again.</li>
+              <li>每題填寫至少 3 個字元的答案。<br>Enter an answer at least 3 characters long for each.</li>
+              <li>記住答案的文字、空格與寫法，忘記密碼時會用來驗證身分。<br>Remember the exact wording, spacing, and spelling — these answers verify your identity if you forget your password.</li>
+            </ol>
+            <p>安全問題答案不應使用密碼，也不要選擇別人容易從社群網站猜到的內容。</p>
+            <p>Don't reuse your password as a security answer, and avoid answers others could easily guess from your social media.</p>
+            <h3>2.6 完成註冊 <small>Finish registration</small></h3>
+            <p>確認個人資料、學習資料、安全問題及可上課時間後，勾選同意事項並送出。註冊完成後會直接進入學生使用介面。</p>
+            <p>After reviewing your profile, learning information, security questions, and availability, check the consent box and submit. You'll land directly in the student interface once registration is complete.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s3">
+            <h2>三、登入、登出與忘記密碼 <small>Sign in, sign out & password reset</small></h2>
+            <h3>3.1 登入 <small>Sign in</small></h3>
+            <ol>
+              <li>開啟正式系統首頁。<br>Open the production site's homepage.</li>
+              <li>輸入學號及密碼。<br>Enter your student ID and password.</li>
+              <li>按「登入 / Sign in」。<br>Click "登入 / Sign in."</li>
+            </ol>
+            <p>若登入失敗，先確認鍵盤大小寫及密碼。連續輸入錯誤時，系統可能暫時限制登入，請稍後再試，不要持續重複送出。</p>
+            <p>If sign-in fails, check Caps Lock and your password first. Repeated failed attempts may trigger a temporary lockout — wait and try again rather than resubmitting repeatedly.</p>
+            <h3>3.2 登出 <small>Sign out</small></h3>
+            <p>按右上角「登出 / Sign out」。確認回到登入頁後再關閉瀏覽器。</p>
+            <p>Click "登出 / Sign out" in the top right. Confirm you're back on the sign-in page before closing the browser.</p>
+            <h3>3.3 忘記密碼 <small>Forgot password</small></h3>
+            <ol>
+              <li>在登入頁按「忘記密碼 / Forgot password」。<br>On the sign-in page, click "忘記密碼 / Forgot password."</li>
+              <li>輸入學號並繼續。<br>Enter your student ID and continue.</li>
+              <li>回答註冊時設定的三個安全問題。<br>Answer the three security questions you set during registration.</li>
+              <li>驗證成功後設定新密碼，並再次輸入確認。<br>Once verified, set a new password and enter it again to confirm.</li>
+              <li>回到登入頁，以新密碼登入。<br>Return to the sign-in page and sign in with the new password.</li>
+            </ol>
+            <p>系統不會顯示原密碼。若忘記安全問題答案，請聯絡管理員處理，不要將可能的答案交給他人代試。</p>
+            <p>The system never shows your original password. If you've forgotten your security answers, contact an administrator — don't hand your possible answers to someone else to try.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s4">
+            <h2>四、學生介面導覽 <small>Student interface tour</small></h2>
+            <p>登入後，左側功能選單是主要操作入口。</p>
+            <p>After signing in, the left-hand menu is your main entry point for every feature.</p>
+            <img src="{% static 'img/handbook/student/dashboard-nav.png' %}" alt="學生首頁與左側功能選單 / Student dashboard and sidebar menu">
+            <table>
+              <thead><tr><th>功能 / Menu item</th><th>用途 / Purpose</th></tr></thead>
+              <tbody>
+                <tr><td>我的首頁<br>Overview</td><td>查看目前學期、配對、邀請及近期課程<br>View the current semester, matches, invitations, and upcoming classes</td></tr>
+                <tr><td>我的課表<br>Schedule</td><td>查看老師建立的課程、課程狀態及進入課堂頁<br>View classes your teacher created, their status, and open the class page</td></tr>
+                <tr><td>輔導紀錄<br>History</td><td>查看有效、待處理或未核准的課程與時數，下載證明<br>Check verified, pending, or rejected classes and hours, and download certificates</td></tr>
+                <tr><td>私訊<br>Messages</td><td>與目前或歷史配對老師查看訊息<br>Message your current or past matched teacher</td></tr>
+                <tr><td>邀請管理<br>Invitations</td><td>查看收到、送出、已接受、婉拒、取消或過期的邀請<br>Track received, sent, accepted, declined, cancelled, or expired invitations</td></tr>
+                <tr><td>尋找老師<br>Find teachers</td><td>只有允許學生主動媒合的合作計畫會顯示；目前主要適用於馬里蘭計畫<br>Only shown for programs that allow student-initiated matching — currently mainly the Maryland program</td></tr>
+              </tbody>
+            </table>
+            <p>按右上角姓名可開啟個人資料頁。若姓名、Email、學習資料或可上課時間有變更，請從個人資料頁進入編輯。</p>
+            <p>Click your name in the top right to open your profile page. Update your name, email, learning information, or availability from there.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s5">
+            <h2>五、老師配對 <small>Teacher matching</small></h2>
+            <h3>5.1 一般學生：收到老師邀請 <small>General students: receiving a teacher's invitation</small></h3>
+            <p>一般師大外籍生不需要主動尋找老師。老師送出邀請後：</p>
+            <p>Ordinary NTNU international students don't need to look for a teacher themselves. Once a teacher sends an invitation:</p>
+            <ol>
+              <li>按左側「邀請管理 / Invitations」。<br>Click "邀請管理 / Invitations" in the sidebar.</li>
+              <li>查看收到的老師邀請與匿名資料。<br>Review the teacher's invitation and anonymous profile.</li>
+              <li>選擇接受或婉拒。<br>Choose to accept or decline.</li>
+            </ol>
+            <p>接受後配對立即成立，雙方才會看到姓名、學號及 Email。一位學生同一學期只能有 1 位進行中的老師；配對成立後，其他尚未完成的相關邀請會由系統取消。</p>
+            <p>Accepting creates the match immediately, and only then do both sides see names, student IDs, and emails. A student may have only 1 active teacher per semester; once matched, the system cancels your other pending invitations automatically.</p>
+            <h3>5.2 馬里蘭計畫學生：尋找老師 <small>Maryland students: finding a teacher</small></h3>
+            <p>馬里蘭計畫學生可主動尋找老師：</p>
+            <p>Maryland program students may look for a teacher themselves:</p>
+            <ol>
+              <li>按「尋找老師 / Find teachers」。<br>Click "尋找老師 / Find teachers."</li>
+              <li>查看老師的匿名資料與可上課時間。<br>Review teachers' anonymous profiles and availability.</li>
+              <li>使用搜尋條件縮小結果。<br>Use search filters to narrow the results.</li>
+              <li>選擇老師並按「邀請老師 / Invite teacher」。<br>Select a teacher and click "邀請老師 / Invite teacher."</li>
+              <li>到「邀請管理」查看等待回覆狀態。<br>Check "邀請管理 / Invitations" for the pending status.</li>
+            </ol>
+            <img src="{% static 'img/handbook/student/find-teachers.png' %}" alt="尋找老師頁 / Find teachers page">
+            <p>學生只會看到自己計畫可配對的老師。配對成立前，系統不會顯示老師姓名、學號及 Email。</p>
+            <p>Students only see teachers eligible for their own program. Before a match is made, the system never shows a teacher's name, student ID, or email.</p>
+            <h3>5.3 邀請期限與取消 <small>Invitation expiry & cancellation</small></h3>
+            <ul>
+              <li>邀請有效期限為 5 天。<br>Invitations are valid for 5 days.</li>
+              <li>每位使用者同一學期最多同時有 3 筆待回覆邀請。<br>Each user may have at most 3 pending invitations per semester.</li>
+              <li>同一組已有待回覆邀請時，不能重複送出。<br>You can't send a second invitation to the same person while one is already pending.</li>
+              <li>發起邀請的人可在對方回覆前取消邀請。<br>Whoever sent the invitation may cancel it before the other side responds.</li>
+            </ul>
+            <h3>5.4 配對成立後 <small>After a match is made</small></h3>
+            <p>回到「我的首頁」，在「我的配對」查看老師。點「查看資料 / View profile」可查看配對後開放的基本資料。</p>
+            <p>Go back to "我的首頁 / Overview" and find your teacher under "我的配對 / My match." Click "查看資料 / View profile" to see the details unlocked after matching.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s6">
+            <h2>六、私訊與解除配對 <small>Messages & pairing release</small></h2>
+            <h3>6.1 使用私訊 <small>Using messages</small></h3>
+            <ol>
+              <li>按左側「私訊 / Messages」，或在配對卡片按「私訊 / Message」。<br>Click "私訊 / Messages" in the sidebar, or "私訊 / Message" on the match card.</li>
+              <li>選擇老師。<br>Select the teacher.</li>
+              <li>輸入訊息並送出。<br>Type your message and send it.</li>
+            </ol>
+            <p>私訊適合確認上課時間、地點與一般課務事項。緊急事件或安全問題不要只留在私訊中，應另外聯絡管理員。</p>
+            <p>Messages are meant for confirming class times, locations, and routine matters. For emergencies or safety concerns, always contact an administrator directly instead of relying on messages alone.</p>
+            <h3>6.2 申請解除配對 <small>Requesting a pairing release</small></h3>
+            <p>在配對卡片找到「解除配對 / Release pairing」，選擇原因並送出。</p>
+            <p>Find "解除配對 / Release pairing" on the match card, choose a reason, and submit.</p>
+            <ul>
+              <li>未出席、失去聯絡或時間無法配合：管理員 48 小時內未處理時，系統會自動解除。<br>No-show, unreachable, or scheduling conflict: the system auto-releases the pairing if an administrator hasn't acted within 48 hours.</li>
+              <li>態度或行為問題、其他原因：必須填寫說明，並等待管理員審核。<br>Conduct issues or other reasons: you must provide an explanation and wait for administrator review.</li>
+            </ul>
+            <p>申請送出後，在系統顯示配對已解除前，請不要自行假設配對已經終止。解除後，已建立的歷史課程與訊息仍會保留供查閱。</p>
+            <p>After submitting, don't assume the pairing has ended until the system confirms it. Once released, existing class history and messages remain viewable.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s7">
+            <h2>七、查看課表與課程異動 <small>Schedule & class changes</small></h2>
+            <h3>7.1 查看老師建立的課程 <small>View classes your teacher created</small></h3>
+            <p>按「我的課表 / Schedule」，可查看日期、時間、老師及課程狀態。點「查看課程 / View」可進入該堂課。</p>
+            <p>Click "我的課表 / Schedule" to see the date, time, teacher, and status of each class. Click "查看課程 / View" to open that class.</p>
+            <img src="{% static 'img/handbook/student/schedule.png' %}" alt="學生課表 / Student schedule">
+            <p>課程只能由老師建立、修改或取消。學生不能直接改動課表。</p>
+            <p>Only a teacher can create, reschedule, or cancel a class. Students can't change the schedule directly.</p>
+            <h3>7.2 時間有誤或無法上課 <small>Wrong time or can't attend</small></h3>
+            <p>使用私訊聯絡老師，請老師修改或取消。老師完成後，再回到「我的課表」確認變更。</p>
+            <p>Message your teacher and ask them to reschedule or cancel it. Once they do, return to "我的課表 / Schedule" to confirm the change.</p>
+            <p>若課程已經有簽到或課堂紀錄，老師也不能自行修改或取消，雙方應聯絡管理員處理。</p>
+            <p>If the class already has a check-in or class record, even the teacher can't self-edit or cancel it — both sides should contact an administrator.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s8">
+            <h2>八、上課當天：簽到與課堂紀錄 <small>Class day: check-in & class records</small></h2>
+            <h3>8.1 進入課堂頁 <small>Open the class page</small></h3>
+            <p>從「我的首頁」或「我的課表」找到課程，按「查看課程 / View」。課堂頁會依序顯示雙方簽到、課堂紀錄、互相確認及審核狀態。</p>
+            <p>Find the class from "我的首頁 / Overview" or "我的課表 / Schedule," then click "查看課程 / View." The class page shows both sides' check-in, class record, mutual confirmation, and review status in order.</p>
+            <h3>8.2 簽到 <small>Check-in</small></h3>
+            <ul>
+              <li>上課前 10 分鐘開始開放簽到。<br>Check-in opens 10 minutes before class starts.</li>
+              <li>課程結束後 30 分鐘內仍屬一般簽到。<br>Checking in within 30 minutes after class ends still counts as an ordinary check-in.</li>
+              <li>超過課程結束 30 分鐘才簽到，會改為補簽到，必須填寫原因。<br>Checking in more than 30 minutes after class ends becomes a late check-in, which requires a reason.</li>
+            </ul>
+            <p>按「確認簽到 / Check in」後，確認畫面顯示已完成簽到。老師與學生都要使用自己的帳號簽到，不能由一方代簽。</p>
+            <p>After clicking "確認簽到 / Check in," confirm the screen shows check-in complete. Both the teacher and student must check in with their own account — one side may not check in for the other.</p>
+            <h3>8.3 課堂進行中通報 <small>Reporting during class</small></h3>
+            <p>上課期間若老師未出席或無法聯絡，可在課堂頁使用即時通報。這項功能只在課程進行時間內開放，送出後管理員會看到通報紀錄。</p>
+            <p>If your teacher doesn't show up or can't be reached during class, use the real-time alert on the class page. It's only available during the class's scheduled time; once submitted, an administrator sees the alert on record.</p>
+            <p>若涉及人身安全或緊急事件，請先使用校方或緊急聯絡方式處理，不要等待系統回覆。</p>
+            <p>For personal safety or emergencies, use official or emergency contact channels first — don't wait on a system response.</p>
+            <h3>8.4 填寫學生課堂紀錄 <small>Writing your class record (student)</small></h3>
+            <p>課程開始後即可填寫。依畫面完成上課地點、學習內容、教材、個別學習情形及心得等欄位。畫面會顯示字數計數，請勿超過欄位上限。</p>
+            <p>You can fill this in once class has started. Complete the location, what was learned, materials used, individual progress, and reflections fields as shown. The screen displays a live character count — stay within each field's limit.</p>
+            <p>學生可選擇提供 0–5 個 <code>https://</code> 佐證連結，例如上課畫面截圖、教材、作業或錄影。若提供連結：</p>
+            <p>Students may optionally provide 0–5 <code>https://</code> evidence links, such as class screenshots, materials, assignments, or recordings. If you provide any:</p>
+            <ol>
+              <li>開啟共用檢視權限，讓老師與管理員可以直接查看。<br>Turn on sharing permissions so your teacher and administrators can view them directly.</li>
+              <li>不要分享密碼或設定需要另外申請權限的連結。<br>Don't share links that require a password or a separate access request.</li>
+              <li>保留至本次實習或輔導階段結束後至少 10 天。<br>Keep them available for at least 10 days after this practicum or tutoring stage ends.</li>
+            </ol>
+            <img src="{% static 'img/handbook/student/class-record.png' %}" alt="學生課堂紀錄頁 / Student class record page">
+            <h3>8.5 確認老師資料 <small>Confirming your teacher's record</small></h3>
+            <p>老師完成簽到與課堂紀錄後，學生可查看並選擇：</p>
+            <p>Once the teacher has completed check-in and their class record, the student can review and choose:</p>
+            <ul>
+              <li>資料正確：確認老師的簽到與紀錄。<br>Correct: confirm the teacher's check-in and record.</li>
+              <li>需要修改：填寫原因，請老師修正。<br>Needs revision: enter a reason and ask the teacher to fix it.</li>
+              <li>回報問題：填寫問題內容，交由管理員查看。<br>Report an issue: describe the problem for an administrator to review.</li>
+            </ul>
+            <p>老師修改紀錄後，原確認會失效，學生需要重新檢查及確認。</p>
+            <p>If the teacher edits their record afterward, any existing confirmation is cleared, and the student must review and confirm it again.</p>
+            <h3>8.6 有效時數成立條件 <small>Conditions for verified hours</small></h3>
+            <p>一堂課必須同時符合下列條件，才會列入有效紀錄與時數：</p>
+            <p>A class only counts as a verified record and hours once all of the following are true:</p>
+            <ol>
+              <li>老師與學生都完成簽到。<br>Both the teacher and student have checked in.</li>
+              <li>老師與學生都提交課堂紀錄。<br>Both have submitted a class record.</li>
+              <li>雙方都確認對方的簽到與紀錄。<br>Each side has confirmed the other's check-in and record.</li>
+              <li>若有補簽到或補課堂紀錄，管理員已核准補登。<br>If there's a late check-in or late record, an administrator has approved it.</li>
+            </ol>
+            <p>只完成單方資料、仍待對方確認或補登未核准，都不會列入有效紀錄與時數。</p>
+            <p>A class with only one side's data, still awaiting confirmation, or with an unapproved late entry, is not counted as a verified record or hours.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s9">
+            <h2>九、補簽到與補課堂紀錄 <small>Late check-ins & records</small></h2>
+            <h3>9.1 什麼情況會成為補登 <small>When does an entry become "late"?</small></h3>
+            <table>
+              <thead><tr><th>操作 / Action</th><th>一般期限 / Normal window</th><th>超過後 / If missed</th></tr></thead>
+              <tbody>
+                <tr><td>簽到<br>Check-in</td><td>課程結束後 30 分鐘內<br>Within 30 minutes after class ends</td><td>成為補簽到，需填原因<br>Becomes a late check-in; a reason is required</td></tr>
+                <tr><td>課堂紀錄<br>Class record</td><td>課程結束後 24 小時內<br>Within 24 hours after class ends</td><td>新增時成為補課堂紀錄，需填原因<br>Becomes a late record when first submitted; a reason is required</td></tr>
+              </tbody>
+            </table>
+            <p>補登最後期限以課堂頁顯示為準；超過該學期補登期限後，系統不再接受補登。</p>
+            <p>The final deadline for a late entry is whatever the class page shows; once the semester's late-entry deadline passes, the system no longer accepts one.</p>
+            <h3>9.2 補登次數 <small>Late-entry limits</small></h3>
+            <p>每位使用者每學期最多：</p>
+            <p>Per user, per semester, at most:</p>
+            <ul>
+              <li>補簽到 5 次。<br>5 late check-ins.</li>
+              <li>補課堂紀錄 5 次。<br>5 late class records.</li>
+            </ul>
+            <p>兩種次數分開計算。</p>
+            <p>The two counts are tracked separately.</p>
+            <h3>9.3 補登流程 <small>Late-entry process</small></h3>
+            <ol>
+              <li>從「輔導紀錄」找到過去課程，按「查看課程」。<br>Find the past class under "輔導紀錄 / History" and click "查看課程 / View class."</li>
+              <li>完成補簽到或補課堂紀錄並填寫原因。<br>Complete the late check-in or record and enter a reason.</li>
+              <li>等待老師完成資料與互相確認。<br>Wait for your teacher to complete their data and for mutual confirmation.</li>
+              <li>雙方確認完成後，等待管理員審核。<br>Once both sides confirm, wait for administrator review.</li>
+              <li>回到「輔導紀錄」查看結果。<br>Check the result under "輔導紀錄 / History."</li>
+            </ol>
+            <p>狀態顯示「未核准 / Rejected」時，該堂不列入有效紀錄與時數。若認為結果有誤，請提供課程日期、配對老師及畫面給管理員查核，不要重複送出不同內容。</p>
+            <p>A "未核准 / Rejected" status means that class doesn't count as a verified record or hours. If you believe this is wrong, give an administrator the class date, matched teacher, and a screenshot to check — don't keep resubmitting different content.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s10">
+            <h2>十、輔導紀錄與證明 <small>History & certificates</small></h2>
+            <h3>10.1 查看輔導紀錄 <small>Check your history</small></h3>
+            <p>按左側「輔導紀錄 / History」。頁面會列出課程及狀態，例如有效成立、待完成、待審核或未核准。</p>
+            <p>Click "輔導紀錄 / History" in the sidebar. The page lists classes and their status — verified, pending, awaiting review, or rejected.</p>
+            <img src="{% static 'img/handbook/student/history.png' %}" alt="輔導紀錄頁 / History page">
+            <p>若總時數與預期不同，先逐堂檢查雙方是否完成簽到、紀錄及確認；有補登時再確認管理員是否已核准。</p>
+            <p>If the total doesn't match your expectation, check each class for both sides' check-in, record, and confirmation first, then confirm whether any late entries have been approved.</p>
+            <h3>10.2 預覽與下載證明 <small>Preview & download a certificate</small></h3>
+            <p>所屬計畫開放學生下載證明時，可在下載區：</p>
+            <p>If your program allows students to download certificates, in the download area you can:</p>
+            <ol>
+              <li>選擇學期，或自訂日期範圍。<br>Choose a semester, or set a custom date range.</li>
+              <li>選擇中文或英文。<br>Choose Chinese or English.</li>
+              <li>選擇摘要版或詳細版；詳細版可再選擇要顯示的欄位。<br>Choose the summary or detailed version; the detailed version lets you pick which fields to show.</li>
+              <li>先按預覽確認內容，再下載 PDF。<br>Preview it to confirm the content, then download the PDF.</li>
+            </ol>
+            <p>目前學期的證明會在學期結束後第 3 天開放下載。過去學期若已有有效時數，可依頁面提供的期間下載。</p>
+            <p>The current semester's certificate becomes downloadable on the 3rd day after the semester ends. Past semesters with verified hours can be downloaded anytime within the range the page offers.</p>
+            <p>證明名稱依合作計畫不同：</p>
+            <p>The certificate's title varies by partner program:</p>
+            <ul>
+              <li>師大外籍生計畫：受輔導證明。<br>NTNU international-student program: certificate of tutoring received.</li>
+              <li>馬里蘭計畫：語言交換證明。<br>Maryland program: certificate of language exchange.</li>
+              <li>其他合作計畫：依該計畫設定顯示。<br>Other partner programs: as configured for that program.</li>
+            </ul>
+            <img src="{% static 'img/handbook/student/certificate.png' %}" alt="學生證明下載區 / Student certificate download area">
+            <h3>10.3 證明資料錯誤 <small>Errors on a certificate</small></h3>
+            <p>若姓名、學號、計畫、日期或時數有誤，不要自行修改 PDF。請先確認個人資料與課程狀態，再將錯誤項目、課程日期及畫面交給管理員查核。</p>
+            <p>If your name, student ID, program, dates, or hours are wrong, never edit the PDF yourself. Check your profile and class status first, then give an administrator the incorrect item, class date, and a screenshot to verify.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s11">
+            <h2>十一、合作計畫上課文件 <small>Class documents</small></h2>
+            <p>只有所屬計畫已啟用此功能時，網站上方才會顯示「上課文件 / Class documents」。目前主要提供馬里蘭計畫使用。</p>
+            <p>"上課文件 / Class documents" only appears at the top of the site if your program has this feature enabled — currently mainly for the Maryland program.</p>
+            <ol>
+              <li>點網站上方「上課文件」。<br>Click "上課文件 / Class documents" at the top of the site.</li>
+              <li>查看文件名稱、適用計畫及學期。<br>Check the document's title, applicable program, and semester.</li>
+              <li>按下載並依文件內容上課。<br>Download it and follow it during class.</li>
+            </ol>
+            <img src="{% static 'img/handbook/student/class-documents.png' %}" alt="合作計畫上課文件頁 / Partner program class documents page">
+            <p>文件只能供計畫內部使用，不要轉傳至公開網站或不相關的人員。</p>
+            <p>These documents are for program-internal use only — never repost them publicly or share them with unrelated people.</p>
+          </section>
+
+          <section class="profile-card manual-section" id="s12">
+            <h2>十二、常見問題 <small>FAQ</small></h2>
+            <h3>12.1 看不到「尋找老師」 <small>No "Find teachers"</small></h3>
+            <p>這個功能只開放給允許學生主動媒合的合作計畫，目前主要適用於馬里蘭計畫。一般師大外籍生由老師主動邀請，請到「邀請管理」查看收到的邀請。</p>
+            <p>This feature is only available to programs that allow student-initiated matching, currently mainly the Maryland program. Ordinary NTNU international students are invited by teachers — check "邀請管理 / Invitations" for what you've received.</p>
+            <h3>12.2 已配對後不能再找老師 <small>Can't find another teacher after matching</small></h3>
+            <p>一位學生同一學期只能有 1 位進行中的老師。已建立配對時，系統會顯示目前不需要尋找新老師。</p>
+            <p>A student may have only 1 active teacher per semester. Once matched, the system indicates you don't need to look for a new teacher right now.</p>
+            <h3>12.3 課程時間錯誤，但不能修改 <small>Wrong class time, but can't change it</small></h3>
+            <p>學生不能直接修改課程。請用私訊聯絡老師，由老師修改或取消；若課程已有簽到或紀錄，請聯絡管理員。</p>
+            <p>Students can't edit a class directly. Message your teacher and have them reschedule or cancel it; if the class already has a check-in or record, contact an administrator.</p>
+            <h3>12.4 課程沒有列入有效紀錄 <small>A class isn't counted as a verified record</small></h3>
+            <p>一堂課需要雙方簽到、雙方課堂紀錄、雙方互相確認；補登還要經管理員核准。任何一項未完成，都不會列入有效紀錄與時數。</p>
+            <p>A class needs both sides' check-ins, both class records, and mutual confirmation; a late entry also needs administrator approval. Missing any of these means it won't count as a verified record or hours.</p>
+            <h3>12.5 頁面顯示 CSRF 驗證失敗 <small>The page shows a CSRF validation failure</small></h3>
+            <p>這通常是頁面開啟太久，或在另一個分頁重新登入後，舊頁面的安全驗證已失效。重新整理頁面，再從系統內重新操作；不要重複送出舊分頁中的表單。</p>
+            <p>This usually means the page has been open too long, or you signed in again in another tab and the old page's security token expired. Refresh the page and try again from within the system — don't resubmit a form from a stale tab.</p>
+            <h3>12.6 聯絡管理員時要提供什麼 <small>What to send an administrator</small></h3>
+            <p>請提供：</p>
+            <p>Please provide:</p>
+            <ul>
+              <li>學號。<br>Your student ID.</li>
+              <li>發生日期與時間。<br>The date and time it happened.</li>
+              <li>使用的功能與操作步驟。<br>The feature you were using and the steps you took.</li>
+              <li>畫面上的完整錯誤訊息。<br>The full on-screen error message.</li>
+              <li>不含密碼、安全問題答案的畫面截圖。<br>A screenshot with no password or security answers visible.</li>
+            </ul>
+            <p>不要在訊息或截圖中附上密碼及安全問題答案。</p>
+            <p>Never include your password or security answers in a message or screenshot.</p>
+          </section>
+        </div>
+      </div>
+
+    {% else %}
+      <section class="guide-grid">
         <article class="guide-card"><span>01</span><h2>名冊匯入 <small>Roster import</small></h2><p>在管理首頁「名冊匯入」頁籤，依角色與合作計畫分卡片上傳「學號＋身分別」名單；舊的單欄學號清單仍可使用。重新匯入可補上既有空白身分別，但不會覆蓋已存在的資料。</p><p>Upload a student ID and identity-category list under the matching role/program card. Legacy ID-only files remain supported. Re-importing may fill blank identities without overwriting existing data.</p></article>
         <article class="guide-card"><span>02</span><h2>口語能力審核 <small>Oral proficiency review</small></h2><p>審核老師上傳的口語能力證明；審核通過後老師才能瀏覽學生資料並發出邀請。</p><p>Review teachers' uploaded oral proficiency documents. Approval is required before a teacher can browse students or send invitations.</p></article>
         <article class="guide-card"><span>03</span><h2>學期設定 <small>Semester settings</small></h2><p>新增、編輯或封存學期；可依合作計畫分別設定期間，數量不設上限，但同一計畫的啟用期間不可重疊。已有配對紀錄的學期只能封存，不能刪除。</p><p>Create, edit, or archive semesters, scoped per partner program with no limit on how many exist; enabled periods for the same program cannot overlap. Semesters with existing pairings can only be archived, not deleted.</p></article>
@@ -43,8 +851,9 @@
         <article class="guide-card"><span>06</span><h2>課堂通報與異常回報 <small>Class alerts & incident reports</small></h2><p>查看待處理與已紀錄的通報／回報，可標記為「已紀錄」並留備註；「已紀錄」代表已知悉留存，不代表問題已解決。</p><p>Review pending and recorded alerts/reports, and mark them "recorded" with a note — recorded means acknowledged and kept on file, not necessarily resolved.</p></article>
         <article class="guide-card"><span>07</span><h2>補簽到／補紀錄審核 <small>Late check-in/record approval</small></h2><p>逐筆核准或拒絕補簽到與補課堂紀錄；被拒絕的紀錄不計入有效時數。</p><p>Approve or reject late check-ins and late class records individually. Rejected entries do not count toward verified hours.</p></article>
         <article class="guide-card"><span>08</span><h2>時數修正與匯出 <small>Hour adjustments & exports</small></h2><p>可在 Django Admin 新增「行政更正」紀錄補登系統紀錄以外的時數（只能加不能扣）；另可依使用者、學期或日期範圍匯出報表。</p><p>Add an administrative correction in Django Admin for hours outside the system's own records (additive only); export reports by user, semester, or date range.</p></article>
-      {% endif %}
-    </section>
+      </section>
+    {% endif %}
+
     <p class="guide-footnote">本手冊將隨系統功能持續更新。<br>This guide will be updated as the system evolves.</p>
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>

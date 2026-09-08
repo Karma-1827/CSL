@@ -198,6 +198,12 @@
 - **2026-08-10 弱掃前再複核補強**:`PrivateNoStoreMiddleware` 擴充到未登入的登入/註冊/帳號恢復/設定新密碼流程;CSP 正式強制並加入 `Permissions-Policy`;Nginx 範本加入 `server_tokens off`、TLS 1.2/1.3、TLS 1.2 cipher allowlist、請求/連線限制與 client/proxy timeout。完整 273 項測試全數通過。實際 VM 的 DNS、憑證、網段、防火牆、NFS、監控、X-Accel-Redirect、備份還原與正式 AppScan 仍列在批次 9。
 - migrations(本輪弱掃整改新增):`accounts` 新增 `0015`(身分類別 choices 文字調整,無資料影響)、`0016`(建立共享 cache 資料表,`RunPython` 呼叫 `createcachetable`);`tutoring` 無新增(批次 0-8 皆為邏輯/設定/模板變更)。累計 `accounts` 16 個、`tutoring` 22 個 migration。
 - **2026-08-10 已將本輪弱掃整改(批次 0-6、8,共 9 個 commit)push 至 `origin/main`**;push 前發現遠端多了一個本機沒有的 merge commit(`c79c898`,GitHub PR UI 上合併已在本機以 fast-forward 整合過的分支),經 `git merge-base`/`git diff --stat` 確認內容完全相同後以一般 `git merge`(非 rebase/force-push)整合,零內容差異,合併後重跑完整測試套件(272 項全數通過)、`ruff check .`、`makemigrations --check --dry-run` 皆乾淨才 push。
+- **2026-09-08 使用手冊(`/handbook/`)改版為完整操作手冊**:使用者提供自行撰寫的 `docs/TEACHER_OPERATION_MANUAL.md`(13 章)、`docs/STUDENT_OPERATION_MANUAL.md`(12 章),先逐條比對系統實際規則(邀請 5 天效期/3 筆待回覆上限、排課 0.5–2 小時/5 分鐘遞增/每組每週 2 小時/每組每學期 32 小時/Tutor 每學期 64 小時、簽到前 10 分鐘開放/結束後 30 分鐘寬限、補登每學期各 5 次上限/24 小時內未補視為補課堂紀錄、解除配對 48 小時未處理自動解除、課程結束 21 天內可修改取消、2026-09 課堂紀錄新欄位名稱、Tutor 佐證連結 1–5 必填 vs Tutee 0–5 選填、證明下載時機等),確認內容與現況完全一致,無需更正業務邏輯後才整合進畫面。
+  - `templates/accounts/handbook.html` 由原本的短卡片式格式,改為 Tutor(`id="t1"`–`t13"`)、Tutee(`id="s1"`–`s12"`)兩份完整章節文件,沿用既有 `.profile-layout`/`.profile-section-nav`/`.profile-content`/`.profile-card` 元件(原為 `/profile/` 設計),新增 `.manual-section` CSS 規則(標題錨點捲動偏移、段落/清單/表格/圖片排版)取代重複造樣式。Admin 分支(`.guide-grid` 8 張卡片)完全未變動。
+  - 新增 `static/img/handbook/{teacher,student}/*.png`(共 15 張),從使用者提供的原始截圖目錄複製並依章節重新命名。
+  - 老師手冊 8.3/8.4(修改/取消課程)步驟中額外補了一條使用者原文沒有的說明——課表卡片旁新增的「修改/取消」行內標籤(見上方 P2-04)可直接點擊進入對應區塊,不需要先點「查看課程」再往下捲——反映近期新增的功能,不影響其餘章節內容的一比一忠實轉譯。
+  - **全文為中文撰寫**,使用者確認後(「都幫我加上英文好了」)依全站雙語慣例逐段補上英文:標題以 `<small>` 副標(比照既有 Admin 卡片與側邊欄章節導覽的既有寫法);每個 `<p>` 段落補一句對應英文 `<p>`;每個 `<li>` 內用 `<br>` 換行接英文翻譯(避免斜線硬擠在長句);表格儲存格中英文以 `<br>` 分行,標題儲存格用「中文 / English」；圖片 `alt` 改為中英並列。翻譯時沿用系統既有雙語 UI 用詞(如「登入 / Sign in」「查看資料 / View profile」等),不是另外自創譯名。
+  - 已跑 `ruff check .`(全過)、`python manage.py test accounts`(118 項全過)、以 Django test client 對 Tutor/Tutee/Admin 三種角色實際渲染 `/handbook/`(皆 200,大小合理),確認 15 張圖片與 141 處雙語標題皆正確輸出。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
 
 ## 版本規劃
 
