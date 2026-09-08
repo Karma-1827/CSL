@@ -10,6 +10,7 @@ from accounts.models import PartnerProgram, Role, User
 
 from .models import (
     ClassAlert,
+    ClassDocument,
     ClassRecord,
     ClassSession,
     IncidentReport,
@@ -269,6 +270,40 @@ class SemesterCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["program"].required = True
         self.fields["program"].queryset = PartnerProgram.objects.filter(is_active=True).order_by("name_zh")
+
+
+class ClassDocumentUploadForm(forms.ModelForm):
+    """Admin dashboard upload/edit form for ClassDocument (see CLAUDE.md 4.10). `file` stays
+    required at the model level, but Django's FileField already falls back to the existing
+    upload when editing an instance and no new file is submitted, so re-uploading isn't
+    required just to change a title or toggle `is_active` — same behavior already relied on
+    by QualificationUploadForm's re-submission flow."""
+
+    class Meta:
+        model = ClassDocument
+        fields = ("program", "semester", "title_zh", "title_en", "file", "is_active")
+        widgets = {"is_active": forms.CheckboxInput()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["program"].queryset = PartnerProgram.objects.filter(
+            class_documents_enabled=True
+        ).order_by("name_zh")
+        self.fields["semester"].required = False
+        self.fields["semester"].queryset = Semester.objects.order_by("-starts_on")
+        self.fields["semester"].empty_label = "（適用所有學期） / (Applies to every semester)"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        program = cleaned_data.get("program")
+        semester = cleaned_data.get("semester")
+        if program and semester and semester.program_id and semester.program_id != program.pk:
+            self.add_error(
+                "semester",
+                "所選學期屬於其他合作計畫，請重新選擇。 / "
+                "The selected semester belongs to a different partner program.",
+            )
+        return cleaned_data
 
 
 class PairingMessageForm(forms.ModelForm):

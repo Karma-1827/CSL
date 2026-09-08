@@ -41,7 +41,14 @@ from tutoring.models import (
     MakeupReview,
     MakeupReviewStatus,
 )
-from tutoring.forms import AdminPairingForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm
+from tutoring.forms import (
+    AdminPairingForm,
+    ClassDocumentUploadForm,
+    HoursDownloadForm,
+    ScheduleClassForm,
+    SemesterCreateForm,
+    SemesterSettingsForm,
+)
 from tutoring.reporting import user_has_hour_records
 from tutoring.services import (
     DAY_LABELS,
@@ -295,6 +302,12 @@ def dashboard(request):
         semester_rows = list(Semester.objects.order_by("-starts_on"))
         for row in semester_rows:
             row.edit_form = SemesterSettingsForm(instance=row, prefix=f"semester-{row.pk}")
+        class_document_programs = list(PartnerProgram.objects.filter(class_documents_enabled=True).order_by("name_zh"))
+        class_document_rows = list(
+            ClassDocument.objects.select_related("program", "semester", "uploaded_by").order_by("-uploaded_at")
+        )
+        for row in class_document_rows:
+            row.edit_form = ClassDocumentUploadForm(instance=row, prefix=f"document-{row.pk}")
         overview_semesters = semester_rows
         overview_semester = current_semester or (overview_semesters[0] if overview_semesters else None)
         requested_semester_id = request.GET.get("class_semester")
@@ -430,6 +443,9 @@ def dashboard(request):
                 "export_semesters": overview_semesters,
                 "roster_import_form": RosterImportForm(),
                 "quick_import_programs": PartnerProgram.objects.filter(is_active=True).order_by("name_zh"),
+                "class_document_programs": class_document_programs,
+                "class_document_rows": class_document_rows,
+                "new_class_document_form": ClassDocumentUploadForm(),
             }
         )
     elif request.user.role == Role.TUTOR:
@@ -1011,11 +1027,14 @@ def _private_file_response(file_field, filename, *, inline=False):
     return response
 
 
-@role_required(Role.TUTOR, Role.TUTEE)
+@role_required(Role.TUTOR, Role.TUTEE, Role.ADMIN)
 def download_class_document(request, pk):
-    document = get_object_or_404(ClassDocument, pk=pk, is_active=True)
-    if document.program not in visible_class_document_programs(request.user):
-        raise Http404
+    if request.user.role == Role.ADMIN:
+        document = get_object_or_404(ClassDocument, pk=pk)
+    else:
+        document = get_object_or_404(ClassDocument, pk=pk, is_active=True)
+        if document.program not in visible_class_document_programs(request.user):
+            raise Http404
     AuditLog.record(
         actor=request.user, target_user=request.user, event_type="CLASS_DOCUMENT_DOWNLOADED",
         description="下載上課文件 / Class document downloaded",

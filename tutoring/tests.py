@@ -3173,6 +3173,126 @@ class ClassDocumentTests(MatchingFixtureTestCase):
         response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_admin_can_download_any_document_regardless_of_active_state(self):
+        """Admin bypass added alongside the dashboard upload UI: an Admin verifying a
+        freshly uploaded (or intentionally deactivated) document shouldn't be blocked by
+        the same eligibility/is_active gate that applies to Tutor/Tutee viewers."""
+        admin = User.objects.create_superuser(username="ADMIN-CLASSDOC", password="Admin-password-2026")
+        document = self.make_document(self.maryland_program, is_active=False)
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:download_class_document", args=[document.pk]))
+        self.assertEqual(response.status_code, 200)
+
+
+class ClassDocumentAdminUploadTests(MatchingFixtureTestCase):
+    """Admin dashboard upload/edit/delete UI for ClassDocument (see CLAUDE.md 4.10, added
+    after the initial Django-Admin-only launch)."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = User.objects.create_superuser(username="ADMIN-CLASSDOC-UI", password="Admin-password-2026")
+
+    def make_upload(self, name="material.pdf"):
+        return SimpleUploadedFile(name, minimal_pdf_bytes(), content_type="application/pdf")
+
+    def test_admin_can_upload_a_class_document(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("tutoring:save_class_document"),
+            {
+                "program": self.maryland_program.pk,
+                "semester": "",
+                "title_zh": "教材",
+                "title_en": "Course material",
+                "file": self.make_upload(),
+                "is_active": "on",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#class-documents")
+        document = ClassDocument.objects.get(title_zh="教材")
+        self.assertEqual(document.program, self.maryland_program)
+        self.assertEqual(document.uploaded_by, self.admin)
+        self.assertTrue(document.is_active)
+        log = AuditLog.objects.get(event_type="CLASS_DOCUMENT_UPLOADED")
+        self.assertEqual(log.actor, self.admin)
+        self.assertEqual(log.metadata["program"], "MARYLAND")
+
+    def test_non_admin_cannot_upload(self):
+        self.client.force_login(self.maryland_tutor)
+        response = self.client.post(
+            reverse("tutoring:save_class_document"),
+            {
+                "program": self.maryland_program.pk, "semester": "", "title_zh": "教材",
+                "title_en": "Course material", "file": self.make_upload(), "is_active": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(ClassDocument.objects.exists())
+
+    def test_semester_from_a_different_program_is_rejected(self):
+        other_semester = Semester.objects.create(
+            name_zh="其他計畫學期", name_en="Other program semester", program=self.ntnu_program,
+            starts_on=date(2026, 9, 1), ends_on=date(2027, 1, 31), is_active=True,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("tutoring:save_class_document"),
+            {
+                "program": self.maryland_program.pk, "semester": other_semester.pk, "title_zh": "教材",
+                "title_en": "Course material", "file": self.make_upload(), "is_active": "on",
+            },
+            follow=True,
+        )
+        self.assertFalse(ClassDocument.objects.exists())
+        self.assertContains(response, "所選學期屬於其他合作計畫")
+
+    def test_admin_can_edit_without_reuploading_file(self):
+        document = ClassDocument.objects.create(
+            program=self.maryland_program, title_zh="舊標題", title_en="Old title",
+            file=self.make_upload(), uploaded_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("tutoring:update_class_document", args=[document.pk]),
+            {
+                f"document-{document.pk}-program": self.maryland_program.pk,
+                f"document-{document.pk}-semester": "",
+                f"document-{document.pk}-title_zh": "新標題",
+                f"document-{document.pk}-title_en": "New title",
+                # deliberately no file field, to prove the existing upload is kept
+                f"document-{document.pk}-is_active": "",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#class-documents")
+        document.refresh_from_db()
+        self.assertEqual(document.title_zh, "新標題")
+        self.assertFalse(document.is_active)
+        self.assertTrue(document.file)
+        self.assertEqual(AuditLog.objects.filter(event_type="CLASS_DOCUMENT_UPDATED").count(), 1)
+
+    def test_admin_can_delete_a_document(self):
+        document = ClassDocument.objects.create(
+            program=self.maryland_program, title_zh="教材", title_en="Course material",
+            file=self.make_upload(), uploaded_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("tutoring:delete_class_document", args=[document.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#class-documents")
+        self.assertFalse(ClassDocument.objects.filter(pk=document.pk).exists())
+        log = AuditLog.objects.get(event_type="CLASS_DOCUMENT_DELETED")
+        self.assertEqual(log.metadata["title_zh"], "教材")
+
+    def test_dashboard_shows_upload_form_and_existing_documents(self):
+        document = ClassDocument.objects.create(
+            program=self.maryland_program, title_zh="教材", title_en="Course material",
+            file=self.make_upload(), uploaded_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(document, response.context["class_document_rows"])
+        self.assertContains(response, "上課文件")
+
 
 READ_ONLY_ADMIN_CLASSES = [
     (PairingAdmin, Pairing),

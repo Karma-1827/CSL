@@ -203,7 +203,14 @@
   - 新增 `static/img/handbook/{teacher,student}/*.png`(共 15 張),從使用者提供的原始截圖目錄複製並依章節重新命名。
   - 老師手冊 8.3/8.4(修改/取消課程)步驟中額外補了一條使用者原文沒有的說明——課表卡片旁新增的「修改/取消」行內標籤(見上方 P2-04)可直接點擊進入對應區塊,不需要先點「查看課程」再往下捲——反映近期新增的功能,不影響其餘章節內容的一比一忠實轉譯。
   - **全文為中文撰寫**,使用者確認後(「都幫我加上英文好了」)依全站雙語慣例逐段補上英文:標題以 `<small>` 副標(比照既有 Admin 卡片與側邊欄章節導覽的既有寫法);每個 `<p>` 段落補一句對應英文 `<p>`;每個 `<li>` 內用 `<br>` 換行接英文翻譯(避免斜線硬擠在長句);表格儲存格中英文以 `<br>` 分行,標題儲存格用「中文 / English」；圖片 `alt` 改為中英並列。翻譯時沿用系統既有雙語 UI 用詞(如「登入 / Sign in」「查看資料 / View profile」等),不是另外自創譯名。
-  - 已跑 `ruff check .`(全過)、`python manage.py test accounts`(118 項全過)、以 Django test client 對 Tutor/Tutee/Admin 三種角色實際渲染 `/handbook/`(皆 200,大小合理),確認 15 張圖片與 141 處雙語標題皆正確輸出。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
+  - 已跑 `ruff check .`(全過)、`python manage.py test accounts`(118 項全過)、以 Django test client 對 Tutor/Tutee/Admin 三種角色實際渲染 `/handbook/`(皆 200,大小合理),確認 15 張圖片與 141 處雙語標題皆正確輸出。**已於當日完成正式部署**,見 `docs/VM_UPDATE_WORKFLOW.md` 第二十九次部署紀錄。
+- **2026-09-08 Admin dashboard 新增「上課文件」上傳/管理頁籤**:使用者事後要求把 `ClassDocument` 從「只能在 Django Admin 操作」(見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 5 項原始定位)改成也能在自訂前台 Admin dashboard 直接上傳與管理,理由是目前實際需要上傳上課文件,原本的低頻率使用假設不再成立。詳細設計已同步更新至 `CLAUDE.md` 4.10 節,重點:
+  - 新增 `tutoring/forms.py::ClassDocumentUploadForm`(`program` 限定已開放此功能的計畫、`semester` 選填且以 `clean()` 檢查跨計畫學期錯配、`file` 沿用 Django `FileField` 編輯時免重新上傳的既有機制)。
+  - 新增 `tutoring/views.py::save_class_document()`(新增/編輯共用,比照 `save_semester()` 寫法)、`delete_class_document()`,皆手動寫入 `AuditLog`(`CLASS_DOCUMENT_UPLOADED`/`_UPDATED`/`_DELETED`),因為自訂前台流程不會被只鏡射 Django Admin 操作的 `mirror_admin_log_entry_to_audit_log()` 涵蓋。
+  - `accounts:download_class_document` 新增 Admin 例外,可下載任何文件(含未啟用)供上傳後核對,比照 `download_qualification()` 既有寫法。
+  - Admin dashboard 新增「上課文件 / Class documents」頁籤(`templates/dashboard/admin_v2_panels.html`、側邊欄項目於 `templates/dashboard/index.html`),沿用學期設定既有的新增表單+逐筆卡片(內含編輯用 `<details>`)版面與既有 CSS,無新增樣式。Django Admin 後台管理入口予以保留,兩條路徑並存不衝突。
+  - 新增 8 個測試(`tutoring/tests.py::ClassDocumentAdminUploadTests` 6 個 + `ClassDocumentTests` 新增 1 個 Admin 下載例外測試),涵蓋上傳、非 Admin 被拒、跨計畫學期擋下、免重新上傳檔案即可編輯、刪除、dashboard 正確帶出表單與清單。無 migration(`ClassDocument` model 本身未變動)。
+  - 已跑 `ruff check .`、完整測試套件(333 項全過)、並以 curl 對本機 dev server 做過真實 HTTP 端到端驗證:登入 Admin → 上傳文件(multipart POST)→ 下載確認為合法 PDF → 編輯(改標題+停用,不重傳檔案,確認原檔案保留)→ 刪除,並確認四個階段對應的 `AuditLog` 皆正確寫入。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
 
 ## 版本規劃
 

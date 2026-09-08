@@ -14,11 +14,11 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.models import AuditLog, PartnerProgram, Role
 
 from .forms import (
-    AdminPairingForm, ClassAlertForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm, PairingMessageForm,
-    RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
+    AdminPairingForm, ClassAlertForm, ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm,
+    PairingMessageForm, RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
 )
 from .models import (
-    ClassAlert, ClassAlertStatus, ClassRecord, ClassSession, IncidentReport,
+    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassSession, IncidentReport,
     Pairing, PairingMessage, PairingStatus, Semester,
 )
 from .reporting import (
@@ -130,6 +130,52 @@ def delete_semester(request, pk):
         )
         messages.success(request, "學期設定已刪除。 / Semester setting deleted.")
     return redirect(f"{reverse('accounts:dashboard')}#semesters")
+
+
+@login_required
+@require_POST
+def save_class_document(request, pk=None):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    instance = get_object_or_404(ClassDocument, pk=pk) if pk else None
+    form = ClassDocumentUploadForm(
+        request.POST, request.FILES, instance=instance, prefix=f"document-{pk}" if pk else None
+    )
+    if form.is_valid():
+        document = form.save(commit=False)
+        if instance is None:
+            document.uploaded_by = request.user
+        document.save()
+        AuditLog.record(
+            actor=request.user,
+            event_type="CLASS_DOCUMENT_UPDATED" if instance else "CLASS_DOCUMENT_UPLOADED",
+            description="更新上課文件 / Class document updated" if instance else "上傳上課文件 / Class document uploaded",
+            metadata={"document_id": document.pk, "program": document.program.code, "title_zh": document.title_zh},
+        )
+        messages.success(request, "上課文件已儲存。 / Class document saved.")
+    else:
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+    return redirect(f"{reverse('accounts:dashboard')}#class-documents")
+
+
+@login_required
+@require_POST
+def delete_class_document(request, pk):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    document = get_object_or_404(ClassDocument, pk=pk)
+    document_id, program_code, title_zh = document.pk, document.program.code, document.title_zh
+    document.delete()
+    AuditLog.record(
+        actor=request.user,
+        event_type="CLASS_DOCUMENT_DELETED",
+        description="刪除上課文件 / Class document deleted",
+        metadata={"document_id": document_id, "program": program_code, "title_zh": title_zh},
+    )
+    messages.success(request, "上課文件已刪除。 / Class document deleted.")
+    return redirect(f"{reverse('accounts:dashboard')}#class-documents")
 
 
 def _pairing_for_participant(user, pk):

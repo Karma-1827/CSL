@@ -169,3 +169,51 @@
     </div>
   </details>
 </section>
+
+<section class="dashboard-view" data-dashboard-panel="class-documents">
+  <div class="view-heading"><span>CLASS DOCUMENTS</span><h2>上課文件 <small>Class documents</small></h2><p>上傳給合作計畫老師與學生下載的課程文件；只有已開放「上課文件」功能的合作計畫會出現在下方選單中。<br>Upload class documents for teachers and students to download; only partner programs with the class documents feature enabled appear in the menu below.</p></div>
+
+  {% if not class_document_programs %}
+    <div class="empty-state">目前沒有任何合作計畫開放「上課文件」功能，請先到 <a href="{% url 'admin:accounts_partnerprogram_changelist' %}">Django Admin</a> 開啟該計畫的「上課文件」設定。<br>No partner program currently has the class documents feature enabled. Enable it for a program in Django Admin first.</div>
+  {% else %}
+    <details class="semester-add-disclosure"{% if not class_document_rows %} open{% endif %}>
+      <summary>
+        <span class="semester-add-icon" aria-hidden="true">＋</span>
+        <span><strong>上傳文件</strong><small>Upload document</small></span>
+      </summary>
+      <form class="schedule-form semester-form semester-new-form" action="{% url 'tutoring:save_class_document' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}{{ new_class_document_form.as_div }}
+        <button class="button button-primary" type="submit">上傳文件 <small>Upload document</small></button>
+      </form>
+    </details>
+  {% endif %}
+
+  {% if class_document_rows %}
+    <div class="semester-setting-list">
+      {% for document in class_document_rows %}
+        <div class="semester-card">
+          <div class="semester-setting-row">
+            <span class="semester-setting-name"><strong>{{ document.title_zh }}</strong><small>{{ document.title_en }}</small></span>
+            <span class="semester-setting-program">{{ document.program.name_zh }}<small>{{ document.program.name_en }}</small></span>
+            <span class="semester-setting-dates">{% if document.semester %}<time>{{ document.semester.name_zh }}</time><small>{{ document.semester.name_en }}</small>{% else %}適用所有學期<small>All semesters</small>{% endif %}</span>
+            <span class="semester-setting-status{% if not document.is_active %} status-future{% endif %}">{% if document.is_active %}啟用中<small>Active</small>{% else %}已停用<small>Inactive</small>{% endif %}</span>
+            <div class="semester-setting-actions">
+              <a class="button button-secondary button-small" href="{% url 'accounts:download_class_document' document.pk %}">下載 <small>Download</small></a>
+              <form action="{% url 'tutoring:delete_class_document' document.pk %}" method="post" data-confirm="確定刪除這份上課文件？此動作無法復原。">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除 <small>Delete</small></button></form>
+            </div>
+          </div>
+          <details class="semester-edit-disclosure">
+            <summary class="semester-edit-icon-btn" aria-label="編輯文件 / Edit document"><span aria-hidden="true">✎</span></summary>
+            <form class="schedule-form semester-form semester-edit-form" action="{% url 'tutoring:update_class_document' document.pk %}" method="post" enctype="multipart/form-data">
+              {% csrf_token %}{{ document.edit_form.as_div }}
+              <p class="semester-edit-warning">留空「檔案」欄位表示保留原本上傳的檔案，只更新其他資訊。<br>Leave "File" blank to keep the existing file and only update the other details.</p>
+              <button class="button button-primary button-small" type="submit">儲存修改 / Save changes</button>
+            </form>
+          </details>
+        </div>
+      {% endfor %}
+    </div>
+  {% elif class_document_programs %}
+    <div class="empty-state">目前沒有上傳任何上課文件。 / No class documents uploaded yet.</div>
+  {% endif %}
+</section>

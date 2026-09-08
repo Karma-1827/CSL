@@ -27,6 +27,7 @@
             <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#export" data-dashboard-target="export"><span aria-hidden="true">⇩</span><b>資料匯出<small>Data export</small></b></a>
             <a class="sidebar-link" href="#roster-import" data-dashboard-target="roster-import"><span aria-hidden="true">⇧</span><b>名冊匯入<small>Roster import</small></b></a>
+            <a class="sidebar-link" href="#class-documents" data-dashboard-target="class-documents"><span aria-hidden="true">▤</span><b>上課文件<small>Class documents</small></b></a>
             <a class="sidebar-link" href="#activity" data-dashboard-target="activity"><span aria-hidden="true">◷</span><b>系統紀錄<small>Activity</small></b></a>
             <a class="sidebar-link sidebar-link-external" href="{% url 'admin:accounts_rosterentry_changelist' %}"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
           {% elif request.user.role == 'TUTOR' %}
