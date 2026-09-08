@@ -1174,6 +1174,7 @@ a {
   color: var(--blue);
 }
 .profile-hero {
+  --deep-ink: #68152f;
   position: relative;
   overflow: hidden;
   display: grid;
@@ -1219,6 +1220,7 @@ a {
 }
 .profile-hero h1 {
   margin: 3px 0 10px;
+  color: #fff;
   font-size: clamp(1.5rem, 3vw, 2.15rem);
 }
 .profile-hero h1 small {
@@ -1495,6 +1497,7 @@ a {
 }
 
 .guide-hero {
+  --navy: #68152f;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -1507,6 +1510,7 @@ a {
 }
 .guide-hero h1 {
   margin: 4px 0 8px;
+  color: #fff;
   font-size: clamp(1.8rem, 4vw, 2.6rem);
 }
 .guide-hero h1 small {
@@ -1583,6 +1587,7 @@ a {
   box-shadow: 0 10px 32px rgba(39, 55, 77, 0.09);
 }
 .sidebar-profile {
+  --deep-ink: #68152f;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -1903,6 +1908,7 @@ a {
   background: var(--blue);
 }
 .stat-card:nth-child(4n + 1)::before {
+  --navy: #68152f;
   background: var(--navy);
 }
 .stat-card:nth-child(4n + 2)::before {
@@ -2537,6 +2543,7 @@ td small {
   outline: none;
 }
 .invitation-teacher-mark {
+  --navy: #68152f;
   width: 36px;
   height: 36px;
   display: grid;
@@ -3453,6 +3460,7 @@ td small {
   text-decoration: none;
 }
 .class-detail-hero {
+  --deep-ink: #68152f;
   display: flex;
   justify-content: space-between;
   gap: 30px;
@@ -3469,6 +3477,7 @@ td small {
 }
 .class-detail-hero h1 {
   margin: 5px 0;
+  color: #fff;
   font-size: 1.75rem;
 }
 .class-detail-hero p {
@@ -4976,6 +4985,7 @@ td small {
 }
 .tutor-schedule-hero h1 {
   margin: 5px 0;
+  color: #fff;
   font-size: 2rem;
 }
 .tutor-schedule-hero p {
