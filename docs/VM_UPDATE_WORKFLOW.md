@@ -347,3 +347,17 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
   - 清理後驗證:`https://mpts.tcsl.ntnu.edu.tw/`、`/system-admin/login/` 皆回應 200;`User.objects.all()` 僅剩 `admin`;`PartnerProgram` 三筆設定未受影響;`mpts-gunicorn.service`/`mpts-process-matching-state.timer` 皆正常運作。
   - 清理過程使用的臨時 `sudoers.d/90-mpts-deploy-tmp` NOPASSWD 授權(使用者於清理前在自己的終端機開設)已於清理完成後移除,`sudo -n -l` 確認已恢復需要密碼。
   - **下一步(留給系辦/使用者操作,不在本次清理範圍內)**:匯入真實名冊、建立真實學期,才能真正開放使用者註冊。
+
+## 13. 弱點掃描專用帳號建立紀錄
+
+依 `docs/VULNERABILITY_SCAN_ACCOUNT_SETUP.md` 建立僅供師大資訊中心 HCL AppScan 使用的隔離帳號,不是部署,獨立於第 11 節之外記錄於此;依該文件第九節規定,此處不記錄任何密碼。
+
+- **2026-09-08**：操作者 Claude Code(依使用者指示執行)。建立前唯讀盤點確認正式站無任何 `TEST-SCAN-*` 帳號/名冊,且**正式站目前沒有任何 `Semester`(0 筆)**——封測資料已於 2026-09-04 全數清空(見第 12 節),真實學期尚未建立。
+  - 備份:`/var/backups/mpts/20260908-144321`。
+  - 建立 4 筆 `RosterEntry` 與對應 `User`/`TutorProfile`/`TuteeProfile`/`SecurityQuestionAnswer`(經真實 HTTPS 註冊流程,非直接寫入資料庫):`TEST-SCAN-TUTOR-NTNU`(TUTOR/MASTER)、`TEST-SCAN-TUTEE-NTNU`(TUTEE/NTNU)、`TEST-SCAN-TUTOR-MD`(TUTOR/BACHELOR)、`TEST-SCAN-TUTEE-MD`(TUTEE/MARYLAND)。兩位老師各上傳一份標明「僅供網站弱點掃描，非正式證明」的測試 PDF 並由管理員(`admin`)核准。
+  - **與設定文件表格的一處刻意偏離**:`TEST-SCAN-TUTOR-MD` 的「所屬計畫」依現行 `tutor_can_serve_program()` 規則設為 `MARYLAND`(文件表格原寫「留空」;若真的留空,該 Tutor 依規則只能服務 NTNU,無法與馬里蘭 Tutee 配對,會讓文件自己要求的「Maryland 配對均成立」驗收項目在規則上不可能達成)。已於執行時以程式註解記錄原因,細節見完成回報。
+  - **因無可用學期而中止**:依文件 5.3.3「如果某計畫沒有可用學期,停止建立配對並回報,不可擅自新增會影響正式規則的學期」,NTNU 與 MARYLAND 配對均未建立,5.4 節的課程/課堂紀錄/私訊/佐證連結/附件測試資料亦連帶未建立(皆依賴配對存在)。未新增任何 `Semester`。
+  - 密碼由本機 Python 腳本產生,全程未輸入為 shell 參數、未寫入 VM、未印出於任何輸出,僅存於使用者本機一個 600 權限的暫存檔(路徑於完成回報中告知,不在此記錄),供填入資訊中心表單後由使用者自行刪除。
+  - 已完成的權限隔離驗證(帳號未登入時保護頁面導回登入頁、各帳號可開啟自己的首頁與個人資料頁、資格文件僅本人與 Admin 可下載、彼此虛構 Email 不互相外流)全數通過,細節見完成回報。
+  - 過程使用的臨時 `sudoers.d/90-mpts-deploy-tmp` NOPASSWD 授權(使用者事先在自己的終端機開設)已於完成後移除,`sudo -n -l` 確認已恢復需要密碼。`git status`、`mpts-gunicorn.service`、`journalctl` 均無非預期變化。
+  - **待辦(留給使用者)**:確認是否/何時建立正式 NTNU、MARYLAND 學期,學期到位後再繼續完成 5.3 配對與 5.4 測試資料;掃描完成後依文件第九節停用帳號、更換密碼,複掃確認不需要後再依外鍵順序清除。
