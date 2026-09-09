@@ -21,7 +21,7 @@
           <span>{{ request.user.get_account_status_display }}</span>
         </div>
       </div>
-      <div class="profile-updated"><span>學號 / Student ID</span><strong>{{ request.user.username }}</strong></div>
+      <div class="profile-updated"><span>{% if profile_kind == 'admin' %}ID{% else %}學號 / Student ID{% endif %}</span><strong>{{ request.user.username }}</strong></div>
     </section>
 
     <div class="profile-layout">
@@ -41,7 +41,7 @@
 
       <div class="profile-content">
         <section class="profile-card" id="basic-information">
-          <div class="profile-card-heading"><div><span>01</span><h2>基本資料 <small>Basic information</small></h2></div><p>此處顯示您註冊時提交的個人資料。<br>Information submitted during registration.</p></div>
+          <div class="profile-card-heading"><div><span>01</span><h2>基本資料 <small>Basic information</small></h2></div>{% if profile_kind != 'admin' %}<p>此處顯示您註冊時提交的個人資料。<br>Information submitted during registration.</p>{% endif %}</div>
           <div class="profile-data-grid">
             <div class="profile-data-item"><span>中文姓名 / Chinese name</span><strong>{{ request.user.name_zh|default:"未提供 / Not provided" }}</strong></div>
             <div class="profile-data-item"><span>英文姓名 / English name</span><strong>{{ request.user.name_en|default:"未提供 / Not provided" }}</strong></div>
@@ -114,7 +114,7 @@
         {% if edit_form %}
           <section class="profile-card is-editable" id="edit-profile">
             {% if profile_kind == 'admin' %}
-              <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>學號如需更正請聯絡系辦；姓名、Email 與密碼可自行更新，儲存後立即生效。<br>Student ID requires the department office to correct; name, email, and password below take effect immediately.</p></div>
+              <div class="profile-card-heading"><div><span>02</span><h2>編輯個人資料 <small>Edit profile</small></h2></div></div>
             {% else %}
               <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>姓名與學號如需更正請聯絡系辦；以下欄位可自行更新，儲存後立即生效。<br>Name and student ID require the department office to correct; the fields below take effect immediately.</p></div>
             {% endif %}
@@ -131,7 +131,6 @@
                   {% include "components/form_field.html" with field=edit_form.new_password1 %}
                   {% include "components/form_field.html" with field=edit_form.new_password2 %}
                 </div>
-                <p class="form-note bilingual-note">留空表示不修改密碼。<br>Leave both blank to keep your current password.</p>
               {% else %}
               <div class="two-column-fields">
                 {% include "components/form_field.html" with field=edit_form.phone %}
