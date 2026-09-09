@@ -2040,6 +2040,12 @@ class ClassWorkflowTests(TestCase):
         session_choices = set(form.fields["session"].queryset.values_list("pk", flat=True))
         self.assertIn(own_session.pk, session_choices)
         self.assertNotIn(other_session.pk, session_choices)
+        # 2026-09-10: the dropdown label must not fall back to ClassSession.__str__(),
+        # which interpolates Pairing.__str__() and leaks both sides' usernames.
+        option_label = str(form["session"])
+        self.assertIn(self.tutee.name_zh, option_label)
+        self.assertNotIn(self.tutee.username, option_label)
+        self.assertNotIn(self.tutor.username, option_label)
 
         response = self.client.post(
             reverse("tutoring:incident_report"),

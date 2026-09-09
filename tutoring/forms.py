@@ -229,6 +229,21 @@ class ClassAlertForm(forms.ModelForm):
         widgets = {"note": forms.Textarea(attrs={"rows": 3})}
 
 
+class _OwnSessionChoiceField(forms.ModelChoiceField):
+    """Labels each class by date/time and the *other* participant's name — not
+    ClassSession.__str__(), which interpolates Pairing.__str__() and so leaks both
+    sides' usernames (2026-09-10: same fix as PairingChoiceField, applied here too since
+    this dropdown is built independently)."""
+
+    def __init__(self, *args, viewer=None, **kwargs):
+        self.viewer = viewer
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        counterpart = obj.pairing.tutee if self.viewer and self.viewer.pk == obj.pairing.tutor_id else obj.pairing.tutor
+        return f"{obj.class_date} {obj.start_time:%H:%M} · {counterpart.bilingual_name}"
+
+
 class StandaloneIncidentReportForm(forms.ModelForm):
     """Filed from the "異常回報 / Incident reports" dashboard tab (2026-09-10), not tied
     to a specific class's detail page — the session itself is a field, picked from a
@@ -238,9 +253,11 @@ class StandaloneIncidentReportForm(forms.ModelForm):
         model = IncidentReport
         fields = ("session", "category", "content")
         widgets = {"content": forms.Textarea(attrs={"rows": 3})}
+        field_classes = {"session": _OwnSessionChoiceField}
 
     def __init__(self, *args, user, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["session"].viewer = user
         self.fields["session"].queryset = ClassSession.objects.filter(
             Q(pairing__tutor=user) | Q(pairing__tutee=user)
         ).select_related("pairing__tutor", "pairing__tutee").order_by("-class_date", "-start_time")
