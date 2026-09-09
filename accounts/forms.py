@@ -812,6 +812,64 @@ class TuteeProfileEditForm(forms.Form):
         return changed
 
 
+class AdminProfileEditForm(forms.Form):
+    """Self-service profile edit for Admin accounts (2026-09-09): unlike Tutor/Tutee,
+    Admin has no roster-driven name, so without this an admin's bilingual_name() falls
+    back to their bare username everywhere review/resolution attribution is shown
+    (qualification review, pairing release, class alert, incident report, makeup review,
+    hour adjustment). Password is optional here — leaving both fields blank keeps the
+    current password unchanged, matching how re-saving name/email shouldn't force a
+    password change every time."""
+
+    name_zh = forms.CharField(label="中文姓名 / Chinese name", max_length=100)
+    name_en = forms.CharField(label="英文姓名 / English name", max_length=150, required=False)
+    email = forms.EmailField(label="Email", max_length=254, required=False)
+    new_password1 = forms.CharField(
+        label="新密碼（選填，留空則不修改） / New password (optional, leave blank to keep current)",
+        required=False, strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+        help_text=PASSWORD_RULES_HELP_TEXT,
+    )
+    new_password2 = forms.CharField(
+        label="再次輸入新密碼 / Confirm new password", required=False, strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        kwargs.setdefault("initial", {"name_zh": user.name_zh, "name_en": user.name_en, "email": user.email})
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+
+    def clean(self):
+        cleaned = super().clean()
+        password1 = cleaned.get("new_password1")
+        password2 = cleaned.get("new_password2")
+        if password1 or password2:
+            if password1 != password2:
+                self.add_error("new_password2", "兩次密碼不一致。 / The two passwords do not match.")
+            elif password1:
+                try:
+                    password_validation.validate_password(password1, self.user)
+                except ValidationError as error:
+                    self.add_error("new_password1", error)
+        return cleaned
+
+    def save(self):
+        changed = []
+        for field_name in ("name_zh", "name_en", "email"):
+            value = self.cleaned_data.get(field_name, "")
+            if getattr(self.user, field_name) != value:
+                changed.append(field_name)
+                setattr(self.user, field_name, value)
+        password_changed = bool(self.cleaned_data.get("new_password1"))
+        if password_changed:
+            self.user.set_password(self.cleaned_data["new_password1"])
+        if changed or password_changed:
+            self.user.save()
+        return changed, password_changed
+
+
 class RosterImportForm(forms.Form):
     file = forms.FileField(widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx"}))
 

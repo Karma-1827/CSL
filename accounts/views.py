@@ -5,7 +5,7 @@ import random
 
 from django.contrib import messages
 from django.conf import settings
-from django.contrib.auth import login
+from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.views import LoginView
@@ -78,6 +78,7 @@ from .forms import (
     OVERALL_LEVEL_CHOICES,
     SKILL_CHOICES,
     TIME_SLOTS,
+    AdminProfileEditForm,
     BilingualAuthenticationForm,
     BilingualSetPasswordForm,
     QualificationUploadForm,
@@ -936,12 +937,37 @@ def profile(request):
             context["edit_form"] = TutorProfileEditForm(profile=role_profile, user=request.user)
     elif request.user.role == Role.TUTEE and role_profile:
         context["edit_form"] = TuteeProfileEditForm(profile=role_profile, user=request.user)
+    elif request.user.role == Role.ADMIN:
+        context["edit_form"] = AdminProfileEditForm(user=request.user)
     return render(request, "accounts/profile.html", context)
 
 
 @login_required
 @require_POST
 def update_profile(request):
+    if request.user.role == Role.ADMIN:
+        form = AdminProfileEditForm(request.POST, user=request.user)
+        if form.is_valid():
+            changed_fields, password_changed = form.save()
+            if password_changed:
+                update_session_auth_hash(request, request.user)
+            if changed_fields or password_changed:
+                log_event(
+                    request,
+                    "PROFILE_UPDATED",
+                    "更新個人資料 / Profile updated",
+                    request.user,
+                    {"fields": changed_fields, "password_changed": password_changed},
+                )
+                messages.success(request, "個人資料已更新。 / Your profile has been updated.")
+            else:
+                messages.success(request, "沒有欄位變更。 / No changes were made.")
+        else:
+            for errors in form.errors.values():
+                for error in errors:
+                    messages.error(request, error)
+        return redirect(reverse("accounts:profile") + "#edit-profile")
+
     role_profile = getattr(request.user, "tutor_profile", None) if request.user.role == Role.TUTOR else (
         getattr(request.user, "tutee_profile", None) if request.user.role == Role.TUTEE else None
     )

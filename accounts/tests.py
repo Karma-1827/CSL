@@ -1140,6 +1140,15 @@ class ProfilePageTests(TestCase):
         self.assertContains(response, "1～2 年")
         self.assertContains(response, "希望練習日常會話")
 
+    def test_admin_profile_shows_edit_form_not_the_missing_profile_error(self):
+        admin = User.objects.create_superuser(username="PROFILE-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:profile"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context["edit_form"])
+        self.assertNotContains(response, "找不到完整的個人檔案")
+        self.assertContains(response, "編輯個人資料")
+
     def test_handbook_uses_signed_in_role(self):
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:handbook"))
@@ -1748,11 +1757,78 @@ class ProfileEditTests(TestCase):
         self.assertEqual(self.tutor_profile.department, "華語文教學系")
         self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
 
-    def test_admin_cannot_access_update_profile(self):
+    def test_admin_can_update_name_and_email_without_touching_password(self):
         admin = User.objects.create_superuser(username="EDIT-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
-        response = self.client.post(reverse("accounts:update_profile"), {})
-        self.assertEqual(response.status_code, 404)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {"name_zh": "審核老師", "name_en": "Reviewer Chen", "email": "reviewer@example.com"},
+        )
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        admin.refresh_from_db()
+        self.assertEqual(admin.name_zh, "審核老師")
+        self.assertEqual(admin.name_en, "Reviewer Chen")
+        self.assertEqual(admin.email, "reviewer@example.com")
+        self.assertTrue(admin.check_password("Admin-password-2026"), "password must be unchanged")
+        log = AuditLog.objects.get(event_type="PROFILE_UPDATED")
+        self.assertIn("name_zh", log.metadata["fields"])
+        self.assertFalse(log.metadata["password_changed"])
+        # bilingual_name() drives every "reviewed by"/"resolved by" display (qualification
+        # review, pairing release, class alert, incident report, makeup review, hour
+        # adjustment) — this is the entire point of letting admins set their own name.
+        self.assertEqual(admin.bilingual_name, "審核老師 / Reviewer Chen")
+
+    def test_admin_name_zh_is_required(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN2", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("accounts:update_profile"), {"name_zh": "", "email": "x@example.com"})
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        admin.refresh_from_db()
+        self.assertEqual(admin.email, "")
+        self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
+
+    def test_admin_can_change_password_and_stays_logged_in(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN3", password="Old-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "name_zh": "管理員",
+                "new_password1": "Brand-New-Password-2026!",
+                "new_password2": "Brand-New-Password-2026!",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        admin.refresh_from_db()
+        self.assertTrue(admin.check_password("Brand-New-Password-2026!"))
+        # update_session_auth_hash() must have been called, or changing your own password
+        # would immediately invalidate the session that just changed it.
+        dashboard_response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(dashboard_response.status_code, 200)
+        log = AuditLog.objects.get(event_type="PROFILE_UPDATED")
+        self.assertTrue(log.metadata["password_changed"])
+        self.client.logout()
+        self.assertTrue(self.client.login(username="EDIT-ADMIN3", password="Brand-New-Password-2026!"))
+
+    def test_admin_mismatched_password_confirmation_is_rejected(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN4", password="Old-password-2026")
+        self.client.force_login(admin)
+        self.client.post(
+            reverse("accounts:update_profile"),
+            {"name_zh": "管理員", "new_password1": "Brand-New-Password-2026!", "new_password2": "Different-Password-2026!"},
+        )
+        self.assertTrue(admin.check_password("Old-password-2026"), "password must be unchanged on mismatch")
+        self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
+
+    def test_admin_username_cannot_be_changed_via_profile_form(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN5", password="Admin-password-2026")
+        self.client.force_login(admin)
+        self.client.post(
+            reverse("accounts:update_profile"),
+            {"name_zh": "管理員", "username": "FAKE-ADMIN-ID"},
+        )
+        admin.refresh_from_db()
+        self.assertEqual(admin.username, "EDIT-ADMIN5")
 
 
 class AuditLogResilienceTests(TestCase):

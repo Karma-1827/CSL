@@ -109,9 +109,26 @@
 
         {% if edit_form %}
           <section class="profile-card is-editable" id="edit-profile">
-            <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>姓名與學號如需更正請聯絡系辦；以下欄位可自行更新，儲存後立即生效。<br>Name and student ID require the department office to correct; the fields below take effect immediately.</p></div>
+            {% if profile_kind == 'admin' %}
+              <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>學號如需更正請聯絡系辦；姓名、Email 與密碼可自行更新，儲存後立即生效。<br>Student ID requires the department office to correct; name, email, and password below take effect immediately.</p></div>
+            {% else %}
+              <div class="profile-card-heading"><div><span>05</span><h2>編輯個人資料 <small>Edit profile</small></h2></div><p>姓名與學號如需更正請聯絡系辦；以下欄位可自行更新，儲存後立即生效。<br>Name and student ID require the department office to correct; the fields below take effect immediately.</p></div>
+            {% endif %}
             <form method="post" action="{% url 'accounts:update_profile' %}" class="profile-registration-form" novalidate>
               {% csrf_token %}
+              {% if profile_kind == 'admin' %}
+                <div class="two-column-fields">
+                  {% include "components/form_field.html" with field=edit_form.name_zh %}
+                  {% include "components/form_field.html" with field=edit_form.name_en %}
+                  {% include "components/form_field.html" with field=edit_form.email %}
+                </div>
+                <p class="form-note bilingual-note">姓名會顯示在審核、通報等紀錄中，方便日後追蹤是哪位管理員處理過哪一筆。<br>Your name appears on review and report records so others can see which admin handled each item.</p>
+                <div class="two-column-fields">
+                  {% include "components/form_field.html" with field=edit_form.new_password1 %}
+                  {% include "components/form_field.html" with field=edit_form.new_password2 %}
+                </div>
+                <p class="form-note bilingual-note">留空表示不修改密碼。<br>Leave both blank to keep your current password.</p>
+              {% else %}
               <div class="two-column-fields">
                 {% include "components/form_field.html" with field=edit_form.phone %}
                 {% include "components/form_field.html" with field=edit_form.email %}
@@ -150,6 +167,7 @@
                   <div class="choice-field{% if edit_form.preferred_time_slots.errors %} has-error{% endif %}"><label>2. {{ edit_form.preferred_time_slots.label }}<span class="required-mark"> *</span></label>{{ edit_form.preferred_time_slots }}{% for error in edit_form.preferred_time_slots.errors %}<p class="field-error">{{ error }}</p>{% endfor %}<p class="form-note bilingual-note">其他時間：配對後請與老師討論實際上課時間。<br>Other times: discuss the actual class time with your teacher after matching.</p></div>
                 {% endif %}
               </div>
+              {% endif %}
               <button class="button button-primary" type="submit">儲存變更 <small>Save changes</small></button>
             </form>
           </section>

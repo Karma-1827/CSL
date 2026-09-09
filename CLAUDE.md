@@ -30,6 +30,7 @@
 
 - 不可由公開學生名冊註冊;用 `createsuperuser` 或 Django Admin 建立。
 - 後台入口:`/system-admin/`。
+- **2026-09-09 起 Admin 可在 `/profile/` 自行編輯個人資料**:因應多位管理員共用系統的情境(每人各自的帳號由其他管理員以 Django Admin/`createsuperuser` 建立),需要能自行填寫中文姓名,讓口語能力審核、解除配對、課堂通報、異常回報、補登審核、時數調整等各處既有的「審核人/處理人」顯示(皆讀取 `User.bilingual_name`,留空時會退回顯示裸學號)能正確顯示姓名,方便日後追蹤是哪位管理員處理過哪一筆。欄位:中文姓名(必填)、英文姓名(選填)、Email(選填)、新密碼(選填,`accounts/forms.py::AdminProfileEditForm`)。密碼欄位留空表示不修改,不會強迫每次編輯資料都要重設密碼;有填寫時走一般密碼驗證規則,`accounts/views.py::update_profile()` 呼叫 `set_password()` 後會呼叫 Django 的 `update_session_auth_hash()`,確保管理員改自己的密碼後目前的登入 session 不會被立即登出。學號一律不可透過此表單修改(與 Tutor/Tutee 既有規則一致)。
 - 管理學生名冊、帳號、帳號狀態、口語能力證明與稽核紀錄。
 - 自訂 Admin dashboard「名冊匯入」頁籤預設是**分類卡片式快速匯入**(`accounts:roster_import_quick`):**2026-08 起改為以合作計畫為單位的卡片**——每個啟用中 `PartnerProgram` 一張卡片,卡片內含該計畫的「Tutor 名單」與「學生名單」兩個上傳區塊,不再拆成獨立的卡片。`category_code` 的判斷規則不變:Tutee 名單用計畫代碼本身(如 `NTNU`、`MARYLAND`);Tutor 名單則依計畫而定——`NTNU` 卡片的 Tutor 區塊用 `category_code="TUTOR"`,其餘計畫用 `category_code="TUTOR:<程式碼>"`。快速匯入接受 Excel/CSV 前兩欄「學號＋身分別」,第二欄可使用本地生、僑生、港澳生、陸生、外國學生/外籍生等中英文別名;舊的單欄學號清單仍相容。角色與計畫由上傳區塊決定,身分別由第二欄寫入。重新匯入時可補上既有空白身分別,但不覆蓋既有非空白值;未知身分別的資料列會略過並提示。姓名與學制仍由使用者註冊時填寫。實作位於 `accounts/services.py::_read_quick_roster_rows()`/`import_roster_ids()`。目前(2026-08)系辦實際只有兩個計畫:`NTNU`(師大外籍生輔導)與 `MARYLAND`(馬里蘭大學語言學伴)。
 - 舊版「完整欄位」CSV/Excel(.xlsx)匯入(含姓名、學制、身份別、計畫代碼等欄位)保留在同頁籤的「進階匯入」摺疊區塊(`accounts:roster_import`),仍提供範本下載。
