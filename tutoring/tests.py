@@ -537,17 +537,30 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertEqual(log.target_user, self.tutee)
         self.assertEqual(log.metadata["invitation_id"], invitation.pk)
 
-    def test_accepting_invitation_auto_cancels_tutees_other_invitation_with_audit_log(self):
+    def test_second_tutor_cannot_invite_a_tutee_with_a_pending_invitation(self):
+        """2026-09-10 (user-requested): a tutee can only ever end up with one active tutor,
+        so the first pending invitation now locks them — a different tutor can no longer
+        send a competing invitation while it's unresolved. (Previously any tutor could
+        invite an as-yet-unmatched tutee regardless of other pending invitations.)"""
         other_tutor = self.make_tutor("MULTI-INV-TUTOR", "另一位老師", "Other Tutor")
-        invitation_a = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
-        invitation_b = send_invitation(initiator=other_tutor, tutor_id=other_tutor.pk, tutee_id=self.tutee.pk)
-        respond_to_invitation(invitation_id=invitation_a.pk, responder=self.tutee, accept=True)
-        invitation_b.refresh_from_db()
-        self.assertEqual(invitation_b.status, InvitationStatus.CANCELLED)
-        log = AuditLog.objects.get(event_type="INVITATION_AUTO_CANCELLED")
-        self.assertIsNone(log.actor)
-        self.assertEqual(log.target_user, self.tutee)
-        self.assertEqual(log.metadata["invitation_id"], invitation_b.pk)
+        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=other_tutor, tutor_id=other_tutor.pk, tutee_id=self.tutee.pk)
+
+    def test_tutee_becomes_invitable_again_once_pending_invitation_is_resolved(self):
+        other_tutor = self.make_tutor("MULTI-INV-TUTOR2", "另一位老師二", "Other Tutor 2")
+        invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        cancel_invitation(invitation_id=invitation.pk, actor=self.tutor)
+        second_invitation = send_invitation(initiator=other_tutor, tutor_id=other_tutor.pk, tutee_id=self.tutee.pk)
+        self.assertEqual(second_invitation.status, InvitationStatus.PENDING)
+
+    def test_locked_tutee_is_hidden_from_other_tutors_but_still_shown_to_the_inviter(self):
+        other_tutor = self.make_tutor("MULTI-INV-TUTOR3", "另一位老師三", "Other Tutor 3")
+        send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        other_candidates = {c["user_id"] for c in anonymous_tutee_candidates(semester=self.semester, tutor=other_tutor)}
+        self.assertNotIn(self.tutee.pk, other_candidates)
+        own_candidates = {c["user_id"] for c in anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)}
+        self.assertIn(self.tutee.pk, own_candidates)
 
     def test_dashboard_shows_resolved_invitations_in_history_not_pending_lists(self):
         invitation = send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
@@ -980,15 +993,20 @@ class MatchingTests(MatchingFixtureTestCase):
         with self.assertRaises(ValidationError):
             send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=fourth.pk)
 
-    def test_pending_invitation_cap_counts_both_directions_for_tutee(self):
+    def test_tutee_lock_applies_regardless_of_who_initiated_the_pending_invitation(self):
+        """2026-09-10: superseded the old "3-pending cap counts both directions" rule for
+        tutees specifically — a tutee can now only ever end up with one active tutor, so a
+        single pending invitation (whichever side sent it) locks them well before the
+        general 3-pending cap (MAX_PENDING_INVITATIONS_PER_USER, still relevant for tutors)
+        would matter. Kept the "both directions" framing from the old test since that part
+        of the intent — the lock isn't one-directional — still applies to the new rule."""
         tutor_b = self.make_maryland_tutor("TUTOR210", "第二位老師", "Second Tutor")
         tutor_c = self.make_maryland_tutor("TUTOR220", "第三位老師", "Third Tutor")
-        tutor_d = self.make_maryland_tutor("TUTOR230", "第四位老師", "Fourth Tutor")
-        send_invitation(initiator=self.maryland_tutor, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk)
-        send_invitation(initiator=tutor_b, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk)
-        send_invitation(initiator=self.maryland, tutor_id=tutor_c.pk, tutee_id=self.maryland.pk)
+        send_invitation(initiator=self.maryland, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk)
         with self.assertRaises(ValidationError):
-            send_invitation(initiator=self.maryland, tutor_id=tutor_d.pk, tutee_id=self.maryland.pk)
+            send_invitation(initiator=tutor_b, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk)
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.maryland, tutor_id=tutor_c.pk, tutee_id=self.maryland.pk)
 
     def test_tutor_reaching_capacity_cancels_other_pending_invitations(self):
         tutee_b = self.make_tutee("TUTEE240", "乙學生", "Tutee B", self.ntnu_program)
@@ -1005,17 +1023,14 @@ class MatchingTests(MatchingFixtureTestCase):
         invitation_c.refresh_from_db()
         self.assertEqual(invitation_c.status, InvitationStatus.CANCELLED)
 
-    def test_maryland_initiated_invitation_cancels_tutees_other_pending_on_acceptance(self):
+    def test_maryland_tutee_cannot_invite_a_second_tutor_while_one_invitation_is_pending(self):
+        """2026-09-10: the tutee lock applies the same way regardless of who initiated the
+        pending invitation — a Maryland tutee that already sent (or received) one pending
+        invitation can't also send a second, competing one to a different tutor."""
         tutor_b = self.make_maryland_tutor("TUTOR240", "乙老師", "Tutor B")
-        invitation_to_tutor = send_invitation(
-            initiator=self.maryland, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk
-        )
-        invitation_to_tutor_b = send_invitation(
-            initiator=self.maryland, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk
-        )
-        respond_to_invitation(invitation_id=invitation_to_tutor.pk, responder=self.maryland_tutor, accept=True)
-        invitation_to_tutor_b.refresh_from_db()
-        self.assertEqual(invitation_to_tutor_b.status, InvitationStatus.CANCELLED)
+        send_invitation(initiator=self.maryland, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk)
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.maryland, tutor_id=tutor_b.pk, tutee_id=self.maryland.pk)
 
 
 class MarylandTutorRosterTests(MatchingFixtureTestCase):

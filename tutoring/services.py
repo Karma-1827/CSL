@@ -471,6 +471,18 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
         semester=semester, tutor=tutor, tutee=tutee, status=InvitationStatus.PENDING
     ).exists():
         raise ValidationError("雙方已有一筆等待回覆的邀請。 / A pending invitation already exists.")
+    # A tutee can only ever end up with one active tutor (unlike a tutor, who has room
+    # for two), so the first pending invitation reserves them: other tutors are blocked
+    # from sending a competing invitation until it's accepted, declined, cancelled, or
+    # expires (2026-09-10, user-requested — previously every tutor could independently
+    # invite the same still-unmatched tutee at once).
+    if MatchingInvitation.objects.filter(
+        semester=semester, tutee=tutee, status=InvitationStatus.PENDING
+    ).exclude(tutor=tutor).exists():
+        raise ValidationError(
+            "此學生已有其他老師送出的待回覆邀請，請等候該邀請結束後再試。 / "
+            "This student already has a pending invitation from another tutor. Please wait until it is resolved."
+        )
     if _pending_invitation_count(tutor, semester) >= MAX_PENDING_INVITATIONS_PER_USER:
         raise ValidationError("此 Tutor 待回覆邀請已達上限。 / This tutor has reached the pending invitation limit.")
     if _pending_invitation_count(tutee, semester) >= MAX_PENDING_INVITATIONS_PER_USER:
@@ -669,9 +681,17 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     blocked_tutees = Pairing.objects.filter(semester=semester).filter(
         Q(status=PairingStatus.ACTIVE) | Q(tutor=tutor)
     ).values_list("tutee_id", flat=True)
-    queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).select_related(
-        "tutee__roster_entry"
-    ).order_by("tutee_id")
+    # A tutee with a pending invitation from a different tutor is locked (send_invitation()
+    # now refuses a second, competing invitation — 2026-09-10), so don't show them as an
+    # available candidate to anyone else either; the browsing tutor's *own* pending
+    # invitations are deliberately not excluded here, since those candidates should still
+    # show up (marked "pending" below) rather than disappear from their own list.
+    locked_by_other_tutor = MatchingInvitation.objects.filter(
+        semester=semester, status=InvitationStatus.PENDING
+    ).exclude(tutor=tutor).values_list("tutee_id", flat=True)
+    queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).exclude(
+        tutee_id__in=locked_by_other_tutor
+    ).select_related("tutee__roster_entry").order_by("tutee_id")
     tutor_roster_program = tutor.roster_entry.program if tutor.roster_entry_id else None
     if tutor_roster_program is None:
         queryset = queryset.filter(tutee__roster_entry__program__code="NTNU")
