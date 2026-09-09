@@ -106,6 +106,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "accounts.password_validation.BilingualMinimumLengthValidator", "OPTIONS": {"min_length": 10}},
     {"NAME": "accounts.password_validation.BilingualCommonPasswordValidator"},
     {"NAME": "accounts.password_validation.BilingualNumericPasswordValidator"},
+    {"NAME": "accounts.password_validation.BilingualPasswordComplexityValidator"},
 ]
 
 LANGUAGE_CODE = "zh-hant"

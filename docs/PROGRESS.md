@@ -217,7 +217,9 @@
   - 新增 `accounts/forms.py::AdminProfileEditForm`:中文姓名(必填)、英文姓名(選填)、Email(選填)、新密碼(選填,留空則不修改;有填寫才驗證兩次一致並套用現行密碼規則)。
   - `accounts/views.py::profile()`/`update_profile()` 新增 Admin 分支(此前 Admin 完全無法編輯,`update_profile()` 對 Admin 一律回應 404);密碼變更後呼叫 `update_session_auth_hash()`,確保管理員改自己密碼後目前登入的 session 不會被登出。學號一律不可透過表單修改,與 Tutor/Tutee 既有規則一致。
   - `templates/accounts/profile.html` 新增 `profile_kind == 'admin'` 分支(該模板原本只支援 Tutor/Tutee 欄位),沿用既有 `.two-column-fields`/`.form-note` 樣式,無新增 CSS。
-  - 新增/取代 6 個測試(`accounts/tests.py::ProfileEditTests`/`ProfilePageTests`):取代原本斷言「Admin 無法存取 `update_profile`(404)」的過期測試,新增姓名/Email 更新、姓名必填、密碼變更且登入狀態不中斷、密碼兩次不一致擋下、學號無法被竄改、GET 頁面正確顯示編輯表單。已跑 `ruff check .`、完整測試套件(338 項全過),並以 Django test client 對本機做過真實端到端驗證(改資料、改密碼、確認密碼變更後仍保持登入、確認新密碼可登入)。無 migration。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
+  - 新增/取代 6 個測試(`accounts/tests.py::ProfileEditTests`/`ProfilePageTests`):取代原本斷言「Admin 無法存取 `update_profile`(404)」的過期測試,新增姓名/Email 更新、姓名必填、密碼變更且登入狀態不中斷、密碼兩次不一致擋下、學號無法被竄改、GET 頁面正確顯示編輯表單。已跑 `ruff check .`、完整測試套件(338 項全過),並以 Django test client 對本機做過真實端到端驗證(改資料、改密碼、確認密碼變更後仍保持登入、確認新密碼可登入)。無 migration。
+  - **同日後續調整(使用者測試後回饋)**:「基本資料」唯讀區塊對 Admin 不再顯示學號與電話(學號本來就顯示在頁面上方,電話 Admin 用不到);`new_password1` 的表單標籤簡化為「新密碼 / New password」,說明文字改成編號兩點(密碼規則、選填留空不改)。
+  - **同日發現並修補一個密碼規則真實缺口**:使用者測試改密碼功能時發現全小寫的密碼(如一長串小寫英文)可以通過現有全部密碼驗證器(長度、相似度、常見密碼、非純數字皆未檢查字元類型混合)。新增 `accounts/password_validation.py::BilingualPasswordComplexityValidator`,要求密碼同時包含大寫字母、小寫字母、數字與特殊符號,已加入 `config/settings.py::AUTH_PASSWORD_VALIDATORS`。這條規則透過共用的 `accounts/forms.py::PASSWORD_RULES_HELP_TEXT`(已同步改寫)同時套用到公開註冊頁、忘記密碼「設定新密碼」頁與 Admin 個人資料頁,不需要逐頁分別修改。新增 `accounts/tests.py::RegistrationTests::test_registration_rejects_password_missing_character_complexity` 驗證全小寫密碼確實被拒絕;重跑完整測試套件確認既有測試用的密碼(皆已混合大小寫/數字/符號)不受影響(339 項全過)。無 migration。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
 
 ## 版本規劃
 

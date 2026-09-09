@@ -63,3 +63,31 @@ class BilingualNumericPasswordValidator(NumericPasswordValidator):
                 "Your password cannot be entirely numeric. Please include letters or symbols.",
                 code="password_entirely_numeric",
             )
+
+
+class BilingualPasswordComplexityValidator:
+    """Requires at least one uppercase letter, one lowercase letter, one digit, and one
+    special/symbol character. None of Django's built-in validators check character-class
+    mixing — an all-lowercase password like "abcdefghijk" passed every existing validator
+    (length, similarity, common-password, not-all-numeric) — found while testing the Admin
+    profile edit form's own password-change field (2026-09-09)."""
+
+    def validate(self, password, user=None):
+        if (
+            any(char.isupper() for char in password)
+            and any(char.islower() for char in password)
+            and any(char.isdigit() for char in password)
+            and any(not char.isalnum() for char in password)
+        ):
+            return
+        raise ValidationError(
+            "密碼需混合大寫字母、小寫字母、數字與特殊符號。 / "
+            "Your password must mix uppercase letters, lowercase letters, digits, and special symbols.",
+            code="password_missing_complexity",
+        )
+
+    def get_help_text(self):
+        return (
+            "密碼需混合大寫字母、小寫字母、數字與特殊符號。 / "
+            "Your password must mix uppercase letters, lowercase letters, digits, and special symbols."
+        )

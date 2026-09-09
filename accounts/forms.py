@@ -224,9 +224,9 @@ def roster_registration_identity(roster):
 
 
 PASSWORD_RULES_HELP_TEXT = (
-    "密碼需至少 10 個字元，且不可全為數字、不可是常見密碼，也不可與您的學號、姓名或 Email 太相似。\n"
-    "Your password must be at least 10 characters, cannot be entirely numeric or a common password, "
-    "and cannot be too similar to your student ID, name, or email."
+    "密碼需至少 10 個字元，混合大寫與小寫字母、數字、特殊符號，不可是常見密碼，也不可與您的學號、姓名或 Email 太相似。\n"
+    "Your password must be at least 10 characters, mixing uppercase and lowercase letters, digits, and "
+    "special symbols; it cannot be a common password or too similar to your student ID, name, or email."
 )
 
 
@@ -825,10 +825,15 @@ class AdminProfileEditForm(forms.Form):
     name_en = forms.CharField(label="英文姓名 / English name", max_length=150, required=False)
     email = forms.EmailField(label="Email", max_length=254, required=False)
     new_password1 = forms.CharField(
-        label="新密碼（選填，留空則不修改） / New password (optional, leave blank to keep current)",
+        label="新密碼 / New password",
         required=False, strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
-        help_text=PASSWORD_RULES_HELP_TEXT,
+        help_text=(
+            "1. 密碼需至少 10 個字元，混合大寫與小寫字母、數字、特殊符號。\n"
+            "1. Must be at least 10 characters, mixing uppercase and lowercase letters, digits, and special symbols.\n"
+            "2. 選填欄位，留空表示不修改密碼。\n"
+            "2. Optional — leave both fields blank to keep your current password."
+        ),
     )
     new_password2 = forms.CharField(
         label="再次輸入新密碼 / Confirm new password", required=False, strip=False,

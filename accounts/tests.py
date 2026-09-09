@@ -208,6 +208,20 @@ class RegistrationTests(TestCase):
         self.assertContains(response, "密碼至少需要 10 個字元")
         self.assertContains(response, "at least 10 characters long")
 
+    def test_registration_rejects_password_missing_character_complexity(self):
+        """An all-lowercase password used to pass every validator (length, similarity,
+        common-password, not-all-numeric) — found while testing the Admin profile edit
+        form's own password-change field (2026-09-09). BilingualPasswordComplexityValidator
+        now requires uppercase, lowercase, digit, and symbol together."""
+        response = self.client.post(
+            reverse("accounts:register"),
+            {"student_id": "TEST1001", "registration_identity": "LOCAL", "password1": "verylongbutlowercaseonly", "password2": "verylongbutlowercaseonly"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密碼需混合大寫字母、小寫字母、數字與特殊符號")
+        self.assertContains(response, "must mix uppercase letters, lowercase letters, digits, and special symbols")
+        self.assertFalse(RegistrationDraft.objects.filter(roster_entry=self.roster).exists())
+
     def test_registration_rejects_password_too_similar_to_student_id(self):
         response = self.client.post(
             reverse("accounts:register"),
