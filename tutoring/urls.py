@@ -40,7 +40,7 @@ urlpatterns = [
     path("classes/<int:pk>/alert/", views.class_alert, name="class_alert"),
     path("classes/<int:pk>/alert/<int:alert_id>/cancel/", views.cancel_alert, name="cancel_alert"),
     path("alerts/<int:alert_id>/resolve/", views.resolve_alert, name="resolve_alert"),
-    path("classes/<int:pk>/incident-report/", views.incident_report, name="incident_report"),
+    path("incident-reports/submit/", views.incident_report, name="incident_report"),
     path(
         "incident-reports/<int:report_id>/resolve/",
         views.resolve_incident_report_view,

@@ -3,6 +3,7 @@ from datetime import time
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+from django.db.models import Q
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
@@ -219,11 +220,22 @@ class ClassAlertForm(forms.ModelForm):
         widgets = {"note": forms.Textarea(attrs={"rows": 3})}
 
 
-class IncidentReportForm(forms.ModelForm):
+class StandaloneIncidentReportForm(forms.ModelForm):
+    """Filed from the "異常回報 / Incident reports" dashboard tab (2026-09-10), not tied
+    to a specific class's detail page — the session itself is a field, picked from a
+    dropdown of the user's own classes, rather than being bound via a URL argument."""
+
     class Meta:
         model = IncidentReport
-        fields = ("category", "content")
+        fields = ("session", "category", "content")
         widgets = {"content": forms.Textarea(attrs={"rows": 3})}
+
+    def __init__(self, *args, user, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["session"].queryset = ClassSession.objects.filter(
+            Q(pairing__tutor=user) | Q(pairing__tutee=user)
+        ).select_related("pairing__tutor", "pairing__tutee").order_by("-class_date", "-start_time")
+        self.fields["session"].label = "課程 / Class"
 
 
 class MakeupReasonForm(forms.Form):

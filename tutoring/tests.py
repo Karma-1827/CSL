@@ -1985,6 +1985,55 @@ class ClassWorkflowTests(TestCase):
                 content="   ",
             )
 
+    def test_standalone_incident_report_can_be_submitted_from_the_dashboard(self):
+        """2026-09-10: incident reports moved from a per-class form (bound to a session via
+        the class detail page's URL) to their own dashboard tab, with the session itself
+        picked from a dropdown — see docs/PROGRESS.md."""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("tutoring:incident_report"),
+            {"session": session.pk, "category": "STUDENT_ABSENT", "content": "學生當天未出席。"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+        report = IncidentReport.objects.get(session=session, reporter=self.tutor)
+        self.assertEqual(report.category, "STUDENT_ABSENT")
+        log = AuditLog.objects.get(event_type="INCIDENT_REPORT_SUBMITTED")
+        self.assertEqual(log.actor, self.tutor)
+        self.assertEqual(log.metadata["session_id"], session.pk)
+
+    def test_standalone_incident_report_session_choices_are_restricted_to_own_classes(self):
+        class_date = timezone.localdate()
+        own_session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        other_tutor = User.objects.create_user(username="OTHER-CLASS-TUTOR", password="Test-password-2026", role=Role.TUTOR)
+        other_tutee = User.objects.create_user(username="OTHER-CLASS-TUTEE", password="Test-password-2026", role=Role.TUTEE)
+        other_pairing = Pairing.objects.create(semester=self.semester, tutor=other_tutor, tutee=other_tutee)
+        other_session = schedule_classes(
+            tutor=other_tutor, pairing=other_pairing, class_date=class_date,
+            start_time=time(14), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+
+        self.client.force_login(self.tutor)
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        form = dashboard.context["incident_report_form"]
+        session_choices = set(form.fields["session"].queryset.values_list("pk", flat=True))
+        self.assertIn(own_session.pk, session_choices)
+        self.assertNotIn(other_session.pk, session_choices)
+
+        response = self.client.post(
+            reverse("tutoring:incident_report"),
+            {"session": other_session.pk, "category": "OTHER", "content": "不是我的課程。"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+        self.assertFalse(IncidentReport.objects.filter(session=other_session).exists())
+
     def test_admin_can_resolve_incident_report_and_dashboard_history_updates(self):
         class_date = timezone.localdate()
         session = schedule_classes(

@@ -14,11 +14,12 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.models import AuditLog, PartnerProgram, Role
 
 from .forms import (
-    AdminPairingForm, ClassAlertForm, ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm, IncidentReportForm,
+    AdminPairingForm, ClassAlertForm, ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm,
     PairingMessageForm, RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
+    StandaloneIncidentReportForm,
 )
 from .models import (
-    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassSession, IncidentReport,
+    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassSession,
     Pairing, PairingMessage, PairingStatus, Semester,
 )
 from .reporting import (
@@ -597,7 +598,6 @@ def class_detail(request, pk):
     own_alert = ClassAlert.objects.filter(
         session=session, reporter=request.user, status=ClassAlertStatus.ACTIVE
     ).first()
-    own_incident_reports = IncidentReport.objects.filter(session=session, reporter=request.user)
     now = timezone.now()
     form = ClassRecordForm(request.POST or None, request.FILES or None, instance=own_record, author=request.user)
     reschedule_form = RescheduleClassForm(
@@ -637,8 +637,6 @@ def class_detail(request, pk):
             "own_confirmation": own_confirmation,
             "own_alert": own_alert,
             "alert_form": ClassAlertForm(),
-            "own_incident_reports": own_incident_reports,
-            "incident_report_form": IncidentReportForm(),
             "checkin_requires_makeup_reason": now > session.ends_at + timedelta(minutes=30),
             "record_requires_makeup_reason": own_record is None and now > session.ends_at + timedelta(hours=24),
             "alert_window_open": session.starts_at <= now <= session.ends_at,
@@ -800,17 +798,26 @@ def resolve_alert(request, alert_id):
 
 @login_required
 @require_POST
-def incident_report(request, pk):
-    _session_for_user(request.user, pk)
-    form = IncidentReportForm(request.POST)
+def incident_report(request):
+    """Standalone dashboard version (2026-09-10): originally only reachable from a
+    specific class's detail page (tied to that class via the URL); now the class itself
+    is a field on the form, filed from the "異常回報 / Incident reports" dashboard tab
+    instead — see docs/PROGRESS.md for why. StandaloneIncidentReportForm's own queryset
+    already restricts `session` to the user's classes, and submit_incident_report()
+    re-checks participation itself, so an unrelated session id can't slip through either
+    layer."""
+    if request.user.role not in {Role.TUTOR, Role.TUTEE}:
+        raise Http404
+    form = StandaloneIncidentReportForm(request.POST, user=request.user)
     if not form.is_valid():
         for errors in form.errors.values():
             for error in errors:
                 messages.error(request, error)
-        return redirect("tutoring:class_detail", pk=pk)
+        return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
+    session = form.cleaned_data["session"]
     try:
         report = submit_incident_report(
-            session_id=pk,
+            session_id=session.pk,
             reporter=request.user,
             category=form.cleaned_data["category"],
             content=form.cleaned_data["content"],
@@ -822,10 +829,10 @@ def incident_report(request, pk):
             actor=request.user,
             event_type="INCIDENT_REPORT_SUBMITTED",
             description="送出異常回報 / Incident report submitted",
-            metadata={"report_id": report.pk, "session_id": pk, "category": report.category},
+            metadata={"report_id": report.pk, "session_id": session.pk, "category": report.category},
         )
         messages.success(request, "異常回報已送出。 / Incident report submitted.")
-    return redirect("tutoring:class_detail", pk=pk)
+    return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
 
 
 @login_required

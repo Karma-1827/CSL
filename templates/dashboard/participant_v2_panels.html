@@ -74,3 +74,21 @@
     </details>
   </section>
 </section>
+
+<section class="dashboard-view" data-dashboard-panel="incident-reports">
+  <div class="view-heading"><span>INCIDENT REPORTS</span><h2>異常回報 <small>Incident reports</small></h2><p>可針對自己參與過的任一堂課送出事後分類回報，不限上課時間內；只有管理員能標記處理完成。<br>File an after-the-fact report for any of your own classes, not limited to class time; only administrators can mark these logged.</p></div>
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">NEW</span><h2>送出回報 <small>Submit a report</small></h2></div></div>
+    <form action="{% url 'tutoring:incident_report' %}" method="post" class="stack-form">{% csrf_token %}{{ incident_report_form.as_p }}<button class="button button-secondary" type="submit">送出回報 / Submit report</button></form>
+  </section>
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>我送出的回報 <small>My submitted reports</small></h2></div></div>
+    {% if own_incident_reports %}
+      <div class="incident-report-list">
+        {% for report in own_incident_reports %}
+          <div class="profile-note-box"><span>{{ report.session.class_date|date:"Y-m-d" }} · {{ report.get_category_display }} · {% if report.status == 'RESOLVED' %}已紀錄 / Logged{% else %}待處理 / Pending{% endif %}</span><p>{{ report.content }}</p>{% if report.resolution_note %}<p><em>紀錄備註 / Note：{{ report.resolution_note }}</em></p>{% endif %}</div>
+        {% endfor %}
+      </div>
+    {% else %}<div class="empty-state">目前沒有送出過異常回報。 / You haven't submitted any incident reports yet.</div>{% endif %}
+  </section>
+</section>

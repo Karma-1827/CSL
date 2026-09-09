@@ -48,6 +48,7 @@ from tutoring.forms import (
     ScheduleClassForm,
     SemesterCreateForm,
     SemesterSettingsForm,
+    StandaloneIncidentReportForm,
 )
 from tutoring.reporting import user_has_hour_records
 from tutoring.services import (
@@ -671,6 +672,10 @@ def dashboard(request):
                     pairing for pairing in conversation_pairings if pairing.status == PairingStatus.ENDED
                 ],
                 "unread_message_total": sum(pairing.unread_count for pairing in conversation_pairings),
+                "incident_report_form": StandaloneIncidentReportForm(user=request.user),
+                "own_incident_reports": IncidentReport.objects.filter(reporter=request.user)
+                .select_related("session__pairing__tutor", "session__pairing__tutee")
+                .order_by("-created_at"),
             }
         )
     elif request.user.role == Role.ADMIN:

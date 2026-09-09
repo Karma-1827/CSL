@@ -32,19 +32,21 @@
             <a class="sidebar-link sidebar-link-external" href="{% url 'admin:accounts_rosterentry_changelist' %}"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
           {% elif request.user.role == 'TUTOR' %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
+            <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力證明<small>Oral proficiency</small></b></a>
+            <a class="sidebar-link" href="#find-tutee" data-dashboard-target="find-tutee"><span aria-hidden="true">⌕</span><b>尋找學生<small>Find students</small></b></a>
+            <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#schedule" data-dashboard-target="schedule"><span aria-hidden="true">▦</span><b>我的課表<small>Schedule</small></b></a>
             <a class="sidebar-link" href="#hours" data-dashboard-target="hours"><span aria-hidden="true">◷</span><b>輔導時數<small>Hours</small></b></a>
             <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#find-tutee" data-dashboard-target="find-tutee"><span aria-hidden="true">⌕</span><b>尋找學生<small>Find students</small></b></a>
-            <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力證明<small>Oral proficiency</small></b></a>
+            <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b></a>
           {% else %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
+            {% if is_maryland %}<a class="sidebar-link" href="#find-tutor" data-dashboard-target="find-tutor"><span aria-hidden="true">⌕</span><b>尋找老師<small>Find teachers</small></b></a>{% endif %}
+            <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#schedule" data-dashboard-target="schedule"><span aria-hidden="true">▦</span><b>我的課表<small>Schedule</small></b></a>
             <a class="sidebar-link" href="#hours" data-dashboard-target="hours"><span aria-hidden="true">◷</span><b>輔導紀錄<small>History</small></b></a>
             <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
-            {% if is_maryland %}<a class="sidebar-link" href="#find-tutor" data-dashboard-target="find-tutor"><span aria-hidden="true">⌕</span><b>尋找老師<small>Find teachers</small></b></a>{% endif %}
+            <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b></a>
           {% endif %}
         </nav>
         <div class="sidebar-note"><span>匿名媒合 / Private matching</span><small>配對成立前不顯示個人身分。<br>Identity stays hidden until matched.</small></div>

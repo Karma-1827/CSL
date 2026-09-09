@@ -265,6 +265,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 通報者送出後不能自行撤回,只有 Admin 能標記為已紀錄(內部狀態值仍是 `RESOLVED`)並留備註,同樣是「已知悉留存」而非「已解決」的語意。
 - 無附件上傳。
 - Admin dashboard「異常回報」頁籤有 PENDING 待處理 + HISTORY 已紀錄兩區塊,紀錄含紀錄人、紀錄時間、備註。
+- **2026-09-10 起 Tutor/Tutee 端改為獨立頁籤送出,不再綁在單一課程頁面**:原本 `IncidentReportForm` 固定附掛在 `class_detail.html`(URL 帶課程 `pk`,只能對「當下打開的這一堂課」送出),使用者要求「從查看課程拉出來單獨一個介面」。新增 `tutoring/forms.py::StandaloneIncidentReportForm`(在 `IncidentReportForm` 的 category/content 之外多一個 `session` 下拉欄位,`__init__` 依登入者過濾成只能選自己參與過的課程),對應的 `tutoring/views.py::incident_report()` 改為無 `pk` 參數(URL 改成 `matching/incident-reports/submit/`),送出後一律導回 Dashboard 的「異常回報」頁籤而非某一堂課的詳情頁。舊的 `IncidentReportForm`(只有 category/content,靠 URL 綁課程)已完全移除,沒有保留相容路徑。Tutor/Tutee dashboard 新增共用區塊(`templates/dashboard/participant_v2_panels.html`,原本只有 hours/messages 兩個頁籤在這個檔案,現在加第三個),含送出表單與「我送出的回報」歷史清單;`class_detail.html` 不再顯示異常回報區塊(課堂通報 `ClassAlert` 維持原樣不受影響,仍綁在課程詳情頁,因為它本來就是有時間窗限制、上課中才用得到的功能)。
 
 ### 4.8 私訊
 
