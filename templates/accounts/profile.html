@@ -7,7 +7,6 @@
 <div class="app-shell">
   {% include "components/app_header.html" %}
   <main id="main-content" class="profile-page-main">
-    {% include "components/messages.html" %}
     <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
 
     <section class="profile-hero">
@@ -114,6 +113,7 @@
 
         {% if edit_form %}
           <section class="profile-card is-editable" id="edit-profile">
+            {% include "components/messages.html" %}
             {% if profile_kind == 'admin' %}
               <div class="profile-card-heading"><div><span>02</span><h2>編輯個人資料 <small>Edit profile</small></h2></div></div>
             {% else %}
