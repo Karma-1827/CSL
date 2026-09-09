@@ -287,6 +287,12 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-10（三十七～三十九）**：操作者 Claude Code(依使用者指示執行)。連續三個小型部署,合併記錄:
+  - `40be728`(配對後不顯示彼此學號;佐證連結範例「上課畫面截圖」改「實際授課照片」)
+  - `4836aca`(發現排課下拉選單用 `Pairing.__str__()` 間接洩漏雙方學號,新增 `PairingChoiceField` 修正)
+  - `ae65d58`(發現異常回報下拉選單用 `ClassSession.__str__()` 同樣間接洩漏,新增 `_OwnSessionChoiceField` 修正)
+  三次皆無 migration、無相依套件變更、無靜態資源變更,部署前依序備份:`/var/backups/mpts/20260910-023533`、`20260910-024147`、`20260910-024656`。每次部署後皆以 `curl` 確認首頁 200、`journalctl` 無新增錯誤,並實際用 `demo-tutor` 帳號登入正式站驗證:個人資料頁與 Dashboard 配對卡片不再顯示對方學號、排課表單與異常回報表單的下拉選單皆改顯示姓名而非學號。三次 `git checkout --detach` 皆乾淨無衝突。臨時 sudo 授權依使用者指示維持開啟。
+
 - **2026-09-10（三十六）**：操作者 Claude Code(依使用者指示執行)。上一版 `cd2af49` → 新版 `c6ec727`(Tutor 側邊欄重新排序,Tutee 同步調整;異常回報從課程詳情頁拉出獨立成 Dashboard 頁籤,新增 `StandaloneIncidentReportForm` 讓使用者從下拉選單挑選自己的任一堂課,不必先點進特定課程,詳見 `docs/PROGRESS.md`)。無 migration、無相依套件變更、無靜態資源變更。部署前備份:`/var/backups/mpts/20260910-020125`。驗收:`https://mpts.tcsl.ntnu.edu.tw/` 回應 200,`journalctl` 無新增錯誤;實際用明天demo要用的 `demo-tutor` 帳號驗證側邊欄新順序、開啟「異常回報」頁籤、從下拉選單選課程並成功送出一筆回報(順便留一筆真實紀錄供明日展示)。`git checkout --detach` 乾淨無衝突。臨時 sudo 授權依使用者指示維持開啟。
 
 - **2026-09-10（三十五）**：操作者 Claude Code(依使用者指示執行)。上一版 `51ee004` → 新版 `f469db3`(密碼等欄位錯誤改顯示在該欄位下方,不再只靠頁面訊息:使用者詢問「密碼錯誤提醒可以放在密碼欄位下方嗎」後,把 `update_profile()` 驗證失敗的處理方式從「導向 + flash message」改成「直接 render 個人資料頁並帶回失效表單」,讓既有的 `components/form_field.html` 逐欄位錯誤顯示生效;成功時仍維持 redirect 避免重整表單重複送出。詳見 commit message)。無 migration、無相依套件變更、無靜態資源變更。部署前備份:`/var/backups/mpts/20260910-005456`。驗收:`https://mpts.tcsl.ntnu.edu.tw/` 回應 200,`journalctl` 無新增錯誤;另外用 `jimmy` 帳號實際送出密碼不一致的表單,確認錯誤文字直接出現在「再次輸入新密碼」欄位下方(`<div class="form-group has-error">`內),而非頁面上方的通用訊息。`git checkout --detach` 乾淨無衝突。**附帶發現**:核對 `AuditLog` 時確認 `fang.chii` 已在稍早(9/9 16:46)自行改好中文姓名、Email 並設定新密碼(`password_changed: True`),原臨時密碼已失效——這是預期中的正常使用,不是異常。臨時 sudo 授權依使用者指示維持開啟。
