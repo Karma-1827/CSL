@@ -58,7 +58,7 @@ def valid_sessions_for_user(user, starts_on, ends_on, program=None):
     ).select_related(
         "pairing__semester", "pairing__tutor", "pairing__tutee", "pairing__tutee__tutee_profile"
     ).prefetch_related(
-        "attendances", "class_records", "confirmations", "makeup_review"
+        "attendances", "class_records", "confirmations", "class_review"
     ).order_by("class_date", "start_time")
     if program is not None:
         rows = rows.filter(pairing__tutee__roster_entry__program=program)
@@ -699,7 +699,7 @@ def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=No
         sessions = ClassSession.objects.filter(participant).select_related(
             "pairing__semester", "pairing__tutor", "pairing__tutee",
             "pairing__tutee__roster_entry__program",
-        ).prefetch_related("attendances", "class_records", "confirmations", "makeup_review")
+        ).prefetch_related("attendances", "class_records", "confirmations", "class_review")
         if program is not None:
             sessions = sessions.filter(pairing__tutee__roster_entry__program=program)
         if starts_on:

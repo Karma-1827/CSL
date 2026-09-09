@@ -29,14 +29,14 @@ from .models import (
     ClassAlertStatus,
     ClassDocument,
     ClassRecord,
+    ClassReview,
+    ClassReviewStatus,
     ClassSession,
     ClassSessionStatus,
     ConfirmationStatus,
     IncidentReport,
     IncidentReportCategory,
     IncidentReportStatus,
-    MakeupReview,
-    MakeupReviewStatus,
 )
 
 
@@ -993,8 +993,6 @@ def check_in(*, session_id, participant, reason="", now=None):
     attendance = Attendance.objects.create(
         session=session, participant=participant, signed_at=now, is_makeup=is_makeup, makeup_reason=reason.strip()
     )
-    if is_makeup:
-        MakeupReview.objects.get_or_create(session=session)
     return attendance
 
 
@@ -1021,10 +1019,13 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
         author=author,
         defaults={**data, "is_makeup": existing.is_makeup if existing else is_makeup, "makeup_reason": existing.makeup_reason if existing else reason.strip()},
     )
-    if record.is_makeup:
-        review, _ = MakeupReview.objects.get_or_create(session=session)
-        if review.status in {MakeupReviewStatus.APPROVED, MakeupReviewStatus.REJECTED}:
-            review.status = MakeupReviewStatus.WAITING
+    if existing:
+        # Editing a record after it already has a review decision invalidates that
+        # decision (2026-09-10): applies to every session now, not just makeup ones,
+        # since every session's review can be reset by a later edit either way.
+        review, _ = ClassReview.objects.get_or_create(session=session)
+        if review.status in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED}:
+            review.status = ClassReviewStatus.WAITING
             review.reviewed_by = None
             review.review_note = ""
             review.reviewed_at = None
@@ -1033,16 +1034,19 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
     return record
 
 
-def _sync_makeup_review(session):
-    has_makeup = session.attendances.filter(is_makeup=True).exists() or session.class_records.filter(is_makeup=True).exists()
-    if not has_makeup:
-        return
-    review, _ = MakeupReview.objects.get_or_create(session=session)
+def _sync_class_review(session):
+    """Keep the session's ClassReview status in step with mutual confirmation.
+
+    2026-09-10 (user-requested): every class now needs admin approval on top of mutual
+    confirmation to count as valid hours, not just late/makeup ones as before — so this
+    runs unconditionally for every session, not only when a makeup attendance/record is
+    involved (see the removed has_makeup gate in prior versions of this function)."""
+    review, _ = ClassReview.objects.get_or_create(session=session)
     confirmed = session.confirmations.filter(
         status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
     ).count() == 2
-    target = MakeupReviewStatus.PENDING if confirmed else MakeupReviewStatus.WAITING
-    if review.status not in {MakeupReviewStatus.APPROVED, MakeupReviewStatus.REJECTED} and review.status != target:
+    target = ClassReviewStatus.PENDING if confirmed else ClassReviewStatus.WAITING
+    if review.status not in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED} and review.status != target:
         review.status = target
         review.save(update_fields=["status", "updated_at"])
 
@@ -1068,11 +1072,16 @@ def confirm_counterpart(*, session_id, reviewer, status, note=""):
             "note": note.strip(),
         },
     )
-    _sync_makeup_review(session)
+    _sync_class_review(session)
     return confirmation
 
 
 def class_is_valid(session):
+    """2026-09-10 (user-requested): every session now requires an approved ClassReview
+    to count as valid hours, in addition to mutual confirmation — regardless of whether
+    it was completed on time or as a makeup. Previously only makeup sessions needed this
+    extra admin approval step; on-time sessions became valid as soon as both parties
+    confirmed. See CLAUDE.md 4.6."""
     if session.status != ClassSessionStatus.SCHEDULED:
         return False
     if session.attendances.count() != 2 or session.class_records.count() != 2:
@@ -1081,20 +1090,17 @@ def class_is_valid(session):
         status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
     ).count() != 2:
         return False
-    has_makeup = session.attendances.filter(is_makeup=True).exists() or session.class_records.filter(is_makeup=True).exists()
-    return not has_makeup or (
-        hasattr(session, "makeup_review") and session.makeup_review.status == MakeupReviewStatus.APPROVED
-    )
+    return hasattr(session, "class_review") and session.class_review.status == ClassReviewStatus.APPROVED
 
 
 @transaction.atomic
-def review_makeup(*, session_id, admin, approve, note=""):
+def review_class_session(*, session_id, admin, approve, note=""):
     if admin.role != Role.ADMIN:
-        raise ValidationError("只有管理員可以審核補登。 / Only administrators may review makeup entries.")
-    review = MakeupReview.objects.select_for_update().select_related("session").get(session_id=session_id)
-    if review.status != MakeupReviewStatus.PENDING:
-        raise ValidationError("此補登尚未進入可審核狀態。 / This makeup entry is not ready for review.")
-    review.status = MakeupReviewStatus.APPROVED if approve else MakeupReviewStatus.REJECTED
+        raise ValidationError("只有管理員可以審核課程。 / Only administrators may review classes.")
+    review = ClassReview.objects.select_for_update().select_related("session").get(session_id=session_id)
+    if review.status != ClassReviewStatus.PENDING:
+        raise ValidationError("此課程尚未進入可審核狀態。 / This class is not ready for review.")
+    review.status = ClassReviewStatus.APPROVED if approve else ClassReviewStatus.REJECTED
     review.reviewed_by = admin
     review.review_note = note.strip()
     review.reviewed_at = timezone.now()

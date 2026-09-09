@@ -35,11 +35,11 @@ from tutoring.models import (
     ClassSessionStatus,
     ClassAlert,
     ClassAlertStatus,
+    ClassReview,
+    ClassReviewStatus,
     HourAdjustment,
     IncidentReport,
     IncidentReportStatus,
-    MakeupReview,
-    MakeupReviewStatus,
 )
 from tutoring.forms import (
     AdminPairingForm,
@@ -321,7 +321,7 @@ def dashboard(request):
         all_classes = list(
             ClassSession.objects.select_related(
                 "pairing__semester", "pairing__tutor", "pairing__tutee"
-            ).prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "makeup_review")
+            ).prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "class_review")
             .filter(pairing__semester=overview_semester) if overview_semester else ClassSession.objects.none()
         )
         all_classes.sort(key=lambda row: (row.class_date, row.start_time), reverse=True)
@@ -345,9 +345,9 @@ def dashboard(request):
                     reasons.append("互相確認未完成 / Confirmation incomplete")
             if session.active_alert_count:
                 reasons.append("課堂通報待處理 / Active class alert")
-            review = getattr(session, "makeup_review", None)
-            if review and review.status in {MakeupReviewStatus.WAITING, MakeupReviewStatus.PENDING, MakeupReviewStatus.REJECTED}:
-                reasons.append(f"補登：{review.get_status_display()}")
+            review = getattr(session, "class_review", None)
+            if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED}:
+                reasons.append(f"課程審核：{review.get_status_display()}")
             session.anomaly_reasons = reasons
             if reasons:
                 anomaly_classes.append(session)
@@ -589,7 +589,7 @@ def dashboard(request):
         participant_filter = Q(pairing__tutor=request.user) if request.user.role == Role.TUTOR else Q(pairing__tutee=request.user)
         class_sessions = ClassSession.objects.filter(participant_filter).select_related(
             "pairing__semester", "pairing__tutor", "pairing__tutee"
-        ).prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "makeup_review")
+        ).prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "class_review")
         all_rows = list(class_sessions.order_by("class_date", "start_time"))
         for session in all_rows:
             session.is_official = class_is_valid(session)
@@ -679,12 +679,12 @@ def dashboard(request):
             }
         )
     elif request.user.role == Role.ADMIN:
-        makeup_reviews = list(
-            MakeupReview.objects.select_related(
+        class_reviews = list(
+            ClassReview.objects.select_related(
                 "session__pairing__semester", "session__pairing__tutor", "session__pairing__tutee", "reviewed_by"
             ).prefetch_related("session__attendances", "session__class_records").order_by("-created_at")
         )
-        for review in makeup_reviews:
+        for review in class_reviews:
             has_makeup_attendance = any(row.is_makeup for row in review.session.attendances.all())
             has_makeup_record = any(row.is_makeup for row in review.session.class_records.all())
             if has_makeup_attendance and has_makeup_record:
@@ -693,27 +693,30 @@ def dashboard(request):
             elif has_makeup_attendance:
                 review.category_label = "補簽到"
                 review.category_label_en = "Attendance"
-            else:
+            elif has_makeup_record:
                 review.category_label = "補課堂紀錄"
                 review.category_label_en = "Class record"
+            else:
+                review.category_label = "一般課程"
+                review.category_label_en = "Regular class"
         status_definitions = (
-            (MakeupReviewStatus.PENDING, "等待管理員核准", "Waiting for admin approval", True),
-            (MakeupReviewStatus.WAITING, "等待雙方確認", "Waiting for mutual confirmation", False),
-            (MakeupReviewStatus.APPROVED, "已核准", "Approved", False),
-            (MakeupReviewStatus.REJECTED, "未核准", "Rejected", False),
+            (ClassReviewStatus.PENDING, "等待管理員核准", "Waiting for admin approval", True),
+            (ClassReviewStatus.WAITING, "等待雙方確認", "Waiting for mutual confirmation", False),
+            (ClassReviewStatus.APPROVED, "已核准", "Approved", False),
+            (ClassReviewStatus.REJECTED, "未核准", "Rejected", False),
         )
-        context["makeup_review_sections"] = [
+        context["class_review_sections"] = [
             {
                 "status": status,
                 "label": label,
                 "label_en": label_en,
                 "open": is_open,
-                "rows": [review for review in makeup_reviews if review.status == status],
+                "rows": [review for review in class_reviews if review.status == status],
             }
             for status, label, label_en, is_open in status_definitions
         ]
-        context["pending_makeup_reviews"] = [
-            review for review in makeup_reviews if review.status == MakeupReviewStatus.PENDING
+        context["pending_class_reviews"] = [
+            review for review in class_reviews if review.status == ClassReviewStatus.PENDING
         ]
         context["active_class_alerts"] = ClassAlert.objects.filter(
             status=ClassAlertStatus.ACTIVE
@@ -745,7 +748,7 @@ def admin_tutor_schedule(request, user_id):
         sessions = list(
             ClassSession.objects.filter(pairing__tutor=tutor, pairing__semester=semester)
             .select_related("pairing__semester", "pairing__tutee")
-            .prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "makeup_review")
+            .prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "class_review")
             .order_by("class_date", "start_time")
         )
     now = timezone.now()
@@ -762,8 +765,8 @@ def admin_tutor_schedule(request, user_id):
                 reasons.append("互相確認未完成 / Confirmation incomplete")
         if any(row.status == ClassAlertStatus.ACTIVE for row in session.class_alerts.all()):
             reasons.append("課堂通報待處理 / Active class alert")
-        review = getattr(session, "makeup_review", None)
-        if review and review.status in {MakeupReviewStatus.WAITING, MakeupReviewStatus.PENDING, MakeupReviewStatus.REJECTED}:
+        review = getattr(session, "class_review", None)
+        if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED}:
             reasons.append(f"補登：{review.get_status_display()}")
         session.anomaly_reasons = reasons
         exception_count += bool(reasons)

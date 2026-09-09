@@ -73,6 +73,6 @@ class Command(BaseCommand):
         session.class_records.all().delete()
         session.confirmations.all().delete()
         session.class_alerts.all().delete()
-        if hasattr(session, "makeup_review"):
-            session.makeup_review.delete()
+        if hasattr(session, "class_review"):
+            session.class_review.delete()
         return session

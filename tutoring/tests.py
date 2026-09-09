@@ -21,7 +21,7 @@ from .reporting import build_excel_xlsx, build_export_csv, build_hours_pdf, tuto
 from .models import (
     InvitationStatus,
     MatchingInvitation,
-    MakeupReview,
+    ClassReview,
     Pairing,
     PairingReleaseReason,
     PairingReleaseRequest,
@@ -46,7 +46,7 @@ from .models import (
     IncidentReport,
     IncidentReportCategory,
     IncidentReportStatus,
-    MakeupReviewStatus,
+    ClassReviewStatus,
     validate_class_document_file,
     validate_class_record_attachment,
     validate_qualification_file,
@@ -56,7 +56,7 @@ from .admin import (
     ClassConfirmationAdmin,
     ClassRecordAdmin,
     ClassSessionAdmin,
-    MakeupReviewAdmin,
+    ClassReviewAdmin,
     MatchingInvitationAdmin,
     PairingAdmin,
     PairingReleaseRequestAdmin,
@@ -75,7 +75,7 @@ from .services import (
     respond_to_invitation,
     resolve_class_alert,
     resolve_incident_report,
-    review_makeup,
+    review_class_session,
     report_class_alert,
     process_pending_pairing_releases,
     review_pairing_release_request,
@@ -1227,18 +1227,18 @@ class ClassWorkflowTests(TestCase):
         response = self.client.post(reverse("tutoring:class_cancel", args=[session.pk]))
         self.assertRedirects(response, reverse("accounts:dashboard") + "#schedule")
 
-    def test_makeup_review_without_next_param_returns_to_makeup_review_tab(self):
+    def test_class_review_without_next_param_returns_to_class_review_tab(self):
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
         )[0]
-        MakeupReview.objects.create(session=session, status=MakeupReviewStatus.PENDING)
-        admin = User.objects.create_superuser(username="CLASS-MAKEUP-ADMIN", password="Admin-password-2026")
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="CLASS-REVIEW-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.post(
-            reverse("tutoring:makeup_review", args=[session.pk]), {"action": "approve"}
+            reverse("tutoring:review_class", args=[session.pk]), {"action": "approve"}
         )
-        self.assertRedirects(response, reverse("accounts:dashboard") + "#makeup-review")
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#class-review")
 
     def test_schedule_reserves_weekly_quota_and_dashboard_shows_class(self):
         # Anchor to the Tuesday/Wednesday of a future week instead of "today + 1/+2 days":
@@ -1314,7 +1314,11 @@ class ClassWorkflowTests(TestCase):
         minute_choices = [value for value, _label in form.fields["start_time"].widget.widgets[1].choices]
         self.assertEqual(minute_choices, [f"{minute:02d}" for minute in range(0, 60, 5)])
 
-    def test_both_records_and_mutual_confirmation_create_valid_hours(self):
+    def test_mutual_confirmation_alone_no_longer_creates_valid_hours_without_admin_review(self):
+        """2026-09-10 (user-requested): every class now needs admin approval on top of
+        mutual confirmation to count as valid hours, not just late/makeup ones as before.
+        An on-time class that both parties confirm is PENDING admin review, not valid,
+        until an admin explicitly approves it."""
         class_date = timezone.localdate()
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
@@ -1335,6 +1339,11 @@ class ClassWorkflowTests(TestCase):
         confirm_counterpart(
             session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED
         )
+        session.refresh_from_db()
+        self.assertFalse(class_is_valid(session))
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="ONTIME-REVIEW-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, approve=True)
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
 
@@ -1751,14 +1760,14 @@ class ClassWorkflowTests(TestCase):
         )
         confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
         confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
-        session.makeup_review.refresh_from_db()
-        self.assertEqual(session.makeup_review.status, MakeupReviewStatus.PENDING)
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
         self.assertFalse(class_is_valid(session))
         admin = User.objects.create_superuser(username="CLASS-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         self.assertEqual(detail.status_code, 200)
-        self.assertContains(detail, "補登詳情")
+        self.assertContains(detail, "課程審核詳情")
         self.assertContains(detail, "老師補登")
         self.assertContains(detail, "忘記在期限內填寫")
         # Once both parties confirm, the review moves to PENDING and admins should see
@@ -1767,17 +1776,17 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, "等待管理員核准")
         dashboard = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(dashboard, "等待管理員核准")
-        review_makeup(session_id=session.pk, admin=admin, approve=True)
-        session.makeup_review.refresh_from_db()
+        review_class_session(session_id=session.pk, admin=admin, approve=True)
+        session.class_review.refresh_from_db()
         self.assertTrue(class_is_valid(session))
         history = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(history, "已核准")
         self.assertContains(history, "補課堂紀錄")
 
-    def test_tutor_and_tutee_schedule_badge_reflects_makeup_review_status_not_generic_waiting(self):
+    def test_tutor_and_tutee_schedule_badge_reflects_class_review_status_not_generic_waiting(self):
         """Tutor/Tutee's own class list (class_schedule_group.html / class_history_list.html)
         computes its status badge from is_official/my_record/my_attendance alone, without
-        looking at the actual MakeupReview status. Once both parties confirm a makeup class,
+        looking at the actual ClassReview status. Once both parties confirm a makeup class,
         it should show the review's real "等待管理員核准" state, not the generic "等待雙方完成
         / Waiting" text that never changes even after admin approval is the only thing left."""
         class_date = timezone.localdate()
@@ -1804,8 +1813,8 @@ class ClassWorkflowTests(TestCase):
 
         confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
         confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
-        session.makeup_review.refresh_from_db()
-        self.assertEqual(session.makeup_review.status, MakeupReviewStatus.PENDING)
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
 
         after_tutor = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(after_tutor, "等待管理員核准")
@@ -1817,9 +1826,9 @@ class ClassWorkflowTests(TestCase):
         self.assertNotContains(after_tutee, "等待雙方完成 / Waiting")
 
         admin = User.objects.create_superuser(username="SCHEDULE-BADGE-ADMIN", password="Admin-password-2026")
-        review_makeup(session_id=session.pk, admin=admin, approve=False, note="資料不完整")
-        session.makeup_review.refresh_from_db()
-        self.assertEqual(session.makeup_review.status, MakeupReviewStatus.REJECTED)
+        review_class_session(session_id=session.pk, admin=admin, approve=False, note="資料不完整")
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.REJECTED)
         self.client.force_login(self.tutor)
         after_reject = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(after_reject, "未核准 / Rejected")
@@ -2780,6 +2789,11 @@ class PartnerProgramCertificateTests(TestCase):
                 session=session, reviewer=reviewer, subject=subject,
                 attendance_confirmed=True, record_confirmed=True, status=ConfirmationStatus.CONFIRMED,
             )
+        # 2026-09-10: mutual confirmation alone no longer makes a class valid — it also
+        # needs an approved ClassReview, so this "verified session" test helper creates
+        # one directly (bypassing the confirm_counterpart()-driven WAITING/PENDING flow,
+        # since these callers just want a finished, already-approved class).
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.APPROVED)
         return session
 
     def aware_datetime(self, day, clock):
@@ -3385,7 +3399,7 @@ READ_ONLY_ADMIN_CLASSES = [
     (AttendanceAdmin, Attendance),
     (ClassRecordAdmin, ClassRecord),
     (ClassConfirmationAdmin, ClassConfirmation),
-    (MakeupReviewAdmin, MakeupReview),
+    (ClassReviewAdmin, ClassReview),
     (PairingReleaseRequestAdmin, PairingReleaseRequest),
 ]
 

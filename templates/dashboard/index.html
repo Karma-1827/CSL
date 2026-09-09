@@ -22,7 +22,7 @@
             <a class="sidebar-link" href="#pairing-releases" data-dashboard-target="pairing-releases"><span aria-hidden="true">⌁</span><b>解除審核<small>Pairing releases</small></b>{% if pending_pairing_releases %}<em>{{ pending_pairing_releases|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-alerts" data-dashboard-target="class-alerts"><span aria-hidden="true">!</span><b>課堂通報<small>Class alerts</small></b>{% if active_class_alerts %}<em>{{ active_class_alerts|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b>{% if pending_incident_reports %}<em>{{ pending_incident_reports|length }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#makeup-review" data-dashboard-target="makeup-review"><span aria-hidden="true">↺</span><b>補登審核<small>Makeup review</small></b>{% if pending_makeup_reviews %}<em>{{ pending_makeup_reviews|length }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#class-review" data-dashboard-target="class-review"><span aria-hidden="true">↺</span><b>課程審核<small>Class review</small></b>{% if pending_class_reviews %}<em>{{ pending_class_reviews|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#semesters" data-dashboard-target="semesters"><span aria-hidden="true">▣</span><b>學期設定<small>Semesters</small></b></a>
             <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#export" data-dashboard-target="export"><span aria-hidden="true">⇩</span><b>資料匯出<small>Data export</small></b></a>
@@ -240,17 +240,18 @@
           {% else %}<div class="empty-state">目前沒有已紀錄的回報。 / No logged reports yet.</div>{% endif %}
         </section>
       </section>
-      <section class="dashboard-view" data-dashboard-panel="makeup-review">
-        <div class="view-heading"><span>MAKEUP REVIEW</span><h2>補登審核 <small>Makeup review</small></h2></div>
+      <section class="dashboard-view" data-dashboard-panel="class-review">
+        <div class="view-heading"><span>CLASS REVIEW</span><h2>課程審核 <small>Class review</small></h2></div>
+        <p class="form-note bilingual-note">雙方完成簽到、課堂紀錄與互相確認後，仍須經管理員逐筆核准才會計入有效時數，不論是否為補登。<br>Every class needs admin approval on top of mutual confirmation to count as valid hours, whether it was completed on time or as a makeup.</p>
         <div class="review-status-sections">
-          {% for section in makeup_review_sections %}
+          {% for section in class_review_sections %}
             <details class="panel review-status-group status-group-{{ section.status|lower }}"{% if section.open %} open{% endif %}>
               <summary><span><strong>{{ section.label }}</strong><small>{{ section.label_en }}</small></span><em>{{ section.rows|length }}</em></summary>
               <div class="makeup-review-list">
                 {% for review in section.rows %}
                   <article class="makeup-review-row review-history-row">
                     <a class="review-detail-link" href="{% url 'tutoring:class_detail' review.session_id %}"><span class="review-row-badges"><b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b><i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i></span><strong>{{ review.session.class_date|date:"Y-m-d" }} · {{ review.session.start_time|time:"H:i" }}</strong><span>{{ review.session.pairing.tutor.bilingual_name }} × {{ review.session.pairing.tutee.bilingual_name }}</span>{% if review.reviewed_by %}<small>審核人員 / Reviewed by：{{ review.reviewed_by.bilingual_name }} · {{ review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}{% if review.review_note %}<small>審核備註 / Note：{{ review.review_note }}</small>{% endif %}<em>查看簽到與課堂紀錄 / View details →</em></a>
-                    {% if review.status == 'PENDING' %}<form action="{% url 'tutoring:makeup_review' review.session_id %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="審核備註 / Review note"><div class="inline-actions"><button class="button button-small button-success" name="action" value="approve">核准 / Approve</button><button class="button button-small button-danger" name="action" value="reject">不核准 / Reject</button></div></form>{% else %}<div class="review-history-state"><span>目前狀態 / Current status</span><strong>{{ review.get_status_display }}</strong></div>{% endif %}
+                    {% if review.status == 'PENDING' %}<form action="{% url 'tutoring:review_class' review.session_id %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="審核備註 / Review note"><div class="inline-actions"><button class="button button-small button-success" name="action" value="approve">核准 / Approve</button><button class="button button-small button-danger" name="action" value="reject">不核准 / Reject</button></div></form>{% else %}<div class="review-history-state"><span>目前狀態 / Current status</span><strong>{{ review.get_status_display }}</strong></div>{% endif %}
                   </article>
                 {% empty %}<div class="empty-state compact">此狀態目前沒有資料。 / No records in this status.</div>{% endfor %}
               </div>

@@ -222,7 +222,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 1. 雙方各自簽到。
 2. 雙方各自填寫自己的課堂紀錄(地點、本次教學目標、本日教學範圍與流程、使用之教材教具及設備、個別學習情形、心得回饋或改善方法,及 1–5 個佐證連結)。
 3. 每人確認對方的簽到與課堂紀錄;可確認、要求修改或回報問題。
-4. 一般課程滿足條件後自動成為有效時數;Admin 不逐筆核准一般課。
+4. **2026-09-10 起,雙方互認完成後仍須經 Admin 逐筆核准才成為有效時數,不分是否為補登**(使用者要求,取代先前「一般課程互認後自動生效、只有補登才需要 Admin 核准」的規則;見下方細節)。
 
 細節:
 
@@ -242,8 +242,10 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 每位使用者每學期最多 5 次補簽到、5 次補課堂紀錄;兩種額度分開計算。
 - 補簽/補登最後期限:學期結束後第 1 天 23:59:59。
 - 任何一方修改自己的紀錄時,系統會刪除對方針對該作者的舊確認,必須重新確認。
-- 有任一補簽/補紀錄時,雙方完成互認後才進入 `PENDING`,再由 Admin 逐筆核准;被拒絕不計有效時數。
-- `class_is_valid()` 的唯一有效條件:課程未取消、剛好 2 筆 attendance、2 筆 class record、2 筆完整 CONFIRMED confirmation;若含 makeup,還要 `MakeupReview=APPROVED`。
+- **2026-09-10 起,`MakeupReview` model 已更名為 `ClassReview`(`tutoring/migrations/0030`,`RenameModel`+related_name 從 `makeup_review` 改為 `class_review`),語意從「只有補登才需要的審核」擴大為「每一堂課都需要的審核」**:雙方完成互認後,`tutoring/services.py::_sync_class_review()`(原 `_sync_makeup_review()`,已移除原本只在 `has_makeup` 時才建立/同步審核紀錄的判斷,現在無條件對每一堂課執行)一律建立/同步一筆 `ClassReview`,狀態進入 `PENDING`,再由 Admin 逐筆核准(`tutoring:review_class` URL,`review_class_session()` service,原名 `review_makeup()`);被拒絕不計有效時數。任一方在審核結果為 `APPROVED`/`REJECTED` 後修改自己的課堂紀錄,會把該筆審核重置回 `WAITING`,規則對是否為補登一視同仁(先前只有補登紀錄的修改才會觸發重置)。
+- `class_is_valid()` 的唯一有效條件:課程未取消、剛好 2 筆 attendance、2 筆 class record、2 筆完整 CONFIRMED confirmation、且 `ClassReview.status == APPROVED`——**不再有「非補登可略過審核」的例外**。
+- **此規則變更不溯及既往**(使用者確認只套用到之後完成互認的課程):`tutoring/migrations/0031` 是一次性資料遷移,把「規則生效當下、已符合舊版有效時數條件(互認完成但尚未有任何審核紀錄)」的課程直接建立一筆 `status=APPROVED` 的 `ClassReview`(`reviewed_by=None`,`review_note` 註明是規則變更時自動核准、非人工審核),確保已下載證明、已結案學期的有效時數不會因為這次規則變更而消失或需要重新審核。規則生效後才完成互認的課程,一律走正常的 `PENDING` 流程,沒有這層自動核准。
+- Admin dashboard 原本的「補登審核 / Makeup review」頁籤已更名為「課程審核 / Class review」,`category_label` 新增「一般課程 / Regular class」分類(雙方皆非補登時顯示),原有的「補簽到」「補課堂紀錄」「補簽到＋補課堂紀錄」分類不變。
 - 「已排時數 / Reserved」與「有效時數 / Verified」是不同概念,不可混用。
 
 ### 4.7 課堂通報與異常回報

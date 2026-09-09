@@ -46,5 +46,5 @@ urlpatterns = [
         views.resolve_incident_report_view,
         name="resolve_incident_report",
     ),
-    path("classes/<int:pk>/makeup-review/", views.makeup_review, name="makeup_review"),
+    path("classes/<int:pk>/review/", views.review_class, name="review_class"),
 ]

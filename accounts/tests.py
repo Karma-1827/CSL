@@ -1201,6 +1201,37 @@ class ProfilePageTests(TestCase):
         self.assertContains(response, "尋找學生")
         self.assertNotContains(response, "主動尋找老師")
 
+    def test_handbook_hides_maryland_only_sections_for_ntnu_tutee(self):
+        """2026-09-10 (user-requested): the student manual shouldn't describe features a
+        given student's program doesn't actually have — self.tutee has no roster_entry/
+        program at all, matching an ordinary NTNU international student."""
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:handbook"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "5.2 尋找老師")
+        self.assertNotContains(response, "十一、合作計畫上課文件")
+        self.assertContains(response, "12.1 看不到「尋找老師」")
+        self.assertNotContains(response, "12.2 已配對後不能再找老師")
+
+    def test_handbook_shows_maryland_only_sections_for_maryland_tutee(self):
+        maryland = PartnerProgram.objects.get(code="MARYLAND")
+        roster = RosterEntry.objects.create(
+            student_id="HANDBOOK-MD-TUTEE", name_zh="馬里蘭學生", name_en="Maryland Student",
+            role=Role.TUTEE, education_level=EducationLevel.NOT_APPLICABLE,
+            identity_category=IdentityCategory.INTERNATIONAL, program=maryland,
+        )
+        maryland_tutee = User.objects.create_user(
+            username="HANDBOOK-MD-TUTEE", password="Student-password-2026", role=Role.TUTEE,
+            name_zh="馬里蘭學生", name_en="Maryland Student", roster_entry=roster,
+        )
+        self.client.force_login(maryland_tutee)
+        response = self.client.get(reverse("accounts:handbook"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "5.2 尋找老師")
+        self.assertContains(response, "十一、合作計畫上課文件")
+        self.assertNotContains(response, "12.1 看不到「尋找老師」")
+        self.assertContains(response, "12.2 已配對後不能再找老師")
+
 
 class AdminDashboardNavigationTests(TestCase):
     def setUp(self):

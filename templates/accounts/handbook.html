@@ -482,7 +482,7 @@
           <a href="#s8">八、簽到與課堂紀錄<small>Check-in & class records</small></a>
           <a href="#s9">九、補簽到與補課堂紀錄<small>Late check-ins & records</small></a>
           <a href="#s10">十、輔導紀錄與證明<small>History & certificates</small></a>
-          <a href="#s11">十一、合作計畫上課文件<small>Class documents</small></a>
+          {% if class_documents_visible %}<a href="#s11">十一、合作計畫上課文件<small>Class documents</small></a>{% endif %}
           <a href="#s12">十二、常見問題<small>FAQ</small></a>
         </aside>
 
@@ -597,7 +597,7 @@
                 <tr><td>輔導紀錄<br>History</td><td>查看有效、待處理或未核准的課程與時數，下載證明<br>Check verified, pending, or rejected classes and hours, and download certificates</td></tr>
                 <tr><td>私訊<br>Messages</td><td>與目前或歷史配對老師查看訊息<br>Message your current or past matched teacher</td></tr>
                 <tr><td>邀請管理<br>Invitations</td><td>查看收到、送出、已接受、婉拒、取消或過期的邀請<br>Track received, sent, accepted, declined, cancelled, or expired invitations</td></tr>
-                <tr><td>尋找老師<br>Find teachers</td><td>只有允許學生主動媒合的合作計畫會顯示；目前主要適用於馬里蘭計畫<br>Only shown for programs that allow student-initiated matching — currently mainly the Maryland program</td></tr>
+                {% if is_maryland %}<tr><td>尋找老師<br>Find teachers</td><td>主動瀏覽並邀請老師<br>Browse and invite teachers yourself</td></tr>{% endif %}
               </tbody>
             </table>
             <p>按右上角姓名可開啟個人資料頁。若姓名、Email、學習資料或可上課時間有變更，請從個人資料頁進入編輯。</p>
@@ -616,9 +616,10 @@
             </ol>
             <p>接受後配對立即成立，雙方才會看到姓名、學號及 Email。一位學生同一學期只能有 1 位進行中的老師；配對成立後，其他尚未完成的相關邀請會由系統取消。</p>
             <p>Accepting creates the match immediately, and only then do both sides see names, student IDs, and emails. A student may have only 1 active teacher per semester; once matched, the system cancels your other pending invitations automatically.</p>
-            <h3>5.2 馬里蘭計畫學生：尋找老師 <small>Maryland students: finding a teacher</small></h3>
-            <p>馬里蘭計畫學生可主動尋找老師：</p>
-            <p>Maryland program students may look for a teacher themselves:</p>
+            {% if is_maryland %}
+            <h3>5.2 尋找老師 <small>Finding a teacher</small></h3>
+            <p>你可以主動尋找老師：</p>
+            <p>You may look for a teacher yourself:</p>
             <ol>
               <li>按「尋找老師 / Find teachers」。<br>Click "尋找老師 / Find teachers."</li>
               <li>查看老師的匿名資料與可上課時間。<br>Review teachers' anonymous profiles and availability.</li>
@@ -629,6 +630,7 @@
             <img src="{% static 'img/handbook/student/find-teachers.png' %}" alt="尋找老師頁 / Find teachers page">
             <p>學生只會看到自己計畫可配對的老師。配對成立前，系統不會顯示老師姓名、學號及 Email。</p>
             <p>Students only see teachers eligible for their own program. Before a match is made, the system never shows a teacher's name, student ID, or email.</p>
+            {% endif %}
             <h3>5.3 邀請期限與取消 <small>Invitation expiry & cancellation</small></h3>
             <ul>
               <li>邀請有效期限為 5 天。<br>Invitations are valid for 5 days.</li>
@@ -794,10 +796,9 @@
             <p>If your name, student ID, program, dates, or hours are wrong, never edit the PDF yourself. Check your profile and class status first, then give an administrator the incorrect item, class date, and a screenshot to verify.</p>
           </section>
 
+          {% if class_documents_visible %}
           <section class="profile-card manual-section" id="s11">
             <h2>十一、合作計畫上課文件 <small>Class documents</small></h2>
-            <p>只有所屬計畫已啟用此功能時，網站上方才會顯示「上課文件 / Class documents」。目前主要提供馬里蘭計畫使用。</p>
-            <p>"上課文件 / Class documents" only appears at the top of the site if your program has this feature enabled — currently mainly for the Maryland program.</p>
             <ol>
               <li>點網站上方「上課文件」。<br>Click "上課文件 / Class documents" at the top of the site.</li>
               <li>查看文件名稱、適用計畫及學期。<br>Check the document's title, applicable program, and semester.</li>
@@ -807,15 +808,20 @@
             <p>文件只能供計畫內部使用，不要轉傳至公開網站或不相關的人員。</p>
             <p>These documents are for program-internal use only — never repost them publicly or share them with unrelated people.</p>
           </section>
+          {% endif %}
 
           <section class="profile-card manual-section" id="s12">
             <h2>十二、常見問題 <small>FAQ</small></h2>
+            {% if not is_maryland %}
             <h3>12.1 看不到「尋找老師」 <small>No "Find teachers"</small></h3>
-            <p>這個功能只開放給允許學生主動媒合的合作計畫，目前主要適用於馬里蘭計畫。一般師大外籍生由老師主動邀請，請到「邀請管理」查看收到的邀請。</p>
-            <p>This feature is only available to programs that allow student-initiated matching, currently mainly the Maryland program. Ordinary NTNU international students are invited by teachers — check "邀請管理 / Invitations" for what you've received.</p>
+            <p>這個功能只開放給允許學生主動媒合的合作計畫。您由老師主動邀請，請到「邀請管理」查看收到的邀請。</p>
+            <p>This feature is only available to programs that allow student-initiated matching. You're invited by teachers instead — check "邀請管理 / Invitations" for what you've received.</p>
+            {% endif %}
+            {% if is_maryland %}
             <h3>12.2 已配對後不能再找老師 <small>Can't find another teacher after matching</small></h3>
             <p>一位學生同一學期只能有 1 位進行中的老師。已建立配對時，系統會顯示目前不需要尋找新老師。</p>
             <p>A student may have only 1 active teacher per semester. Once matched, the system indicates you don't need to look for a new teacher right now.</p>
+            {% endif %}
             <h3>12.3 課程時間錯誤，但不能修改 <small>Wrong class time, but can't change it</small></h3>
             <p>學生不能直接修改課程。請用私訊聯絡老師，由老師修改或取消；若課程已有簽到或紀錄，請聯絡管理員。</p>
             <p>Students can't edit a class directly. Message your teacher and have them reschedule or cancel it; if the class already has a check-in or record, contact an administrator.</p>

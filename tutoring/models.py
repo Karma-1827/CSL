@@ -653,18 +653,23 @@ class ClassConfirmation(models.Model):
         constraints = [models.UniqueConstraint(fields=["session", "reviewer"], name="one_confirmation_per_reviewer")]
 
 
-class MakeupReviewStatus(models.TextChoices):
+class ClassReviewStatus(models.TextChoices):
     WAITING = "WAITING", "等待雙方確認 / Waiting for mutual confirmation"
     PENDING = "PENDING", "等待管理員核准 / Waiting for admin approval"
     APPROVED = "APPROVED", "已核准 / Approved"
     REJECTED = "REJECTED", "未核准 / Rejected"
 
 
-class MakeupReview(models.Model):
-    session = models.OneToOneField(ClassSession, on_delete=models.CASCADE, related_name="makeup_review")
-    status = models.CharField(max_length=12, choices=MakeupReviewStatus.choices, default=MakeupReviewStatus.WAITING)
+class ClassReview(models.Model):
+    """Every class session now needs admin approval on top of mutual confirmation to
+    count as valid hours (2026-09-10, user-requested), not just late/makeup ones as
+    before — see CLAUDE.md 4.6. Kept as a plain OneToOne (not merged into ClassSession)
+    so the review lifecycle, reviewer, and note stay separate from the session itself."""
+
+    session = models.OneToOneField(ClassSession, on_delete=models.CASCADE, related_name="class_review")
+    status = models.CharField(max_length=12, choices=ClassReviewStatus.choices, default=ClassReviewStatus.WAITING)
     reviewed_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, blank=True, related_name="reviewed_makeup_requests"
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name="reviewed_class_sessions"
     )
     review_note = models.TextField("審核備註 / Review note", blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)

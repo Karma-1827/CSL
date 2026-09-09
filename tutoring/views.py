@@ -46,7 +46,7 @@ from .services import (
     resolve_class_alert,
     resolve_incident_report,
     review_pairing_release_request,
-    review_makeup,
+    review_class_session,
     schedule_classes,
     send_invitation,
     submit_incident_report,
@@ -585,7 +585,7 @@ def class_detail(request, pk):
                 "tutee_record": tutee_record,
                 "tutor_confirmation": tutor_confirmation,
                 "tutee_confirmation": tutee_confirmation,
-                "makeup_review": getattr(session, "makeup_review", None),
+                "class_review": getattr(session, "class_review", None),
                 "is_valid_class": class_is_valid(session),
             },
         )
@@ -720,11 +720,11 @@ def class_reschedule(request, pk):
 
 @login_required
 @require_POST
-def makeup_review(request, pk):
+def review_class(request, pk):
     if request.user.role != Role.ADMIN:
         raise Http404
     try:
-        review_makeup(
+        review_class_session(
             session_id=pk,
             admin=request.user,
             approve=request.POST.get("action") == "approve",
@@ -733,10 +733,10 @@ def makeup_review(request, pk):
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
     else:
-        messages.success(request, "補登審核已完成。 / Makeup review completed.")
+        messages.success(request, "課程審核已完成。 / Class review completed.")
     if request.POST.get("next") == "detail":
         return redirect("tutoring:class_detail", pk=pk)
-    return redirect(f"{reverse('accounts:dashboard')}#makeup-review")
+    return redirect(f"{reverse('accounts:dashboard')}#class-review")
 
 
 @login_required

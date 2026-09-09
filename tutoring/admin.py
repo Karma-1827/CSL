@@ -8,10 +8,10 @@ from .models import (
     ClassAlert,
     ClassDocument,
     ClassRecord,
+    ClassReview,
     ClassSession,
     HourAdjustment,
     IncidentReport,
-    MakeupReview,
     MatchingInvitation,
     Pairing,
     PairingReleaseRequest,
@@ -126,8 +126,8 @@ class ClassConfirmationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_filter = ("status", "session__pairing__semester")
 
 
-@admin.register(MakeupReview)
-class MakeupReviewAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+@admin.register(ClassReview)
+class ClassReviewAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("session", "status", "reviewed_by", "reviewed_at")
     list_filter = ("status", "session__pairing__semester")
 
