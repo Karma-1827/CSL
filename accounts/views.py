@@ -925,16 +925,21 @@ def _role_profile_context(subject):
     return context
 
 
+def _profile_context(user):
+    context = {"roster": user.roster_entry, "edit_form": None}
+    context.update(_role_profile_context(user))
+    if user.role == Role.TUTOR:
+        context["qualification"] = QualificationDocument.objects.filter(tutor=user).first()
+    return context
+
+
 @login_required
 def profile(request):
     """Present the signed-in user's full profile outside the matching workflow."""
-    context = {"roster": request.user.roster_entry, "edit_form": None}
-    context.update(_role_profile_context(request.user))
+    context = _profile_context(request.user)
     role_profile = context["role_profile"]
-    if request.user.role == Role.TUTOR:
-        context["qualification"] = QualificationDocument.objects.filter(tutor=request.user).first()
-        if role_profile:
-            context["edit_form"] = TutorProfileEditForm(profile=role_profile, user=request.user)
+    if request.user.role == Role.TUTOR and role_profile:
+        context["edit_form"] = TutorProfileEditForm(profile=role_profile, user=request.user)
     elif request.user.role == Role.TUTEE and role_profile:
         context["edit_form"] = TuteeProfileEditForm(profile=role_profile, user=request.user)
     elif request.user.role == Role.ADMIN:
@@ -945,6 +950,13 @@ def profile(request):
 @login_required
 @require_POST
 def update_profile(request):
+    """On success, redirect back (avoids a resubmission on refresh). On validation
+    failure, render the profile page directly with the bound, invalid form instead of
+    redirecting — components/form_field.html already renders each field's own errors
+    right below it, so this is what actually gets a password error to show up under the
+    password field rather than as a single flattened message a user has to go hunting
+    for (found 2026-09-10 from real usage: messages.html wasn't even included on this
+    page at first, and once it was, a top-of-page/generic message was still easy to miss)."""
     if request.user.role == Role.ADMIN:
         form = AdminProfileEditForm(request.POST, user=request.user)
         if form.is_valid():
@@ -962,11 +974,10 @@ def update_profile(request):
                 messages.success(request, "個人資料已更新。 / Your profile has been updated.")
             else:
                 messages.success(request, "沒有欄位變更。 / No changes were made.")
-        else:
-            for errors in form.errors.values():
-                for error in errors:
-                    messages.error(request, error)
-        return redirect(reverse("accounts:profile") + "#edit-profile")
+            return redirect(reverse("accounts:profile") + "#edit-profile")
+        context = _profile_context(request.user)
+        context["edit_form"] = form
+        return render(request, "accounts/profile.html", context)
 
     role_profile = getattr(request.user, "tutor_profile", None) if request.user.role == Role.TUTOR else (
         getattr(request.user, "tutee_profile", None) if request.user.role == Role.TUTEE else None
@@ -988,11 +999,10 @@ def update_profile(request):
             messages.success(request, "個人資料已更新。 / Your profile has been updated.")
         else:
             messages.success(request, "沒有欄位變更。 / No changes were made.")
-    else:
-        for errors in form.errors.values():
-            for error in errors:
-                messages.error(request, error)
-    return redirect(reverse("accounts:profile") + "#edit-profile")
+        return redirect(reverse("accounts:profile") + "#edit-profile")
+    context = _profile_context(request.user)
+    context["edit_form"] = form
+    return render(request, "accounts/profile.html", context)
 
 
 @login_required

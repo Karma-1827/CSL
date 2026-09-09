@@ -1771,14 +1771,15 @@ class ProfileEditTests(TestCase):
                 "available_days": ["MON", "WED"],
                 "available_time_slots": ["13:00-15:00"],
             },
-            follow=True,
         )
-        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        # Invalid submissions render the profile page directly with the bound, invalid
+        # form (200) rather than redirecting, so components/form_field.html can show
+        # each field's own error right below it — found 2026-09-10 after real admins hit
+        # the equivalent gap in production and reported "can't edit my profile" (the
+        # earlier redirect-then-flash-message approach was easy to miss, see below).
+        self.assertEqual(response.status_code, 200)
         self.tutor_profile.refresh_from_db()
         self.assertEqual(self.tutor_profile.department, "華語文教學系")
-        # profile.html didn't include components/messages.html, so this rejection was
-        # silently invisible to the user — found 2026-09-10 after real admins hit the
-        # equivalent gap in production and reported "can't edit my profile."
         self.assertContains(response, "此欄位為必填欄位")
         self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
 
@@ -1806,20 +1807,31 @@ class ProfileEditTests(TestCase):
     def test_admin_name_zh_is_required(self):
         admin = User.objects.create_superuser(username="EDIT-ADMIN2", password="Admin-password-2026")
         self.client.force_login(admin)
-        response = self.client.post(
-            reverse("accounts:update_profile"), {"name_zh": "", "email": "x@example.com"}, follow=True
-        )
-        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        response = self.client.post(reverse("accounts:update_profile"), {"name_zh": "", "email": "x@example.com"})
+        # Invalid submissions render the profile page directly with the bound, invalid
+        # form (200) rather than redirecting, so components/form_field.html can show
+        # each field's own error right below it (found 2026-09-10 after real admins hit
+        # this gap in production and reported "can't edit my profile").
+        self.assertEqual(response.status_code, 200)
         admin.refresh_from_db()
         self.assertEqual(admin.email, "")
         self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
-        # profile.html didn't include components/messages.html at all, so every
-        # validation error on this page (missing name_zh, weak password, mismatched
-        # confirmation) was silently swallowed — the page just reloaded with no visible
-        # feedback, which is exactly what a user experiences as "editing doesn't work"
-        # (found 2026-09-10 after real admins hit this in production). Assert the error
-        # is now actually visible, not just that the save was correctly rejected.
         self.assertContains(response, "此欄位為必填欄位")
+
+    def test_admin_password_mismatch_error_shows_under_the_password_field(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN6", password="Old-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {"name_zh": "管理員", "new_password1": "Brand-New-Password-2026!", "new_password2": "Different-Password-2026!"},
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The error must land inside the new_password2 field's own <div class="form-group">,
+        # not just somewhere on the page — a generic top-of-page message was the exact
+        # complaint that prompted this (使用者:「密碼錯誤提醒可以放在密碼欄位下方嗎？」).
+        field_block = content.split('id="id_new_password2"')[1].split("</div>")[0]
+        self.assertIn("兩次密碼不一致", field_block)
 
     def test_admin_can_change_password_and_stays_logged_in(self):
         admin = User.objects.create_superuser(username="EDIT-ADMIN3", password="Old-password-2026")
