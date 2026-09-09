@@ -1162,6 +1162,12 @@ class ProfilePageTests(TestCase):
         self.assertIsNotNone(response.context["edit_form"])
         self.assertNotContains(response, "找不到完整的個人檔案")
         self.assertContains(response, "編輯個人資料")
+        content = response.content.decode()
+        basic_info_section = content.split('id="basic-information"')[1].split("</section>")[0]
+        self.assertIn("<span>ID</span>", basic_info_section)
+        self.assertIn("PROFILE-ADMIN", basic_info_section)
+        self.assertNotIn("學號 / Student ID", basic_info_section)
+        self.assertNotIn("電話 / Phone", basic_info_section)
 
     def test_handbook_uses_signed_in_role(self):
         self.client.force_login(self.tutor)
