@@ -223,7 +223,11 @@
 - **2026-09-10 Tutor 左側導覽列重新排序,異常回報拉出獨立頁籤**:使用者指定 Tutor 側邊欄新順序(我的首頁 → 口語能力證明 → 尋找學生 → 邀請管理 → 我的課表 → 輔導時數 → 私訊 → 異常回報),並要求檢查 Tutee 是否需要同步——已同步調整(我的首頁 → 尋找老師〔僅 Maryland〕→ 邀請管理 → 我的課表 → 輔導紀錄 → 私訊 → 異常回報,Tutee 沒有口語能力證明頁籤所以直接跳過該項)。
   - 「異常回報」原本固定在 `class_detail.html`(靠 URL 帶 `pk` 綁定單一課程,必須先點進某堂課的「查看課程」才能送出),使用者要求「從查看課程拉出來單獨一個介面」。新增 `tutoring/forms.py::StandaloneIncidentReportForm`(比原本的 `IncidentReportForm` 多一個 `session` 下拉欄位,`__init__` 依登入者過濾成只能選自己參與過的課程),`tutoring/views.py::incident_report()` 改為不吃 `pk` 參數(URL 由 `classes/<pk>/incident-report/` 改成 `incident-reports/submit/`),送出後導回 Dashboard 的「異常回報」頁籤。舊的 `IncidentReportForm` 已完全移除(沒有任何呼叫端還在用)。
   - Tutor/Tutee 共用的 `templates/dashboard/participant_v2_panels.html`(原本只有 hours/messages 兩個頁籤)新增第三個「異常回報」頁籤,含送出表單與「我送出的回報」歷史清單;`accounts/views.py::dashboard()` 在 Tutor/Tutee 共用的 context 區塊新增 `incident_report_form`/`own_incident_reports`。`class_detail.html` 移除異常回報區塊,課堂通報(`ClassAlert`,時間窗限制的即時通報)維持原樣不受影響。
-  - 新增 2 個測試(`tutoring/tests.py::ClassWorkflowTests`):透過新 URL 實際送出回報並確認 `AuditLog`;確認表單的 `session` 下拉選單只會列出登入者自己的課程,且直接用別人課程的 `pk` 送出會被擋下、不會建立資料。已跑 `ruff check .`、完整測試套件(344 項全過)。無 migration。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
+  - 新增 2 個測試(`tutoring/tests.py::ClassWorkflowTests`):透過新 URL 實際送出回報並確認 `AuditLog`;確認表單的 `session` 下拉選單只會列出登入者自己的課程,且直接用別人課程的 `pk` 送出會被擋下、不會建立資料。已跑 `ruff check .`、完整測試套件(344 項全過)。無 migration。**已於當日部署至正式 VM**,見 `docs/VM_UPDATE_WORKFLOW.md` 第三十六次部署紀錄。
+- **2026-09-10 配對雙方不再顯示彼此學號;佐證連結範例文字調整**:
+  - 使用者要求「配對過後不要顯示彼此的 ID」。移除 `templates/accounts/matched_profile.html`「基本資料」的學號欄位,以及 `templates/dashboard/index.html`「目前配對」卡片上對方 `username` 的 `<small>` 顯示,兩處皆只保留姓名(中英)與 Email。CLAUDE.md 4.3 節「配對成立後才顯示雙方正式姓名、學號及 Email」同步改為「...姓名及 Email」。此變更只影響 Tutor/Tutee 互看對方,不影響 Admin 既有的行政檔案/配對管理/課程總覽等畫面(Admin 仍需要真實學號核對名冊,未變動)。新增/擴充 2 個測試(`tutoring/tests.py::MatchingTests`)確認配對後個人資料頁與 Dashboard 配對卡片皆不再包含對方學號。
+  - `tutoring/forms.py::ClassRecordForm` 佐證連結說明文字裡的範例「上課畫面截圖」改為「實際授課照片」(Tutor 必填、Tutee 選填兩個版本皆同步),英文對應改為 "photos of the actual teaching session"。`templates/accounts/handbook.html` 裡引用同一個例子的老師/學生手冊段落(9.4、8.4 節)一併同步用詞,避免手冊內容與實際畫面不一致。
+  - 已跑 `ruff check .`、完整測試套件(344 項全過)。無 migration。**尚未部署至正式 VM**,commit/push/部署待使用者確認後進行。
 
 ## 版本規劃
 

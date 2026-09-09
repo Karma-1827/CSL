@@ -190,13 +190,13 @@ class ClassRecordForm(forms.ModelForm):
             self.fields["evidence_links"].required = False
             self.fields["evidence_links"].label = "佐證連結 / Evidence links（選填 / Optional）"
             count_point = (
-                '<span><b>1</b><span>可選擇提供 0–5 個可供對方及管理者查看的當次上課佐證連結，例如上課畫面截圖、教材、作業或錄影。'
-                '<small>Optionally provide 0–5 accessible links showing evidence of this class, such as class screenshots, teaching materials, assignments, or recordings, for your partner and administrators to review.</small></span></span>'
+                '<span><b>1</b><span>可選擇提供 0–5 個可供對方及管理者查看的當次上課佐證連結，例如實際授課照片、教材、作業或錄影。'
+                '<small>Optionally provide 0–5 accessible links showing evidence of this class, such as photos of the actual teaching session, teaching materials, assignments, or recordings, for your partner and administrators to review.</small></span></span>'
             )
         else:
             count_point = (
-                '<span><b>1</b><span>請提供 1–5 個可供對方及管理者查看的當次上課佐證連結，例如上課畫面截圖、教材、作業或錄影。'
-                '<small>Provide 1–5 accessible links showing evidence of this class, such as class screenshots, teaching materials, assignments, or recordings, for your partner and administrators to review.</small></span></span>'
+                '<span><b>1</b><span>請提供 1–5 個可供對方及管理者查看的當次上課佐證連結，例如實際授課照片、教材、作業或錄影。'
+                '<small>Provide 1–5 accessible links showing evidence of this class, such as photos of the actual teaching session, teaching materials, assignments, or recordings, for your partner and administrators to review.</small></span></span>'
             )
         self.fields["evidence_links"].help_text = mark_safe(
             '<span class="evidence-help-points">'

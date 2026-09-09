@@ -767,6 +767,9 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "希望加強日常會話")
         # Email is shown once a pairing is active.
         self.assertContains(response, "known.tutee@example.com")
+        # 2026-09-10: matched pairs no longer see each other's student ID/username.
+        self.assertNotContains(response, "學號 / Student ID")
+        self.assertNotContains(response, self.tutee.username)
 
         self.client.force_login(self.tutee)
         response = self.client.get(reverse("accounts:matched_profile", args=[self.tutor.pk]))
@@ -774,6 +777,8 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "知名小老師")
         self.assertContains(response, "教學資料")
         self.assertContains(response, "known.tutor@example.com")
+        self.assertNotContains(response, "學號 / Student ID")
+        self.assertNotContains(response, self.tutor.username)
 
     def test_unmatched_user_cannot_open_matched_profile(self):
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
@@ -789,6 +794,9 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "私訊 / Message")
         self.assertContains(response, reverse("tutoring:pairing_messages", args=[pairing.pk]))
         self.assertNotContains(response, "電話 / Phone")
+        # 2026-09-10: the dashboard's own matched-pairing card no longer shows the
+        # counterpart's student ID/username either.
+        self.assertNotContains(response, self.tutor.username)
 
     def test_ntnu_tutee_hides_hours_but_maryland_keeps_them(self):
         Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)

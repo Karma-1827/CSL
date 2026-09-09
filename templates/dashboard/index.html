@@ -292,7 +292,7 @@
           <h2>目前配對 <small>{{ active_pairing_count }}/2</small></h2>
           {% for pairing in active_pairings %}
             <div class="matched-person">
-              <a class="matched-person-profile" href="{% url 'accounts:matched_profile' pairing.tutee_id %}"><span>學生 {{ forloop.counter }} / Student {{ forloop.counter }}</span><strong>{{ pairing.tutee.bilingual_name }}</strong><small>{{ pairing.tutee.username }}</small><em>查看資料 / View profile →</em></a>
+              <a class="matched-person-profile" href="{% url 'accounts:matched_profile' pairing.tutee_id %}"><span>學生 {{ forloop.counter }} / Student {{ forloop.counter }}</span><strong>{{ pairing.tutee.bilingual_name }}</strong><em>查看資料 / View profile →</em></a>
               <div class="matched-message-action"><span>聯絡 / Contact</span><a class="button button-secondary button-small" href="{% url 'tutoring:pairing_messages' pairing.pk %}">私訊 / Message</a></div>
             </div>
             {% include "dashboard/pairing_release_control.html" with pairing=pairing %}
@@ -382,7 +382,7 @@
         <section class="panel panel-wide">
           <span class="eyebrow">CURRENT MATCH</span>
           <h2>我的配對 <small>My matching</small></h2>
-          {% for pairing in active_pairings %}<div class="matched-person"><a class="matched-person-profile" href="{% url 'accounts:matched_profile' pairing.tutor_id %}"><span>老師 / Teacher</span><strong>{{ pairing.tutor.bilingual_name }}</strong><small>{{ pairing.tutor.username }}</small><em>查看資料 / View profile →</em></a><div class="matched-message-action"><span>聯絡 / Contact</span><a class="button button-secondary button-small" href="{% url 'tutoring:pairing_messages' pairing.pk %}">私訊 / Message</a></div></div>{% include "dashboard/pairing_release_control.html" with pairing=pairing %}{% empty %}<div class="empty-state">尚未建立配對。 / No active match yet.</div>{% endfor %}
+          {% for pairing in active_pairings %}<div class="matched-person"><a class="matched-person-profile" href="{% url 'accounts:matched_profile' pairing.tutor_id %}"><span>老師 / Teacher</span><strong>{{ pairing.tutor.bilingual_name }}</strong><em>查看資料 / View profile →</em></a><div class="matched-message-action"><span>聯絡 / Contact</span><a class="button button-secondary button-small" href="{% url 'tutoring:pairing_messages' pairing.pk %}">私訊 / Message</a></div></div>{% include "dashboard/pairing_release_control.html" with pairing=pairing %}{% empty %}<div class="empty-state">尚未建立配對。 / No active match yet.</div>{% endfor %}
         </section>
       </section>
       <section class="dashboard-view" data-dashboard-panel="invitations">
