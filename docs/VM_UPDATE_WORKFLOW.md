@@ -157,17 +157,23 @@ git checkout --detach <TARGET_COMMIT>
 
 正式環境使用明確 commit ID，不使用不確定內容的 `git pull`。`detached HEAD` 在部署目錄是可接受且刻意的設計，表示目前運行版本精確固定在指定 commit。
 
+**`tcsladmin` 直接操作 `/opt/mpts` 的前置條件**(2026-09-10 確認並修好一次,記錄供之後核對現狀用,不代表每次都要重做):`/opt/mpts` 擁有者是 `mpts:mpts`、權限 `750`,`tcsladmin` 必須在 `mpts` 群組裡才能 `cd`/`git`;另外 Git 2.35.2+ 對「目錄擁有者不是目前使用者」會擋下操作(`fatal: detected dubious ownership`),需要 `tcsladmin` 執行過一次 `git config --global --add safe.directory /opt/mpts`(只需設定一次,寫在 `tcsladmin` 的 `~/.gitconfig`,之後的 session 不用重設)。若接手時發現 `cd /opt/mpts` 直接 `Permission denied`,先用 `id` 確認 `tcsladmin` 是否還在 `mpts` 群組(`sudo -n usermod -aG mpts tcsladmin` 補回並**重新登入 SSH**才會生效),而不要預設要整段改用 `sudo -u mpts` 繞過去。
+
 ### 6.3 更新應用程式
 
 ```bash
-source /opt/mpts/.venv/bin/activate
+cd /opt/mpts
+source .venv/bin/activate
 pip install -r requirements.txt
 
 python manage.py check
-python manage.py makemigrations --check --dry-run
-python manage.py migrate --plan
-python manage.py migrate
 python manage.py collectstatic --noinput
+```
+
+**`/opt/mpts/.env` 權限與連 DB 指令**:`.env` 刻意設為 `600`、擁有者 `mpts`,`tcsladmin` 即使在 `mpts` 群組裡也讀不到它——這是刻意的安全邊界(見第 6.1 節初次部署的說明:「擁有者是 mpts,不是操作用的管理帳號」),不是要修的權限錯誤。單純的 `python manage.py check`(不含 `--deploy`)不連 DB,可以像上面一樣直接用 `tcsladmin` 執行。但任何會連 DB 的指令——`makemigrations --check --dry-run`、`migrate --plan`、`migrate`、`DJANGO_DEBUG=0 python manage.py check --deploy`——都必須用 `sudo -n -u mpts` 執行,並在同一個 shell 裡先把 `.env` 匯入環境變數(`config/settings.py` 全部用 `os.getenv()` 讀取,沒有載入 `.env` 的機制;正式的 gunicorn 服務是靠 systemd unit 的 `EnvironmentFile=/opt/mpts/.env` 才吃得到,手動下指令不會自動套用):
+
+```bash
+sudo -n -u mpts bash -c 'cd /opt/mpts && set -a && source .env && set +a && source .venv/bin/activate && python manage.py makemigrations --check --dry-run && python manage.py migrate --plan && python manage.py migrate'
 ```
 
 注意：
@@ -291,7 +297,7 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
   - **本次部署發現一個操作面的環境落差,記錄供之後交接參考**:`tcsladmin` 這次已不在 `mpts` 系統群組內(`id` 確認 `groups=tcsladmin,sudo,users`,不含 `mpts`),導致原本文件裡的 `cd /opt/mpts`(以 `tcsladmin` 直接操作)會直接 `Permission denied`(`/opt/mpts` 是 `drwxr-x--- mpts:mpts`)。本次全程改用 `sudo -n -u mpts bash -c '...'` 以 `mpts` 身分執行所有 `git`/`python manage.py` 指令,順利完成部署;之後若 `tcsladmin` 群組權限沒有復原,應延續這個模式,不要假設可以直接 `cd /opt/mpts`。
   - **同時確認並修正一個一直存在、只是先前沒踩到的既有落差**:`config/settings.py` 讀取 `POSTGRES_*`/`DJANGO_*` 一律用 `os.getenv()`,完全沒有載入 `.env` 的機制(不是 `python-dotenv`/`django-environ`)——正式站 gunicorn 服務靠 systemd unit 的 `EnvironmentFile=/opt/mpts/.env` 才能吃到這些變數,但手動執行 `python manage.py check`/`migrate` 等指令**不會**自動讀到 `.env`,直接執行會 fallback 到程式碼寫死的本機開發預設值(`POSTGRES_USER` 預設 `qiangqiang`,對正式 DB 直接回報 `Peer authentication failed for user "qiangqiang"`)。修法是在每次手動執行 `manage.py` 前先 `set -a && source .env && set +a`,再 `source .venv/bin/activate`。這個步驟本來就該做,只是這次是第一次由 `sudo -u mpts` 這條路徑執行才真正被踩到(先前用 `tcsladmin` 直接操作的 session 顯然也做過這個步驟,只是沒有明確寫進 `docs/DEPLOY.md`/本文件第 6.3 節——已列為待補文件的項目,見下方)。
   - 驗收:`curl -I https://mpts.tcsl.ntnu.edu.tw/` 回應 `HTTP/2 200`;`sudo systemctl restart mpts-gunicorn.service` 後 `journalctl` 僅有既有的 gunicorn `Control server error: Read-only file system` 無關訊息,無新增 error/traceback。另外直接用 Django shell 呼叫 `tutoring/services.py` 的 `send_invitation()`/`anonymous_tutee_candidates()`(與畫面走同一套 service 函式,未新增任何測試資料)對正式資料實測:`DEMO-TUTOR` 已對 `DEMO-TUTEE-03` 有一筆待回覆邀請;讓另一個 Tutor 帳號 `DEMO-TUTOR-PENDING` 嘗試邀請同一位 `DEMO-TUTEE-03`,確認①候選清單裡看不到她、②直接呼叫 `send_invitation()` 正確拋出 `ValidationError`(訊息為新規則的雙語錯誤文字);同時確認 `DEMO-TUTOR`(原邀請人)自己的候選清單仍看得到 `DEMO-TUTEE-03`。三項行為皆符合預期。`git checkout --detach` 乾淨無衝突。**臨時 sudo 授權依使用者指示維持開啟**。
-  - **待補文件**:`docs/DEPLOY.md` 第 6.3 節「更新應用程式」的指令序列應補上 `set -a && source .env && set +a` 這一步(目前只寫 `source .venv/bin/activate` 就直接接 `python manage.py check`),避免下次操作者(不論是我還是別的 agent)在乾淨的 shell 裡重複踩到同一個「假裝連得上 DB 但其實連到本機開發預設值」的陷阱。
+  - **2026-09-10 事後修正(使用者要求處理這兩個落差)**:①以 `sudo -n usermod -aG mpts tcsladmin` 把 `tcsladmin` 加回 `mpts` 群組,並確認新的 SSH 連線 `id` 已含 `mpts`;`git` 因 2.35.2+ 的 dubious-ownership 保護仍擋下操作,額外執行一次 `git config --global --add safe.directory /opt/mpts`(寫入 `tcsladmin` 的 `~/.gitconfig`,一次性,之後不用重設)後,`cd /opt/mpts`、`git status`/`fetch`/`checkout`、`collectstatic`、不連 DB 的 `python manage.py check` 都恢復可用 `tcsladmin` 直接操作,不需要 `sudo -u mpts`。②確認 `.env` 讀不到是**刻意的安全邊界**(`.env` 是 `600`、擁有者 `mpts`,連 `tcsladmin` 加入 `mpts` 群組後也讀不到——群組權限對 owner-only 的檔案沒有幫助),使用者決定**不修改程式**(不加 `python-dotenv` 之類的自動載入機制),維持「連 DB 的指令一律走 `sudo -n -u mpts` 並手動 `source .env`」這個模式;已把正確的指令序列與判斷原則(哪些指令連 DB、哪些不用)寫進本文件第 6.3 節,取代這裡原本指向 `docs/DEPLOY.md` 的錯誤文件參照(該節其實在本文件,不在 `docs/DEPLOY.md`)。
 
 - **2026-09-10（三十七～三十九）**：操作者 Claude Code(依使用者指示執行)。連續三個小型部署,合併記錄:
   - `40be728`(配對後不顯示彼此學號;佐證連結範例「上課畫面截圖」改「實際授課照片」)
