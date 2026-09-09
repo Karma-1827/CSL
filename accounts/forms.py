@@ -343,11 +343,11 @@ class BaseRoleRegistrationForm(forms.Form):
         ),
     )
     nationality = forms.CharField(
-        label="國家／地區 / Country or region",
+        label="國籍 / Nationality",
         max_length=80,
         widget=forms.Select(
             attrs={"data-profile-options": "region"},
-            choices=[("", "請選擇國家／地區 / Select country or region")],
+            choices=[("", "請選擇國籍 / Select nationality")],
         ),
     )
     department = forms.CharField(label="系所 / Department", max_length=150)
@@ -457,7 +457,8 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
     level_reading = forms.TypedChoiceField(label="閱讀 / Reading", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     level_writing = forms.TypedChoiceField(label="寫作 / Writing", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     teaching_notes = forms.CharField(
-        label="教學簡介 / Teaching notes", required=False, widget=forms.Textarea(attrs={"rows": 4})
+        label="教學簡介 / Teaching notes", required=False, max_length=500,
+        widget=forms.Textarea(attrs={"rows": 4, "maxlength": 500, "data-character-count": "500"}),
     )
     available_days = forms.MultipleChoiceField(
         label="可配合星期 / Available days", choices=DAYS, widget=forms.CheckboxSelectMultiple
@@ -648,11 +649,11 @@ class TutorProfileEditForm(forms.Form):
         ),
     )
     nationality = forms.CharField(
-        label="國家／地區 / Country or region",
+        label="國籍 / Nationality",
         max_length=80,
         widget=forms.Select(
             attrs={"data-profile-options": "region"},
-            choices=[("", "請選擇國家／地區 / Select country or region")],
+            choices=[("", "請選擇國籍 / Select nationality")],
         ),
     )
     department = forms.CharField(label="系所 / Department", max_length=150)
@@ -661,7 +662,8 @@ class TutorProfileEditForm(forms.Form):
     level_reading = forms.TypedChoiceField(label="閱讀 / Reading", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     level_writing = forms.TypedChoiceField(label="寫作 / Writing", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     teaching_notes = forms.CharField(
-        label="教學簡介 / Teaching notes", required=False, widget=forms.Textarea(attrs={"rows": 4})
+        label="教學簡介 / Teaching notes", required=False, max_length=500,
+        widget=forms.Textarea(attrs={"rows": 4, "maxlength": 500, "data-character-count": "500"}),
     )
     available_days = forms.MultipleChoiceField(
         label="可配合星期 / Available days", choices=DAYS, widget=forms.CheckboxSelectMultiple
@@ -727,11 +729,11 @@ class TuteeProfileEditForm(forms.Form):
         ),
     )
     nationality = forms.CharField(
-        label="國家／地區 / Country or region",
+        label="國籍 / Nationality",
         max_length=80,
         widget=forms.Select(
             attrs={"data-profile-options": "region"},
-            choices=[("", "請選擇國家／地區 / Select country or region")],
+            choices=[("", "請選擇國籍 / Select nationality")],
         ),
     )
     department = forms.CharField(label="系所 / Department", max_length=150)

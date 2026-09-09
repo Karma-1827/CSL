@@ -277,7 +277,7 @@ class TutorProfile(models.Model):
     level_speaking = models.PositiveSmallIntegerField("口說教學 / Speaking", default=0)
     level_reading = models.PositiveSmallIntegerField("閱讀教學 / Reading", default=0)
     level_writing = models.PositiveSmallIntegerField("寫作教學 / Writing", default=0)
-    teaching_notes = models.TextField("教學簡介 / Teaching notes", blank=True)
+    teaching_notes = models.TextField("教學簡介 / Teaching notes", max_length=500, blank=True)
     available_days = models.JSONField("可配合星期 / Available days", default=list)
     available_time_slots = models.JSONField("可配合時段 / Available time slots", default=list)
     created_at = models.DateTimeField(auto_now_add=True)

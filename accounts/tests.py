@@ -111,6 +111,31 @@ class RegistrationTests(TestCase):
         self.assertRedirects(response, reverse("accounts:register_tutor"))
         return self.client.post(reverse("accounts:register_tutor"), data or self.registration_data)
 
+    def test_tutor_registration_page_shows_nationality_label_and_qualification_document_order(self):
+        self.client.post(
+            reverse("accounts:register"),
+            {
+                "student_id": "TEST1001", "registration_identity": "LOCAL",
+                "password1": self.registration_data["password1"], "password2": self.registration_data["password2"],
+            },
+        )
+        self.client.post(reverse("accounts:register_confirm"))
+        response = self.client.get(reverse("accounts:register_tutor"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertContains(response, "國籍 / Nationality")
+        self.assertNotContains(response, "國家／地區")
+        # 2026-09-10 reorder: MOE certificate first, then the CSL-program transcript, the
+        # department's own oral interview, and the teacher-training admission interview
+        # last (with a "current semester only" qualifier) — must match the same order and
+        # wording the Admin dashboard's qualification-review tab shows via the same
+        # shared partial (templates/accounts/qualification_document_note.html).
+        first = content.index("教育部對外華語教學能力證書")
+        second = content.index("應華組「華語正音與口語表達」修課成績單，成績達B-（含）以上")
+        third = content.index("系上線上語音口試通過證明")
+        fourth = content.index("華語師資養成班招生入學口試通過證明（限當學期）")
+        self.assertTrue(first < second < third < fourth)
+
     def test_registration_requires_roster_entry(self):
         response = self.client.post(reverse("accounts:register"), {"student_id": "UNKNOWN"})
         self.assertEqual(response.status_code, 200)
@@ -1697,6 +1722,31 @@ class ProfileEditTests(TestCase):
         self.assertEqual(sorted(self.tutor_profile.available_days), ["MON", "THU", "TUE"])
         log = AuditLog.objects.get(event_type="PROFILE_UPDATED")
         self.assertIn("department", log.metadata["fields"])
+
+    def test_teaching_notes_over_500_characters_is_rejected(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "phone": "0911222333",
+                "email": "tutor.edit@example.com",
+                "gender": "MALE",
+                "native_language": "Mandarin Chinese",
+                "nationality": "Taiwan",
+                "department": "應用華語文學系",
+                "level_listening": 5,
+                "level_speaking": 5,
+                "level_reading": 5,
+                "level_writing": 5,
+                "teaching_notes": "太長了" * 200,
+                "available_days": ["MON"],
+                "available_time_slots": ["09:00-11:00"],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.tutor_profile.refresh_from_db()
+        self.assertEqual(self.tutor_profile.teaching_notes, "重視口語互動")
+        self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
 
     def test_tutee_can_update_profile_fields(self):
         self.client.force_login(self.tutee)
