@@ -56,8 +56,17 @@ class FiveMinuteTimeField(forms.MultiValueField):
         return time(hour, minute)
 
 
+class PairingChoiceField(forms.ModelChoiceField):
+    """A pairing <select> labeled by the tutee's name, not Pairing.__str__() (which
+    includes both usernames) — matched Tutor/Tutee shouldn't see each other's student ID
+    even in the tutor's own scheduling dropdown (2026-09-10)."""
+
+    def label_from_instance(self, obj):
+        return f"{obj.tutee.bilingual_name} · {obj.semester}"
+
+
 class ScheduleClassForm(forms.Form):
-    pairing = forms.ModelChoiceField(label="學生 / Student", queryset=Pairing.objects.none())
+    pairing = PairingChoiceField(label="學生 / Student", queryset=Pairing.objects.none())
     class_date = forms.DateField(label="上課日期 / Class date", widget=forms.DateInput(attrs={"type": "date"}))
     start_time = FiveMinuteTimeField(label="開始時間 / Start time")
     duration = forms.ChoiceField(label="時數 / Duration", choices=ClassSession.DURATION_CHOICES)

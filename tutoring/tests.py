@@ -1274,6 +1274,12 @@ class ClassWorkflowTests(TestCase):
                 duration="1.0",
             )
 
+    def test_schedule_form_pairing_dropdown_does_not_show_tutee_username(self):
+        form = ScheduleClassForm(tutor=self.tutor)
+        rendered_option = str(form["pairing"])
+        self.assertIn(self.tutee.name_zh, rendered_option)
+        self.assertNotIn(self.tutee.username, rendered_option)
+
     def test_schedule_form_lists_only_five_minute_values(self):
         class_date = timezone.localdate() + timedelta(days=1)
         form = ScheduleClassForm(
