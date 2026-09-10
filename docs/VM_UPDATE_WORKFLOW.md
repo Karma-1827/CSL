@@ -293,6 +293,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-10(五十四)**:操作者 Claude Code(依使用者指示執行)。上一版 `27f240f` → 新版 `7a2ee5f`(師大資中弱點掃描 Batch D 第一項:`MESSAGE_STORAGE` 改用 `SessionStorage`,flash 訊息不再產生 `messages` cookie,詳見 `docs/PROGRESS.md`)。**無 migration、無相依套件變更、無靜態資源變更**,370 項測試全數通過。部署前備份:`/var/backups/mpts/20260910-233409`。`git checkout --detach` 乾淨無衝突。因無 migration/靜態資源異動,只執行 `systemctl restart mpts-gunicorn.service`。驗收:`curl -I` 首頁回應 200;用 `TEST-SCAN-TUTOR-NTNU` 對 `/qualification/upload/` 送一筆會觸發 `messages.error()` 的無效請求,確認回應只帶 `sessionid` cookie、沒有 `messages` cookie;`journalctl` 僅有既有的 gunicorn `Control server error` 無關訊息。SameSite Strict、關瀏覽器即登出、CSRF cookie HttpOnly 三項仍待使用者決定方向,本次未處理。臨時 sudo 授權依使用者指示維持開啟。
+
 - **2026-09-10(資料異動,非程式碼部署)**:操作者 Claude Code(依使用者指示執行)。使用者發現正式站上遺留一批舊的 demo 帳號(`DEMO-TUTOR`、`DEMO-TUTOR-PENDING`、`DEMO-TUTEE-01`~`10`、`DEMO-TUTEE-PENDING`,共 13 個,推測是先前某次對真人展示系統時直接建立在正式站上,命名規則與本機 `seed_admin_demo`/`seed_matching_demo` 的 `DEMO-TUTOR2/3`、`DEMO-TUTEE2/3/4` 不同),且這批 demo 帳號完全沒有任何機制讓它們在匿名候選瀏覽中被排除或標示(不像 `TEST-` 開頭帳號有 `_is_test_account()` 附加的「TEST」提示),導致實際已有真實老師瀏覽候選學生時邀請到 demo 學生。查證後發現的實際影響:
   - `TEST-SCAN-TUTEE-NTNU`(其中一個掃描測試帳號)當時的 ACTIVE 配對其實是配到 `DEMO-TUTOR`,不是它原本該搭配的 `TEST-SCAN-TUTOR-NTNU`。
   - 兩位真實老師(賴廷勛 `61384030I`、范氏金綱 `61484065I`)當時各有一筆 PENDING 邀請卡在 demo 學生(`DEMO-TUTEE-01`/`DEMO-TUTEE-08`)身上,邀請名額因此被佔用。
