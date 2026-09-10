@@ -41,6 +41,13 @@ upstream mpts_app {
 server {
     listen 80;
     server_name mpts.tcsl.ntnu.edu.tw;
+    # 2026-09-10 弱點掃描 Batch C: HSTS is meaningless over plain HTTP (browsers only
+    # honor it on a response actually delivered over TLS) so it's deliberately omitted
+    # here; the other three are cheap to add and match what Django already sends on its
+    # own HTTPS responses (accounts/middleware.py, config/settings.py).
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
     return 301 https://$host$request_uri;
 }
 
@@ -95,15 +102,38 @@ server {
     location = /static/errors/413.html {
         client_max_body_size 0;
         alias TODO/opt/mpts/staticfiles/errors/413.html;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
     }
 
     # Matches STATIC_ROOT in config/settings.py. Re-run collectstatic and reload nginx
     # (not required, just to pick up new files — nginx reads the directory live) after
     # every deploy that changes static/.
+    #
+    # 2026-09-10 弱點掃描 Batch C (P0-3): these 4 responses (this location, the 413 page
+    # above, and the plain-HTTP 301 above) are served directly by Nginx and never reach
+    # Django, so they never got the security headers Django's own middleware adds to
+    # every dynamic response — this is what the scan's COOP/X-Content-Type-Options/HSTS/
+    # Referrer-Policy findings were actually pointing at (see
+    # docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md P0-3). Values are copied
+    # verbatim from what Django already sends (config/settings.py,
+    # accounts/middleware.py) so a client sees one consistent policy site-wide.
+    # Deliberately NOT added to `location /` or `location /system-admin/`: those proxy
+    # to Django, which already sets these on every response it generates, and adding
+    # `add_header` there too — since `add_header` never removes an existing
+    # same-named header from the proxied response — would just duplicate them.
+    # nginx's own synthetic error responses on those two locations (e.g. the 429 from
+    # limit_req_status) are a known, accepted residual gap, not covered by this batch.
     location /static/ {
         alias TODO/opt/mpts/staticfiles/;
         expires 30d;
         add_header Cache-Control "public";
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
     }
 
     # Reserved for the private-download views (accounts:download_qualification,
