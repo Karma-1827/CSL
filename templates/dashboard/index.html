@@ -121,16 +121,29 @@
           {% if qualification_review_history %}
             <div class="table-wrap">
               <table>
-                <thead><tr><th>學生 / Student</th><th>結果 / Result</th><th>留言 / Note</th><th>審核備註 / Review note</th><th>審核人員 / Reviewed by</th><th class="col-nowrap">審核時間 / Reviewed at</th></tr></thead>
+                <thead><tr><th>學生 / Student</th><th>檔案 / File</th><th>結果 / Result</th><th>留言 / Note</th><th>審核備註 / Review note</th><th>審核人員 / Reviewed by</th><th class="col-nowrap">審核時間 / Reviewed at</th><th>操作 / Action</th></tr></thead>
                 <tbody>
                   {% for document in qualification_review_history %}
                     <tr>
                       <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
+                      <td>
+                        <div class="qualification-file-links">
+                          <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
+                          <a class="button button-secondary button-small" href="{% url 'accounts:download_qualification' document.pk %}" rel="noopener">下載 / Download</a>
+                        </div>
+                      </td>
                       <td><span class="result-text status-{{ document.status|lower }}">{{ document.get_status_display }}</span></td>
                       <td>{{ document.tutor_note|default:"—" }}</td>
                       <td>{{ document.review_note|default:"—" }}</td>
                       <td>{{ document.reviewed_by.bilingual_name|default:"—" }}</td>
                       <td class="col-nowrap">{{ document.reviewed_at|date:"Y-m-d H:i" }}</td>
+                      <td>
+                        <form action="{% url 'accounts:review_qualification' document.pk %}" method="post">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="revert">
+                          <button class="button button-secondary button-small" type="submit">撤回 / Revert</button>
+                        </form>
+                      </td>
                     </tr>
                   {% endfor %}
                 </tbody>

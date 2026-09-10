@@ -1168,8 +1168,22 @@ def download_qualification(request, pk):
 def review_qualification(request, pk):
     document = get_object_or_404(QualificationDocument.objects.select_for_update(), pk=pk)
     action = request.POST.get("action")
-    if action not in {"approve", "reject"}:
+    if action not in {"approve", "reject", "revert"}:
         return HttpResponseBadRequest("Invalid review action")
+    if action == "revert":
+        document.status = QualificationStatus.PENDING
+        document.review_note = ""
+        document.reviewed_by = None
+        document.reviewed_at = None
+        document.save()
+        log_event(
+            request,
+            "QUALIFICATION_REVIEW_REVERTED",
+            "口語能力證明審核結果已撤回，回到待審核 / Oral proficiency review reverted to pending",
+            document.tutor,
+        )
+        messages.success(request, "已撤回審核結果，回到待審核。 / Review result reverted to pending.")
+        return redirect(reverse("accounts:dashboard") + "#qualifications")
     document.status = QualificationStatus.APPROVED if action == "approve" else QualificationStatus.REJECTED
     document.review_note = request.POST.get("review_note", "").strip()
     document.reviewed_by = request.user

@@ -1053,6 +1053,32 @@ class QualificationTests(TestCase):
         self.assertContains(dashboard, "證明文件模糊不清，請重新掃描上傳。")
         self.assertContains(dashboard, self.admin.bilingual_name)
         self.assertNotContains(dashboard, "目前沒有已審核的文件")
+        self.assertContains(dashboard, reverse("accounts:download_qualification", args=[document.pk]))
+        self.assertContains(dashboard, document.original_filename)
+
+    def test_admin_can_revert_a_reviewed_qualification_back_to_pending(self):
+        """2026-09-10 (user-requested): a mis-clicked approve/reject must be undoable —
+        the history section's "撤回 / Revert" button sends the document back to PENDING
+        (clearing the old decision) so it can be reviewed again from scratch."""
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]),
+            {"action": "reject", "review_note": "先前的審核備註"},
+        )
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]), {"action": "revert"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.PENDING)
+        self.assertEqual(document.review_note, "")
+        self.assertIsNone(document.reviewed_by)
+        self.assertIsNone(document.reviewed_at)
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, self.tutor.bilingual_name)
+        self.assertNotContains(dashboard, "先前的審核備註")
 
     def test_non_admin_cannot_review_qualification(self):
         document = self.upload_and_get_document()
