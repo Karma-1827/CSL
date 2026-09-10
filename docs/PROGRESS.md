@@ -58,6 +58,8 @@
 >
 > **2026-09-10 師大資中弱點掃描 Batch D 第三項:`SESSION_EXPIRE_AT_BROWSER_CLOSE = True`**(使用者明確決定採用):session cookie 從「帶 `Max-Age` 的持久 cookie」改成「不帶 `Max-Age`/`Expires` 的瀏覽器 session cookie」,完全關閉瀏覽器後瀏覽器會自行捨棄,下次要重新登入。**伺服器端既有的 30 分鐘閒置逾時(`SESSION_COOKIE_AGE`)完全不受影響,兩者是疊加關係不是取代**。**已知的實際限制**:部分瀏覽器/裝置的「回復先前分頁」或行動版瀏覽器背景保留機制,不會真的在關閉當下清掉 session cookie——這是瀏覽器自己的行為,Django 端只能提供這個訊號給瀏覽器參考,無法強制生效,不能保證每個瀏覽器都會如預期般在關閉後登出。新增回歸測試確認 cookie 已無 `Max-Age`/`Expires`。373 項測試全數通過,`ruff` 乾淨。
 > - Batch D 剩下最後一項(CSRF cookie 改 `HttpOnly`)尚未處理,計畫本身也建議這項不要為了消除報告就直接改,需先重新設計 `dashboard.js` 讀取 CSRF cookie 做多分頁 token 輪替的機制。
+>
+> **2026-09-11 補齊 Batch C 的殘留缺口:Nginx 直接回應也加上 COEP/CORP**:整理弱掃缺失處理報告表草稿(`docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md`)時發現 Batch C 只補了 HSTS/`X-Content-Type-Options`/`Referrer-Policy`/COOP 四項,COEP(`Cross-Origin-Embedder-Policy: require-corp`)/CORP(`Cross-Origin-Resource-Policy: same-origin`)沒有一併加到 Nginx 直接處理的 HTTP 301 重導、`/static/`、`/static/errors/413.html` 三處(`deploy/nginx/mpts.conf.example` 與正式 VM 同步套用)。已確認 `/static/errors/413.html` 本身只引用同源的 `app.css`/校徽圖檔,加上 `require-corp` 不影響其渲染;`curl -I` 驗證三處回應皆已正確帶上這兩個標頭,動態頁(`/`)兩個標頭仍各只出現 1 次,無重複。至此報告 19 類結果中的 #3(COEP)、#5(CORP)已從「部分完成」轉為「已完全修正」。
 
 ## 已完成
 
