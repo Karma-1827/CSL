@@ -2965,6 +2965,7 @@ td small {
 .qualification-file-links {
   display: grid;
   gap: 3px;
+  justify-items: start;
 }
 .qualification-review-form {
   display: grid;
