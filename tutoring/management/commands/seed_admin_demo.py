@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.management.commands._demo_files import ensure_demo_pdf_exists
 from accounts.management.commands._demo_guard import ensure_demo_seed_allowed
 from accounts.models import EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
 from tutoring.models import (
@@ -187,7 +188,7 @@ class Command(BaseCommand):
         QualificationDocument.objects.update_or_create(
             tutor=user,
             defaults={
-                "file": "qualifications/demo-proof.pdf",
+                "file": ensure_demo_pdf_exists("qualifications/demo-proof.pdf"),
                 "original_filename": "demo-proof.pdf",
                 "status": qualification_status,
             },
