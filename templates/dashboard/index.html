@@ -126,7 +126,7 @@
                   {% for document in qualification_review_history %}
                     <tr>
                       <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
-                      <td>{{ document.get_status_display }}</td>
+                      <td><span class="result-text status-{{ document.status|lower }}">{{ document.get_status_display }}</span></td>
                       <td>{{ document.tutor_note|default:"—" }}</td>
                       <td>{{ document.review_note|default:"—" }}</td>
                       <td>{{ document.reviewed_by.bilingual_name|default:"—" }}</td>

@@ -167,7 +167,7 @@ class QualificationStatus(models.TextChoices):
     NOT_SUBMITTED = "NOT_SUBMITTED", "未提交 / Not submitted"
     PENDING = "PENDING", "待審核 / Pending review"
     APPROVED = "APPROVED", "已通過 / Approved"
-    REJECTED = "REJECTED", "已拒絕 / Rejected"
+    REJECTED = "REJECTED", "未通過 / Rejected"
 
 
 class QualificationDocument(models.Model):
@@ -453,9 +453,9 @@ class PairingReleaseReason(models.TextChoices):
 
 class PairingReleaseStatus(models.TextChoices):
     PENDING = "PENDING", "等待管理員處理 / Pending admin review"
-    APPROVED = "APPROVED", "管理員已核准 / Approved by admin"
+    APPROVED = "APPROVED", "管理員已通過 / Approved by admin"
     AUTO_APPROVED = "AUTO_APPROVED", "系統自動解除 / Automatically released"
-    REJECTED = "REJECTED", "管理員未核准 / Rejected by admin"
+    REJECTED = "REJECTED", "管理員未通過 / Rejected by admin"
 
 
 class PairingReleaseRequest(models.Model):
@@ -657,8 +657,8 @@ class ClassConfirmation(models.Model):
 class ClassReviewStatus(models.TextChoices):
     WAITING = "WAITING", "等待雙方確認 / Waiting for mutual confirmation"
     PENDING = "PENDING", "等待管理員核准 / Waiting for admin approval"
-    APPROVED = "APPROVED", "已核准 / Approved"
-    REJECTED = "REJECTED", "未核准 / Rejected"
+    APPROVED = "APPROVED", "已通過 / Approved"
+    REJECTED = "REJECTED", "未通過 / Rejected"
 
 
 class ClassReview(models.Model):

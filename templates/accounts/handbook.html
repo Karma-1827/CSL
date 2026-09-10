@@ -148,7 +148,7 @@
               <tbody>
                 <tr><td>我的首頁<br>Overview</td><td>查看目前學期、配對、邀請及近期課程<br>View the current semester, matches, invitations, and upcoming classes</td></tr>
                 <tr><td>我的課表<br>Schedule</td><td>查看課程日期、時間、狀態及進入課堂頁<br>View class dates, times, status, and open the class page</td></tr>
-                <tr><td>輔導時數<br>Hours</td><td>查看有效、待處理或未核准的時數，下載證明<br>Check verified, pending, or rejected hours, and download certificates</td></tr>
+                <tr><td>輔導時數<br>Hours</td><td>查看有效、待處理或未通過的時數，下載證明<br>Check verified, pending, or rejected hours, and download certificates</td></tr>
                 <tr><td>私訊<br>Messages</td><td>與目前或歷史配對學生查看訊息<br>Message current or past matched students</td></tr>
                 <tr><td>尋找學生<br>Find students</td><td>依計畫與條件查看匿名學生資料並送出邀請<br>Browse anonymous student profiles by program and filter, and send invitations</td></tr>
                 <tr><td>邀請管理<br>Invitations</td><td>查看收到、送出、已接受、婉拒、取消或過期的邀請<br>Track received, sent, accepted, declined, cancelled, or expired invitations</td></tr>
@@ -354,9 +354,9 @@
               <li>老師與學生都完成簽到。<br>Both the teacher and student have checked in.</li>
               <li>老師與學生都提交課堂紀錄。<br>Both have submitted a class record.</li>
               <li>雙方都確認對方的簽到與紀錄。<br>Each side has confirmed the other's check-in and record.</li>
-              <li>若有補簽到或補課堂紀錄，管理員已核准補登。<br>If there's a late check-in or late record, an administrator has approved it.</li>
+              <li>若有補簽到或補課堂紀錄，該筆補登已通過管理員審核。<br>If there's a late check-in or late record, an administrator has approved it.</li>
             </ol>
-            <p>只完成單方資料、仍待對方確認或補登未核准，都不會列入有效時數。</p>
+            <p>只完成單方資料、仍待對方確認或補登未通過，都不會列入有效時數。</p>
             <p>A class with only one side's data, still awaiting confirmation, or with an unapproved late entry, is not counted as verified hours.</p>
           </section>
 
@@ -389,17 +389,17 @@
               <li>雙方確認完成後，等待管理員審核。<br>Once both sides confirm, wait for administrator review.</li>
               <li>回到「輔導時數」查看結果。<br>Check the result under "輔導時數 / Hours."</li>
             </ol>
-            <p>狀態顯示「未核准 / Rejected」時，該堂不列入有效時數。若認為結果有誤，請提供課程日期、配對對象及畫面給管理員查核，不要重複送出不同內容。</p>
-            <p>A "未核准 / Rejected" status means that class doesn't count as verified hours. If you believe this is wrong, give an administrator the class date, matched partner, and a screenshot to check — don't keep resubmitting different content.</p>
+            <p>狀態顯示「未通過 / Rejected」時，該堂不列入有效時數。若認為結果有誤，請提供課程日期、配對對象及畫面給管理員查核，不要重複送出不同內容。</p>
+            <p>A "未通過 / Rejected" status means that class doesn't count as verified hours. If you believe this is wrong, give an administrator the class date, matched partner, and a screenshot to check — don't keep resubmitting different content.</p>
           </section>
 
           <section class="profile-card manual-section" id="t11">
             <h2>十一、輔導時數與證明 <small>Hours & certificates</small></h2>
             <h3>11.1 查看時數 <small>Check your hours</small></h3>
-            <p>按左側「輔導時數 / Hours」。頁面會列出課程及狀態，例如有效成立、待完成、待審核或未核准。</p>
+            <p>按左側「輔導時數 / Hours」。頁面會列出課程及狀態，例如有效成立、待完成、待審核或未通過。</p>
             <p>Click "輔導時數 / Hours" in the sidebar. The page lists classes and their status — verified, pending, awaiting review, or rejected.</p>
             <img src="{% static 'img/handbook/teacher/hours.png' %}" alt="輔導時數頁 / Hours page">
-            <p>若總時數與預期不同，先逐堂檢查雙方是否完成簽到、紀錄及確認；有補登時再確認管理員是否已核准。</p>
+            <p>若總時數與預期不同，先逐堂檢查雙方是否完成簽到、紀錄及確認；有補登時再確認補登是否已通過管理員審核。</p>
             <p>If the total doesn't match your expectation, check each class for both sides' check-in, record, and confirmation first, then confirm whether any late entries have been approved.</p>
             <h3>11.2 預覽與下載證明 <small>Preview & download a certificate</small></h3>
             <p>有有效時數後，可在下載區：</p>
@@ -594,7 +594,7 @@
               <tbody>
                 <tr><td>我的首頁<br>Overview</td><td>查看目前學期、配對、邀請及近期課程<br>View the current semester, matches, invitations, and upcoming classes</td></tr>
                 <tr><td>我的課表<br>Schedule</td><td>查看老師建立的課程、課程狀態及進入課堂頁<br>View classes your teacher created, their status, and open the class page</td></tr>
-                <tr><td>輔導紀錄<br>History</td><td>查看有效、待處理或未核准的課程與時數，下載證明<br>Check verified, pending, or rejected classes and hours, and download certificates</td></tr>
+                <tr><td>輔導紀錄<br>History</td><td>查看有效、待處理或未通過的課程與時數，下載證明<br>Check verified, pending, or rejected classes and hours, and download certificates</td></tr>
                 <tr><td>私訊<br>Messages</td><td>與目前或歷史配對老師查看訊息<br>Message your current or past matched teacher</td></tr>
                 <tr><td>邀請管理<br>Invitations</td><td>查看收到、送出、已接受、婉拒、取消或過期的邀請<br>Track received, sent, accepted, declined, cancelled, or expired invitations</td></tr>
                 {% if is_maryland %}<tr><td>尋找老師<br>Find teachers</td><td>主動瀏覽並邀請老師<br>Browse and invite teachers yourself</td></tr>{% endif %}
@@ -725,9 +725,9 @@
               <li>老師與學生都完成簽到。<br>Both the teacher and student have checked in.</li>
               <li>老師與學生都提交課堂紀錄。<br>Both have submitted a class record.</li>
               <li>雙方都確認對方的簽到與紀錄。<br>Each side has confirmed the other's check-in and record.</li>
-              <li>若有補簽到或補課堂紀錄，管理員已核准補登。<br>If there's a late check-in or late record, an administrator has approved it.</li>
+              <li>若有補簽到或補課堂紀錄，該筆補登已通過管理員審核。<br>If there's a late check-in or late record, an administrator has approved it.</li>
             </ol>
-            <p>只完成單方資料、仍待對方確認或補登未核准，都不會列入有效紀錄與時數。</p>
+            <p>只完成單方資料、仍待對方確認或補登未通過，都不會列入有效紀錄與時數。</p>
             <p>A class with only one side's data, still awaiting confirmation, or with an unapproved late entry, is not counted as a verified record or hours.</p>
           </section>
 
@@ -760,17 +760,17 @@
               <li>雙方確認完成後，等待管理員審核。<br>Once both sides confirm, wait for administrator review.</li>
               <li>回到「輔導紀錄」查看結果。<br>Check the result under "輔導紀錄 / History."</li>
             </ol>
-            <p>狀態顯示「未核准 / Rejected」時，該堂不列入有效紀錄與時數。若認為結果有誤，請提供課程日期、配對老師及畫面給管理員查核，不要重複送出不同內容。</p>
-            <p>A "未核准 / Rejected" status means that class doesn't count as a verified record or hours. If you believe this is wrong, give an administrator the class date, matched teacher, and a screenshot to check — don't keep resubmitting different content.</p>
+            <p>狀態顯示「未通過 / Rejected」時，該堂不列入有效紀錄與時數。若認為結果有誤，請提供課程日期、配對老師及畫面給管理員查核，不要重複送出不同內容。</p>
+            <p>A "未通過 / Rejected" status means that class doesn't count as a verified record or hours. If you believe this is wrong, give an administrator the class date, matched teacher, and a screenshot to check — don't keep resubmitting different content.</p>
           </section>
 
           <section class="profile-card manual-section" id="s10">
             <h2>十、輔導紀錄與證明 <small>History & certificates</small></h2>
             <h3>10.1 查看輔導紀錄 <small>Check your history</small></h3>
-            <p>按左側「輔導紀錄 / History」。頁面會列出課程及狀態，例如有效成立、待完成、待審核或未核准。</p>
+            <p>按左側「輔導紀錄 / History」。頁面會列出課程及狀態，例如有效成立、待完成、待審核或未通過。</p>
             <p>Click "輔導紀錄 / History" in the sidebar. The page lists classes and their status — verified, pending, awaiting review, or rejected.</p>
             <img src="{% static 'img/handbook/student/history.png' %}" alt="輔導紀錄頁 / History page">
-            <p>若總時數與預期不同，先逐堂檢查雙方是否完成簽到、紀錄及確認；有補登時再確認管理員是否已核准。</p>
+            <p>若總時數與預期不同，先逐堂檢查雙方是否完成簽到、紀錄及確認；有補登時再確認補登是否已通過管理員審核。</p>
             <p>If the total doesn't match your expectation, check each class for both sides' check-in, record, and confirmation first, then confirm whether any late entries have been approved.</p>
             <h3>10.2 預覽與下載證明 <small>Preview & download a certificate</small></h3>
             <p>所屬計畫開放學生下載證明時，可在下載區：</p>

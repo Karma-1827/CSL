@@ -2115,6 +2115,18 @@ td small {
   color: var(--danger);
   background: var(--danger-soft);
 }
+.result-text {
+  font-weight: 700;
+}
+.result-text.status-approved,
+.result-text.status-accepted {
+  background: none;
+}
+.result-text.status-rejected,
+.result-text.status-cancelled,
+.result-text.status-expired {
+  background: none;
+}
 .upload-form {
   display: grid;
   gap: 10px;

@@ -1780,7 +1780,7 @@ class ClassWorkflowTests(TestCase):
         session.class_review.refresh_from_db()
         self.assertTrue(class_is_valid(session))
         history = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(history, "已核准")
+        self.assertContains(history, "已通過")
         self.assertContains(history, "補課堂紀錄")
 
     def test_tutor_and_tutee_schedule_badge_reflects_class_review_status_not_generic_waiting(self):
@@ -1831,7 +1831,7 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(session.class_review.status, ClassReviewStatus.REJECTED)
         self.client.force_login(self.tutor)
         after_reject = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(after_reject, "未核准 / Rejected")
+        self.assertContains(after_reject, "未通過 / Rejected")
         self.assertContains(after_reject, 'class-status rejected')
         self.assertNotContains(after_reject, "等待雙方完成 / Waiting")
 

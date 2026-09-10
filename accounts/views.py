@@ -736,8 +736,8 @@ def dashboard(request):
         status_definitions = (
             (ClassReviewStatus.PENDING, "等待管理員核准", "Waiting for admin approval", True),
             (ClassReviewStatus.WAITING, "等待雙方確認", "Waiting for mutual confirmation", False),
-            (ClassReviewStatus.APPROVED, "已核准", "Approved", False),
-            (ClassReviewStatus.REJECTED, "未核准", "Rejected", False),
+            (ClassReviewStatus.APPROVED, "已通過", "Approved", False),
+            (ClassReviewStatus.REJECTED, "未通過", "Rejected", False),
         )
         context["class_review_sections"] = [
             {
