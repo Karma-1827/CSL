@@ -31,6 +31,18 @@ from .models import (
 from .throttle import any_throttled, clear_throttles, register_failures
 
 
+def validate_email_no_control_characters(value):
+    """2026-09-08 師大資中弱點掃描報告列出 `/profile/update/` 的 email 參數疑似可做
+    SMTP header/MX 注入(見 docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md)。
+    Django 的內建 `EmailValidator` 正則與 `ProhibitNullCharactersValidator` 其實已經擋掉
+    大部分注入嘗試(嵌入式 \\r\\n、NUL),但沒有明確拒絕其餘 ASCII 控制字元,行為也不夠
+    明確可稽核。這裡在交給 Django 內建 Email 驗證的同時,額外明確擋下任何 ASCII 控制
+    字元(0-31 與 127,含 \\r、\\n、NUL),作為縱深防護,並讓「拒絕控制字元」成為程式碼
+    裡看得到、測得到的規則,而不是隱含依賴 Django 預設行為。"""
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValidationError("Email 不可包含控制字元。 / Email must not contain control characters.")
+
+
 def client_ip(request):
     """The real client IP, honoring exactly `settings.TRUSTED_PROXY_COUNT` reverse-proxy
     hops (docs/VULNERABILITY_SCAN_IMPROVEMENTS.md batch 5). Defaults to 0 — trust nothing
@@ -332,7 +344,7 @@ class BaseRoleRegistrationForm(forms.Form):
     name_en = forms.CharField(label="英文姓名 / English name", max_length=150, required=False)
     identity_category = forms.ChoiceField(label="身份別 / Identity category", choices=IdentityCategory.choices)
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
-    email = forms.EmailField(label="Email", max_length=254)
+    email = forms.EmailField(label="Email", max_length=254, validators=[validate_email_no_control_characters])
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
         label="母語 / Native language",
@@ -645,7 +657,7 @@ class QualificationUploadForm(forms.ModelForm):
 
 class TutorProfileEditForm(forms.Form):
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
-    email = forms.EmailField(label="Email", max_length=254)
+    email = forms.EmailField(label="Email", max_length=254, validators=[validate_email_no_control_characters])
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
         label="母語 / Native language",
@@ -725,7 +737,7 @@ class TutorProfileEditForm(forms.Form):
 
 class TuteeProfileEditForm(forms.Form):
     phone = forms.CharField(label="電話（選填） / Phone (optional)", max_length=30, required=False)
-    email = forms.EmailField(label="Email", max_length=254)
+    email = forms.EmailField(label="Email", max_length=254, validators=[validate_email_no_control_characters])
     gender = forms.ChoiceField(label="性別 / Gender", choices=GENDER_CHOICES)
     native_language = forms.CharField(
         label="母語 / Native language",
@@ -832,7 +844,9 @@ class AdminProfileEditForm(forms.Form):
 
     name_zh = forms.CharField(label="中文姓名 / Chinese name", max_length=100)
     name_en = forms.CharField(label="英文姓名 / English name", max_length=150, required=False)
-    email = forms.EmailField(label="Email", max_length=254, required=False)
+    email = forms.EmailField(
+        label="Email", max_length=254, required=False, validators=[validate_email_no_control_characters]
+    )
     new_password1 = forms.CharField(
         label="新密碼 / New password",
         required=False, strip=False,

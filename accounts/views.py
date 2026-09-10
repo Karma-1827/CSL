@@ -289,6 +289,30 @@ def preview_tutee(request):
     return _registration_preview(request, Role.TUTEE, TuteeRegistrationForm, "accounts/register_tutee.html")
 
 
+# 2026-09-10 (fixing a real finding from the 師大資訊中心 HCL AppScan report,
+# 2026-09-08): the candidate-browsing filter params below used to go straight from
+# request.GET into a Django ORM .filter(field=value) call. A NUL byte in the value
+# (e.g. ?tutee_level=%00) reaches psycopg as a string literal containing 0x00, which
+# PostgreSQL's wire protocol cannot represent — psycopg raises before the query ever
+# runs, and that exception was unhandled, producing a 500. Whitelisting known choice
+# values closes this off entirely for the fixed-choice filters (gender, overall
+# level, skills, days, time slots); native_language has no fixed backend choice
+# list (see CLAUDE.md 4.3), so it's sanitized by rejecting control characters and
+# capping length instead of a whitelist.
+def _sanitize_choice_value(value, valid_values):
+    return value if value in valid_values else ""
+
+
+def _sanitize_choice_list(values, valid_values):
+    return [value for value in values if value in valid_values]
+
+
+def _sanitize_free_text_filter(value, max_length=80):
+    if not value or any(ord(character) < 32 for character in value):
+        return ""
+    return value[:max_length]
+
+
 @login_required
 def dashboard(request):
     synchronize_matching_state()
@@ -515,13 +539,20 @@ def dashboard(request):
             .order_by("-responded_at", "-created_at")[:20]
         ]
         can_match = matching_open and tutor_has_approved_qualification(request.user) and pairings.count() < MAX_ACTIVE_TUTEES_PER_TUTOR
+        gender_values = {choice[0] for choice in GENDER_CHOICES if choice[0]}
+        overall_level_values = {choice[0] for choice in OVERALL_LEVEL_CHOICES}
+        skill_values = {choice[0] for choice in SKILL_CHOICES}
+        day_values = {choice[0] for choice in DAYS}
+        time_slot_values = {choice[0] for choice in TIME_SLOTS}
         candidate_filters = {
-            "gender": request.GET.get("tutee_gender", "").strip(),
-            "overall_level": request.GET.get("tutee_level", "").strip(),
-            "native_language": request.GET.get("tutee_language", "").strip(),
-            "target_skills": request.GET.getlist("tutee_skill"),
-            "days": request.GET.getlist("tutee_day"),
-            "time_slots": request.GET.getlist("tutee_slot"),
+            "gender": _sanitize_choice_value(request.GET.get("tutee_gender", "").strip(), gender_values),
+            "overall_level": _sanitize_choice_value(
+                request.GET.get("tutee_level", "").strip(), overall_level_values
+            ),
+            "native_language": _sanitize_free_text_filter(request.GET.get("tutee_language", "").strip()),
+            "target_skills": _sanitize_choice_list(request.GET.getlist("tutee_skill"), skill_values),
+            "days": _sanitize_choice_list(request.GET.getlist("tutee_day"), day_values),
+            "time_slots": _sanitize_choice_list(request.GET.getlist("tutee_slot"), time_slot_values),
         }
         candidates = (
             anonymous_tutee_candidates(semester=current_semester, tutor=request.user, filters=candidate_filters)
@@ -584,11 +615,14 @@ def dashboard(request):
             and request.user.roster_entry.program_id
             and request.user.roster_entry.program.allow_tutee_initiate_invitation
         )
+        tutor_gender_values = {choice[0] for choice in GENDER_CHOICES if choice[0]}
+        tutor_day_values = {choice[0] for choice in DAYS}
+        tutor_time_slot_values = {choice[0] for choice in TIME_SLOTS}
         tutor_candidate_filters = {
-            "gender": request.GET.get("tutor_gender", "").strip(),
-            "native_language": request.GET.get("tutor_language", "").strip(),
-            "days": request.GET.getlist("tutor_day"),
-            "time_slots": request.GET.getlist("tutor_slot"),
+            "gender": _sanitize_choice_value(request.GET.get("tutor_gender", "").strip(), tutor_gender_values),
+            "native_language": _sanitize_free_text_filter(request.GET.get("tutor_language", "").strip()),
+            "days": _sanitize_choice_list(request.GET.getlist("tutor_day"), tutor_day_values),
+            "time_slots": _sanitize_choice_list(request.GET.getlist("tutor_slot"), tutor_time_slot_values),
         }
         candidates = (
             anonymous_tutor_candidates(semester=current_semester, tutee=request.user, filters=tutor_candidate_filters)
@@ -1150,7 +1184,16 @@ def upload_qualification(request):
     if form.is_valid():
         document = form.save(commit=False)
         document.tutor = request.user
-        document.original_filename = request.FILES["file"].name
+        # 2026-09-08 師大資中弱點掃描發現的第二個真實 500(見
+        # docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md 應用程式錯誤分類):
+        # 重新送審時若送出的表單根本沒有 "file" 這個欄位(例如殘缺的 multipart 送出
+        # file[]=...),Django FileField.clean() 會依既有慣例回退使用 instance 上的舊檔案
+        # 讓 form.is_valid() 仍為 True,但 request.FILES 裡完全沒有 "file" 這個 key,直接
+        # 用 request.FILES["file"] 會丟出未攔截的 KeyError/500。改用 .get() 判斷是否真的
+        # 有上傳新檔案,沒有就沿用既有的 original_filename(維持既有審核紀錄的檔名顯示)。
+        new_upload = request.FILES.get("file")
+        if new_upload is not None:
+            document.original_filename = new_upload.name
         document.status = QualificationStatus.PENDING
         document.review_note = ""
         document.reviewed_by = None

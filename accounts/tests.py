@@ -194,6 +194,21 @@ class RegistrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username="TEST1001").exists())
 
+    def test_registration_rejects_email_with_control_characters(self):
+        """2026-09-08 師大資中弱點掃描報告的 SMTP MX 注入疑似項目
+        (docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md):惡意 email(CRLF
+        header injection、NUL byte)必須被表單擋下、回傳 200 + 表單錯誤,不建立帳號,
+        也不能是未攔截的 500。"""
+        for malicious_email in [
+            "test@example.com\r\nRCPT TO:<evil@example.com>",
+            "test%0a rcpt to:<evil@example.com>@example.com",
+            "test\x00@example.com",
+        ]:
+            data = self.registration_data | {"email": malicious_email}
+            response = self.register_tutor(data)
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(User.objects.filter(username="TEST1001").exists())
+
     def test_tutor_registration_requires_english_name(self):
         data = self.registration_data | {"name_en": ""}
         response = self.register_tutor(data)
@@ -982,6 +997,46 @@ class QualificationTests(TestCase):
         document.refresh_from_db()
         self.assertEqual(document.status, QualificationStatus.APPROVED)
         self.assertEqual(document.file.name, original_name)
+
+    def test_missing_file_field_on_first_upload_is_rejected_not_500(self):
+        """P1-3 弱點掃描畸形上傳測試:第一次上傳(尚無既有文件)完全沒有 "file" 欄位
+        (例如殘缺的 multipart 送出 file[]=... 而非 file=...),表單必為 invalid(file
+        為必填),必須回到原頁並顯示錯誤,不能是 500,也不能建立任何紀錄。"""
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("accounts:upload_qualification"), {"tutor_note": "no file"})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        self.assertFalse(QualificationDocument.objects.filter(tutor=self.tutor).exists())
+
+    def test_missing_file_field_on_resubmission_keeps_existing_file_without_crashing(self):
+        """真實回歸測試(非假設性):修正前,已有既有文件時重新送出完全沒有 "file" 欄位
+        的表單(同上,殘缺的 multipart file[]=... 或單純漏帶檔案),Django FileField 會
+        依既有慣例回退使用 instance 上的舊檔案,is_valid() 仍為 True,但 view 直接用
+        request.FILES["file"] 取檔名會丟出未攔截的 KeyError → 500。"""
+        document = self.upload_and_get_document()
+        original_name = document.original_filename
+        response = self.client.post(reverse("accounts:upload_qualification"), {"tutor_note": "just a note update"})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        document.refresh_from_db()
+        self.assertEqual(document.original_filename, original_name)
+        self.assertEqual(document.tutor_note, "just a note update")
+
+    def test_empty_file_upload_is_rejected_not_saved(self):
+        self.client.force_login(self.tutor)
+        empty = SimpleUploadedFile("empty.pdf", b"", content_type="application/pdf")
+        response = self.client.post(reverse("accounts:upload_qualification"), {"file": empty})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        self.assertFalse(QualificationDocument.objects.filter(tutor=self.tutor).exists())
+
+    def test_duplicate_file_field_submission_does_not_crash(self):
+        """兩個檔案共用同一個 "file" 欄位名稱送出(畸形/重複欄位送出),Django 的
+        MultiValueDict 只會取最後一個值,不應該造成 500 或存下混亂的資料。"""
+        self.client.force_login(self.tutor)
+        first = SimpleUploadedFile("first.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        second = SimpleUploadedFile("second.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        response = self.client.post(reverse("accounts:upload_qualification"), {"file": [first, second]})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        document = QualificationDocument.objects.get(tutor=self.tutor)
+        self.assertEqual(document.original_filename, "second.pdf")
 
     def test_tutee_cannot_upload_qualification(self):
         tutee = User.objects.create_user(username="TUTEE1", password="Tutee-password-2026", role=Role.TUTEE)
@@ -1911,6 +1966,36 @@ class ProfileEditTests(TestCase):
         self.assertEqual(self.tutee_profile.skills_to_improve, "希望加強寫作")
         self.assertEqual(self.tutee_profile.preferred_days, ["WED"])
 
+    def test_profile_update_rejects_email_with_control_characters(self):
+        """Same P0-2 fix as test_registration_rejects_email_with_control_characters,
+        applied to the profile-edit path (TutorProfileEditForm/TuteeProfileEditForm)."""
+        original_email = self.tutee.email
+        self.client.force_login(self.tutee)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "phone": "",
+                "email": "tutee@example.com\r\nBcc:evil@example.com",
+                "gender": "FEMALE",
+                "native_language": "English",
+                "nationality": "United States",
+                "department": "Languages",
+                "overall_level": "B2",
+                "learning_duration": "GT_2_YEARS",
+                "level_listening": 4,
+                "level_speaking": 4,
+                "level_reading": 4,
+                "level_writing": 4,
+                "target_skills": ["READING"],
+                "skills_to_improve": "希望加強寫作",
+                "preferred_days": ["WED"],
+                "preferred_time_slots": ["11:00-13:00"],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.tutee.refresh_from_db()
+        self.assertEqual(self.tutee.email, original_email)
+
     def test_name_and_student_id_cannot_be_changed_via_profile_form(self):
         self.client.force_login(self.tutor)
         self.client.post(
@@ -1987,6 +2072,17 @@ class ProfileEditTests(TestCase):
         # review, pairing release, class alert, incident report, makeup review, hour
         # adjustment) — this is the entire point of letting admins set their own name.
         self.assertEqual(admin.bilingual_name, "審核老師 / Reviewer Chen")
+
+    def test_admin_profile_update_rejects_email_with_control_characters(self):
+        admin = User.objects.create_superuser(username="EDIT-ADMIN3", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {"name_zh": "審核老師", "email": "admin\x00@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        admin.refresh_from_db()
+        self.assertEqual(admin.email, "")
 
     def test_admin_name_zh_is_required(self):
         admin = User.objects.create_superuser(username="EDIT-ADMIN2", password="Admin-password-2026")

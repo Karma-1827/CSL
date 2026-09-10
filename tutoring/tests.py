@@ -675,6 +675,31 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, reverse("tutoring:invite_tutee", args=[other.pk]))
         self.assertNotContains(response, reverse("tutoring:invite_tutee", args=[self.tutee.pk]))
 
+    def test_dashboard_survives_nul_byte_and_unknown_values_in_candidate_filters(self):
+        """2026-09-08 師大資中弱點掃描發現的真實 500:GET /dashboard/?tutee_level=%00
+        未經清理直接進 ORM .filter(overall_level=...),NUL byte 觸發 psycopg 例外變成
+        未攔截的 500。修正後,不在白名單內的值(NUL byte、任意亂打的字串)一律當成
+        「沒有篩選」處理,回傳 200 且候選清單不受影響,不是擋下請求或顯示錯誤。"""
+        self.client.force_login(self.tutor)
+        response = self.client.get(
+            reverse("accounts:dashboard"),
+            {"tutee_gender": "", "tutee_level": "\x00", "tutee_language": "not-a-real-language"},
+        )
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(
+            reverse("accounts:dashboard"),
+            {"tutee_skill": ["\x00", "NOT_A_SKILL"], "tutee_day": ["\x00"], "tutee_slot": ["\x00"]},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_dashboard_survives_nul_byte_in_tutor_candidate_filters(self):
+        self.client.force_login(self.maryland)
+        response = self.client.get(
+            reverse("accounts:dashboard"),
+            {"tutor_gender": "\x00", "tutor_language": "\x00", "tutor_day": ["\x00"], "tutor_slot": ["\x00"]},
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_dashboard_greeting_falls_back_to_english_name_not_student_id(self):
         """International students often have no Chinese name (RosterEntry.name_zh /
         User.name_zh can be blank). The greeting and sidebar identity used to fall back
