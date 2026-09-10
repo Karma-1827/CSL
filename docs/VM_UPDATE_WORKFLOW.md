@@ -293,6 +293,16 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-10(資料異動,非程式碼部署)**:操作者 Claude Code(依使用者指示執行)。使用者發現正式站上遺留一批舊的 demo 帳號(`DEMO-TUTOR`、`DEMO-TUTOR-PENDING`、`DEMO-TUTEE-01`~`10`、`DEMO-TUTEE-PENDING`,共 13 個,推測是先前某次對真人展示系統時直接建立在正式站上,命名規則與本機 `seed_admin_demo`/`seed_matching_demo` 的 `DEMO-TUTOR2/3`、`DEMO-TUTEE2/3/4` 不同),且這批 demo 帳號完全沒有任何機制讓它們在匿名候選瀏覽中被排除或標示(不像 `TEST-` 開頭帳號有 `_is_test_account()` 附加的「TEST」提示),導致實際已有真實老師瀏覽候選學生時邀請到 demo 學生。查證後發現的實際影響:
+  - `TEST-SCAN-TUTEE-NTNU`(其中一個掃描測試帳號)當時的 ACTIVE 配對其實是配到 `DEMO-TUTOR`,不是它原本該搭配的 `TEST-SCAN-TUTOR-NTNU`。
+  - 兩位真實老師(賴廷勛 `61384030I`、范氏金綱 `61484065I`)當時各有一筆 PENDING 邀請卡在 demo 學生(`DEMO-TUTEE-01`/`DEMO-TUTEE-08`)身上,邀請名額因此被佔用。
+  - 額外一位真實老師(阮瓊桂倪 `61584054I`)有一筆已 CANCELLED 的邀請曾指向 `DEMO-TUTEE-06`,無現存影響。
+  - 部署前備份:`/var/backups/mpts/20260910-232231`。
+  - 依相依順序刪除(`Pairing.tutor`/`tutee`、`MatchingInvitation.tutor`/`tutee`/`initiated_by` 皆為 `PROTECT`,必須先清掉所有引用才能刪 `User`):4 筆與 demo 帳號有關的配對(其下 9 堂課程、11 筆簽到、10 筆課堂紀錄、10 筆確認、5 筆課程審核、1 筆異常回報隨 `ClassSession` 一併刪除;另有 2 筆私訊、2 筆解除配對申請)→ 13 筆邀請紀錄 → 13 個 `User`(級聯刪除對應的 `TutorProfile`/`TuteeProfile`/`QualificationDocument`/`SecurityQuestionAnswer`)→ 13 筆對應 `RosterEntry`。寫入 `ADMIN_DEMO_DATA_PURGED` 稽核紀錄。此操作**連帶取消了上述兩位真實老師對 demo 學生的待回覆邀請**,釋放他們的邀請名額(未另行通知本人,因原邀請對象本來就是假資料)。
+  - 因為 `Pairing` 對 `(semester, tutor, tutee)` 有永久唯一約束,無法為 `TEST-SCAN-TUTOR-NTNU`×`TEST-SCAN-TUTEE-NTNU`、`TEST-SCAN-TUTOR-MD`×`TEST-SCAN-TUTEE-MD` 各建立一筆全新配對(兩組先前都配對過,pk=12/13,已在 2026-09-09 因 AppScan 掃描過程觸發解除配對流程而變成 `ENDED`)。改為直接把這兩筆既有配對的 `status` 改回 `ACTIVE`、清空 `ended_at`/`end_reason`,寫入 `ADMIN_PAIRING_REACTIVATED` 稽核紀錄。
+  - 驗收:刪除後重新查詢確認 0 筆 `DEMO-` 開頭使用者、0 筆殘留的混合配對/邀請;`Pairing` 表僅剩 pk=12(`TEST-SCAN-TUTOR-NTNU`×`TEST-SCAN-TUTEE-NTNU`,ACTIVE)、pk=13(`TEST-SCAN-TUTOR-MD`×`TEST-SCAN-TUTEE-MD`,ACTIVE)、pk=18(`NTNU-OIA-TUTOR`×`NTNU-OIA`,未受影響);用 Django test client 對 `TEST-SCAN-TUTOR-NTNU`/`TEST-SCAN-TUTEE-NTNU`/`61384030I`/`61484065I` 四個帳號實際登入 Dashboard 均回應 200。臨時 sudo 授權依使用者指示維持開啟。
+  - **後續待辦(未在本次處理)**:這批遺留 demo 帳號能存在正式站且對真實使用者完全可見這件事本身值得留意——目前系統設計假設「正式站不會有 demo 帳號」,沒有任何一層(候選篩選、Admin 匯出、名冊統計)會排除 `DEMO-` 前綴的帳號;若未來又有人基於展示需求在正式站建立示範帳號,應考慮套用與 `TEST-` 前綴帳號類似的排除或標示機制,而不是仰賴人工事後清理。
+
 - **2026-09-10(五十三,Nginx 設定變更,非應用程式碼部署)**:操作者 Claude Code(依使用者指示執行)。師大資中弱點掃描 Batch C(Nginx 全回應標頭一致性,詳見 `docs/PROGRESS.md`/`docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md` P0-3)。這次不涉及 `git checkout`,只改 Nginx 設定:
   - 對照 `deploy/nginx/mpts.conf.example` 與正式 VM 現行的 `/etc/nginx/sites-enabled/mpts.conf`,確認除 TODO 佔位字串外完全一致後,在本機比照範本改法產生新版設定檔。
   - HTTP→HTTPS 的 301 重導、`location /static/`、`location = /static/errors/413.html` 三處新增 `add_header`(`X-Content-Type-Options`/`Referrer-Policy`/`Cross-Origin-Opener-Policy`,static 與 413 兩處另加 `Strict-Transport-Security`;301 不加 HSTS,因為 HSTS 對純 HTTP 回應本來就不生效),值直接複製 Django 實際送出的字串。**刻意不改 `location /`、`location /system-admin/`**(兩者皆 `proxy_pass` 給 Django,Django 本身已設定這些標頭,重複加會疊出重複標頭)。
