@@ -250,6 +250,7 @@
   - 新增 `QualificationDocument.tutor_note`(`tutoring/models.py`,`TextField`,選填,對應 migration `tutoring/0032_qualificationdocument_tutor_note.py`)。`accounts/forms.py::QualificationUploadForm` 納入這個欄位(`Textarea`,`maxlength=300`,選填,標籤「留言給審核人員（選填）/ Note to reviewer (optional)」),`templates/dashboard/index.html` 的上傳表單在檔案欄位說明文字下方用共用元件 `components/form_field.html` 渲染;Tutor 自己的口語能力狀態卡片與 Admin 的待審核表格皆會顯示這則留言。因為 `QualificationDocument` 是每位 Tutor 一筆(重新上傳覆蓋同一筆),`tutor_note` 也會隨重新上傳被覆蓋,語意上代表「這次(最新一次)上傳時的留言」。
   - Admin 審核區「口語能力證明待審核」表格下方新增「審核紀錄 / Review history」區塊(`accounts/views.py::dashboard()` 新增 `qualification_review_history` context,`QualificationDocument.objects.exclude(status=PENDING)...order_by("-reviewed_at")[:30]`),顯示學生、通過/拒絕結果、Tutor 留言、審核備註、**審核人員**(`reviewed_by.bilingual_name`)、審核時間,版面比照專案裡課堂通報/異常回報/課程審核已經在用的「待處理 + 歷史紀錄」兩段式慣例。因為 `QualificationDocument` 沒有多筆歷史(同一位 Tutor 重新上傳會覆蓋同一筆,不是新增一筆),這份「審核紀錄」呈現的是每位 Tutor 目前這筆文件的最新審核結果,不是逐次重新上傳/重審的完整歷程——已在 `CLAUDE.md` 明確註記這個限制。
   - 新增 2 個測試(`accounts/tests.py::QualificationTests`):Tutor 上傳時填寫留言會存下來且 Admin 在待審核表格看得到;Admin 完成審核後,審核紀錄區塊正確顯示結果、留言、審核備註與審核人員姓名。已跑 `ruff check .`、完整測試套件(352 項全過)、`makemigrations --check --dry-run`(僅偵測到已寫好的 0032,無其餘落差)。**含 1 個 migration**(單純新增欄位,無資料遷移)。
+  - **同日使用者回饋外觀調整**:審核紀錄的「結果 / Result」欄原本用 `.status-badge status-approved`/`status-rejected` 呈現成一個有背景色的圓角色塊,使用者覺得「有點醜」,改成純文字(`{{ document.get_status_display }}`),不套用任何背景樣式。
 
 ## 版本規劃
 
