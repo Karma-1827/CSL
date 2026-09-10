@@ -953,6 +953,24 @@ class ContentSecurityPolicyMiddlewareTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertIn("default-src 'self'", response["Content-Security-Policy"])
 
+    def test_csp_enforces_trusted_types_for_scripts(self):
+        """2026-09-10 弱點掃描 Batch B: only safe to enable once no script in the codebase
+        writes through an innerHTML/outerHTML/insertAdjacentHTML/document.write/eval sink
+        (static/js/dashboard.js's one occurrence was replaced with cloneNode/replaceChildren
+        first — see git history for that change)."""
+        response = self.client.get(reverse("accounts:login"))
+        header = response["Content-Security-Policy"]
+        self.assertIn("require-trusted-types-for 'script'", header)
+        self.assertIn("trusted-types default", header)
+
+    def test_cross_origin_embedder_and_resource_policy_are_set(self):
+        """COEP/CORP have no built-in Django setting (unlike COOP), so
+        ContentSecurityPolicyMiddleware sets them directly. Safe because every resource
+        this app serves is same-origin or a data: URI — no external CDN, no iframes."""
+        response = self.client.get(reverse("accounts:login"))
+        self.assertEqual(response["Cross-Origin-Embedder-Policy"], "require-corp")
+        self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
+
 
 class QualificationTests(TestCase):
     def setUp(self):

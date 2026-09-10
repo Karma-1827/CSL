@@ -51,7 +51,13 @@ class ContentSecurityPolicyMiddleware:
         "object-src 'none'; "
         "base-uri 'self'; "
         "frame-ancestors 'none'; "
-        "form-action 'self';"
+        "form-action 'self'; "
+        # 2026-09-10 弱點掃描 Batch B: safe to enforce now that static/js/dashboard.js's
+        # only innerHTML use has been replaced with cloneNode/replaceChildren — no script
+        # anywhere in the codebase still writes through an innerHTML/outerHTML/
+        # insertAdjacentHTML/document.write/eval sink (confirmed by a full-repo grep).
+        "require-trusted-types-for 'script'; "
+        "trusted-types default;"
     )
 
     def __init__(self, get_response):
@@ -63,4 +69,12 @@ class ContentSecurityPolicyMiddleware:
         response["Permissions-Policy"] = (
             "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
         )
+        # 2026-09-10 弱點掃描 Batch B: Django has no built-in setting for these two (only
+        # SECURE_CROSS_ORIGIN_OPENER_POLICY is built in, already "same-origin" by default
+        # since Django 4.0). Safe to add require-corp here because every resource this app
+        # loads is same-origin or a data: URI (no external CDN, no iframes — confirmed by a
+        # full-repo grep); a cross-origin subresource added later would need its own CORP
+        # header or it will be blocked by this policy.
+        response["Cross-Origin-Embedder-Policy"] = "require-corp"
+        response["Cross-Origin-Resource-Policy"] = "same-origin"
         return response

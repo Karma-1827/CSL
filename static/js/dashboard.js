@@ -30,7 +30,14 @@
         const sourceKicker = sourceHeading?.querySelector(":scope > span");
         const sourceTitle = sourceHeading?.querySelector(":scope > h2");
         pageKicker.textContent = sourceKicker?.textContent?.trim() || "DASHBOARD";
-        pageTitle.innerHTML = sourceTitle?.innerHTML || "";
+        // Clone child nodes instead of copying innerHTML (2026-09-10 弱點掃描 Batch B):
+        // this keeps the <small> bilingual subtitle markup intact without ever parsing an
+        // HTML string, which is what CSP's require-trusted-types-for 'script' needs.
+        if (sourceTitle) {
+          pageTitle.replaceChildren(...Array.from(sourceTitle.childNodes, (node) => node.cloneNode(true)));
+        } else {
+          pageTitle.textContent = "";
+        }
         pageHeading.classList.add("is-section-heading");
       }
     }

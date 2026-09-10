@@ -35,6 +35,13 @@
 > - **P1-3(口語能力證明畸形上傳測試)——過程中發現一個真實的第二個 500**:已有既有文件時重新送出完全沒有 `file` 欄位的表單(例如殘缺的 multipart 送出 `file[]=...`),Django `FileField.clean()` 依既有慣例回退使用 instance 上的舊檔案讓 `form.is_valid()` 仍為 `True`,但 `accounts/views.py::upload_qualification()` 原本直接用 `request.FILES["file"]` 取檔名,該 key 不存在時丟出未攔截的 `KeyError` → 500(這正是弱掃報告「應用程式錯誤」分類裡,先前的分析遺漏的第二筆,不是只有 Dashboard 那一筆)。已改用 `request.FILES.get("file")`,沒有新檔案時保留原本的 `original_filename`。新增回歸測試涵蓋:第一次上傳缺 `file` 欄位(表單 invalid,不建立紀錄)、已有文件時缺 `file` 欄位重新送出(不崩潰、保留舊檔名)、空檔案上傳、重複 `file` 欄位送出兩個檔案(取最後一個,不崩潰)。假/損毀 PDF、偽裝副檔名、超大圖片這幾類在 `tutoring/tests.py::UploadContentValidationTests` 早已有模型層驗證測試覆蓋,本次未新增重複測試。
 > - 366 項測試全數通過,`ruff check .`、`makemigrations --check --dry-run`、`pip check`、`pip-audit -r requirements.txt` 均乾淨。`DJANGO_DEBUG=0 manage.py check --deploy` 本機因缺少正式站等級的 `POSTGRES_PASSWORD`/DB 環境無法完整執行,留待 CI(有 Postgres service container)驗證,非本次改動造成。
 > - Batch B(移除 `dashboard.js` 的 `innerHTML`、CSP Trusted Types、COEP/CORP)、Batch C(Nginx 層級 header 一致性)、Batch D(cookie SameSite/session 儲存評估)、Batch E(文件更新與複掃協調)尚未開始。
+>
+> **2026-09-10 師大資中弱點掃描 Batch B 修正(CSP 與跨來源標頭)**:
+> - **移除 `dashboard.js` 唯一的 `innerHTML` 使用**(切換 Dashboard 分頁時同步頁面標題):`pageTitle.innerHTML = sourceTitle?.innerHTML || ""` 改成 `pageTitle.replaceChildren(...Array.from(sourceTitle.childNodes, (node) => node.cloneNode(true)))`,用 `cloneNode` 保留原本的 `<small>` 雙語副標題標記,但完全不經過 HTML 字串解析。全庫 grep 確認這是整個 `static/js/` 唯一一處 `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write`/`eval` 用法,清乾淨後才進行下一步。
+> - **`accounts/middleware.py::ContentSecurityPolicyMiddleware` 新增 `require-trusted-types-for 'script'; trusted-types default;`**:確認全庫沒有其他 Trusted-Types-guarded sink 後才加上,不是先加規則再看什麼壞掉。
+> - **同一個 middleware 新增 `Cross-Origin-Embedder-Policy: require-corp` 與 `Cross-Origin-Resource-Policy: same-origin`**:Django 只有 `SECURE_CROSS_ORIGIN_OPENER_POLICY`(COOP)是內建設定且預設已是 `same-origin`,COEP/CORP 沒有對應的 Django 設定,因此直接在既有的安全 header middleware 手動加。全庫 grep 確認沒有外部 CDN、跨來源圖片/字型或 `<iframe>`/`<embed>`/`<object>`(與 CLAUDE.md 既有的「不加入前端框架或外部 CDN」慣例一致),風險相對低。
+> - 新增回歸測試 `test_csp_enforces_trusted_types_for_scripts`/`test_cross_origin_embedder_and_resource_policy_are_set`(`accounts/tests.py::ContentSecurityPolicyMiddlewareTests`)。368 項測試全數通過,`ruff` 乾淨。
+> - **尚未做瀏覽器實機驗證**(本次無可用瀏覽器工具):已用 Django test client 與 `curl` 確認新標頭正確送出、`dashboard.js` 新版邏輯正確 serve,但 Chrome 主控台是否真的沒有 Trusted Types/COEP violation、Dashboard 分頁切換後標題顯示是否與改版前肉眼一致,尚未實際在瀏覽器裡確認,部署前建議至少找一輪真人在瀏覽器操作 Dashboard 各分頁切換一次。
 
 ## 已完成
 
