@@ -133,6 +133,13 @@ SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
+# 2026-09-10 弱點掃描 Batch D (P1-2 item 2): flash messages used Django's default
+# FallbackStorage, which tries a client-side `messages` cookie before falling back to
+# the session — this is what the scan flagged as an extra cookie carrying application
+# state. SessionStorage keeps messages entirely server-side (the session is already
+# saved every request via SESSION_SAVE_EVERY_REQUEST above), so the `messages` cookie
+# no longer exists at all; no other behavior changes for callers of django.contrib.messages.
+MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1_500_000

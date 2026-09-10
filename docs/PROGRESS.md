@@ -48,6 +48,11 @@
 > - 在這三處各自明確加上 `add_header ... always;`(`always` 讓 301/4xx 也套用),值直接複製 Django 實際送出的字串,確保前後端一致。
 > - **刻意不動 `location /` 與 `location /system-admin/`**:這兩處都是 `proxy_pass` 給 Django,Django 本來就會在每個回應上設定這些標頭;若在這兩個 location 也加 `add_header`,由於 Nginx 的 `add_header` 不會移除上游已有的同名標頭,只會疊加成重複標頭。這兩個 location 底下 Nginx 自己合成的 429(`limit_req_status`)等錯誤回應目前仍缺標頭,列為已知、可接受的殘留缺口,不在本批次範圍內。
 > - 部署方式:先在正式 VM 備份現有設定(`/tmp/mpts.conf.bak-<timestamp>`)→ 套用新設定 → `sudo nginx -t` 語法驗證通過 → `systemctl reload nginx`(優雅重載,經使用者確認後才執行,因為是正式站服務層變更)。驗收:分別 `curl -I` 這三個回應確認新標頭都正確送出;另外確認 `/`(動態頁)的 `X-Content-Type-Options` 仍只出現 1 次,證實沒有因為這次改動產生重複標頭;`nginx`/`gunicorn` 錯誤紀錄乾淨,僅有與此次變更時間點無關的既有雜訊(離 VPN 網段外的管理員嘗試連 `/system-admin/`、掃描機器人探測不存在的檔案)。
+>
+> **2026-09-10 師大資中弱點掃描 Batch D 修正(Cookie 收斂,先做 P1-2 第 2 項)**:報告把 `messages`/`sessionid`/`csrftoken` 三種 cookie 的 SameSite/機密性拆成好幾筆結果。這幾項每項都是安全性換使用體驗的取捨(SameSite 改 `Strict` 會影響外部連結點入的登入狀態;`SESSION_EXPIRE_AT_BROWSER_CLOSE` 會影響使用體驗;CSRF cookie 改 `HttpOnly` 會牽動 `dashboard.js` 既有的多分頁 CSRF token 輪替機制),因此只先做風險最低、副作用最小的一項:
+> - `config/settings.py` 新增 `MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"`,取代 Django 預設的 `FallbackStorage`(先試著寫進一個 `messages` cookie,只有內容太大才退回 session)。改用純 session storage 後,flash 訊息完全不再產生 `messages` cookie,直接消除報告裡跟這顆 cookie 有關的所有筆數,且因為 `SESSION_SAVE_EVERY_REQUEST=True` 本來每個請求就會存 session,這裡沒有額外增加的資料庫寫入成本。
+> - 新增回歸測試 `accounts/tests.py::MessageStorageTests`(確認送出後不再有 `messages` cookie、確認 flash 訊息在下一頁仍正確渲染)。370 項測試全數通過,`ruff` 乾淨。
+> - **SameSite Strict、`SESSION_EXPIRE_AT_BROWSER_CLOSE`、CSRF cookie HttpOnly 這三項故意先不做**,待使用者決定是否要接受對應的使用體驗取捨後再處理;若最終決定保留現況,依計畫建議缺失報告應具體說明既有補償機制(CSRF token 本身、POST-only、Origin/Referer 檢查、Secure Cookie、CSP),而不是宣稱掃描器誤判就結案。
 
 ## 已完成
 

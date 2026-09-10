@@ -972,6 +972,26 @@ class ContentSecurityPolicyMiddlewareTests(TestCase):
         self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
 
 
+class MessageStorageTests(TestCase):
+    """2026-09-10 弱點掃描 Batch D (P1-2 item 2): MESSAGE_STORAGE was switched from
+    Django's default FallbackStorage (a client-side `messages` cookie, falling back to
+    the session only when the cookie gets too large) to pure SessionStorage, so flash
+    messages no longer create a cookie at all."""
+
+    def test_flash_message_does_not_set_a_messages_cookie(self):
+        tutor = User.objects.create_user(username="MSG-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        self.client.force_login(tutor)
+        response = self.client.post(reverse("accounts:upload_qualification"), {})
+        self.assertNotIn("messages", response.cookies)
+
+    def test_flash_message_still_renders_on_the_next_request(self):
+        tutor = User.objects.create_user(username="MSG-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR)
+        self.client.force_login(tutor)
+        response = self.client.post(reverse("accounts:upload_qualification"), {}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "此欄位為必填欄位")
+
+
 class QualificationTests(TestCase):
     def setUp(self):
         self.tutor = User.objects.create_user(username="TUTOR1", password="Tutor-password-2026", role=Role.TUTOR)
