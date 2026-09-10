@@ -53,6 +53,8 @@
 > - `config/settings.py` 新增 `MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"`,取代 Django 預設的 `FallbackStorage`(先試著寫進一個 `messages` cookie,只有內容太大才退回 session)。改用純 session storage 後,flash 訊息完全不再產生 `messages` cookie,直接消除報告裡跟這顆 cookie 有關的所有筆數,且因為 `SESSION_SAVE_EVERY_REQUEST=True` 本來每個請求就會存 session,這裡沒有額外增加的資料庫寫入成本。
 > - 新增回歸測試 `accounts/tests.py::MessageStorageTests`(確認送出後不再有 `messages` cookie、確認 flash 訊息在下一頁仍正確渲染)。370 項測試全數通過,`ruff` 乾淨。
 > - **SameSite Strict、`SESSION_EXPIRE_AT_BROWSER_CLOSE`、CSRF cookie HttpOnly 這三項故意先不做**,待使用者決定是否要接受對應的使用體驗取捨後再處理;若最終決定保留現況,依計畫建議缺失報告應具體說明既有補償機制(CSRF token 本身、POST-only、Origin/Referer 檢查、Secure Cookie、CSP),而不是宣稱掃描器誤判就結案。
+>
+> **2026-09-10 師大資中弱點掃描 Batch D 第二項:`SESSION_COOKIE_SAMESITE`/`CSRF_COOKIE_SAMESITE` 改為 `Strict`**(使用者已知悉取捨、明確決定採用):`Lax`→`Strict` 後,**已登入的使用者從外部頁面(LINE、Email 等分享的連結)點入本站時,瀏覽器不會在這第一個跨站請求帶上這兩個 cookie**,會被系統當成未登入導去登入頁,即使 session 本身其實仍有效——使用者只要再點一次站內連結或重新登入即可恢復正常,不會遺失資料或真的被登出;這在系辦/助教常用 LINE、Email 分享登入連結提醒學生的情境下會偶爾發生。換來的安全提升是在既有的 Django CSRF token 檢查、`Lax` 本來就會擋下的跨站 POST 之上,再疊一層防護,增量效益不大,但使用者已確認接受這個取捨。**同站的一般操作(登入表單送出、站內所有 POST)完全不受影響**,因為 `Strict` 只限制跨站請求,站內表單一律是同站送出;已用 test client 模擬真實登入流程(GET 登入頁取得 CSRF cookie 再 POST 登入,`enforce_csrf_checks=True`)確認正常運作。新增回歸測試 `accounts/tests.py::CookieSameSiteTests` 鎖住兩個 cookie 的 `SameSite` 屬性值。372 項測試全數通過,`ruff` 乾淨。
 
 ## 已完成
 

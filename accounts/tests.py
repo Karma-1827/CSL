@@ -992,6 +992,23 @@ class MessageStorageTests(TestCase):
         self.assertContains(response, "此欄位為必填欄位")
 
 
+class CookieSameSiteTests(TestCase):
+    """2026-09-10 弱點掃描 Batch D (P1-2 item 1,使用者明確決定接受取捨):session 與
+    CSRF cookie 都改用 SameSite=Strict。這只影響瀏覽器是否在跨站請求帶上 cookie,
+    Django test client 不會模擬這個限制,所以這裡只鎖住 Set-Cookie 標頭本身的屬性值,
+    不是端對端的跨站行為測試。"""
+
+    def test_session_cookie_is_samesite_strict(self):
+        tutor = User.objects.create_user(username="SAMESITE-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        self.client.force_login(tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.cookies["sessionid"]["samesite"], "Strict")
+
+    def test_csrf_cookie_is_samesite_strict(self):
+        response = self.client.get(reverse("accounts:login"))
+        self.assertEqual(response.cookies["csrftoken"]["samesite"], "Strict")
+
+
 class QualificationTests(TestCase):
     def setUp(self):
         self.tutor = User.objects.create_user(username="TUTOR1", password="Tutor-password-2026", role=Role.TUTOR)

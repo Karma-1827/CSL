@@ -131,8 +131,14 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 SESSION_COOKIE_AGE = 60 * 30
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SAMESITE = "Lax"
+# 2026-09-10 弱點掃描 Batch D (P1-2 item 1,使用者明確決定採用 Strict):使用者已知悉並
+#接受這個取捨——已登入的使用者從外部頁面(LINE、Email 等分享的連結)點入本站時,瀏覽器
+# 不會帶上這兩個 cookie,會被當成未登入導去登入頁,即使 session 其實仍然有效;使用者需
+# 再次點擊站內連結或重新登入即可恢復正常,不會遺失資料或真的被登出。換來的安全提升是
+# 額外一層跨站防護,疊加在既有的 Django CSRF token 檢查與 Lax 本來就會擋下的跨站 POST
+# 之上。
+SESSION_COOKIE_SAMESITE = "Strict"
+CSRF_COOKIE_SAMESITE = "Strict"
 # 2026-09-10 弱點掃描 Batch D (P1-2 item 2): flash messages used Django's default
 # FallbackStorage, which tries a client-side `messages` cookie before falling back to
 # the session — this is what the scan flagged as an extra cookie carrying application
