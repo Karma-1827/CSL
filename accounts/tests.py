@@ -1008,6 +1008,19 @@ class CookieSameSiteTests(TestCase):
         response = self.client.get(reverse("accounts:login"))
         self.assertEqual(response.cookies["csrftoken"]["samesite"], "Strict")
 
+    def test_session_cookie_expires_when_browser_closes(self):
+        """2026-09-10 弱點掃描 Batch D (P1-2 item 3,使用者明確決定採用):
+        SESSION_EXPIRE_AT_BROWSER_CLOSE=True means the cookie carries no Max-Age/Expires
+        at all, so the browser discards it on close — a session cookie in the literal
+        sense, not just in name. Server-side idle timeout (SESSION_COOKIE_AGE, 30
+        minutes) is unaffected and tested separately."""
+        tutor = User.objects.create_user(username="BROWSERCLOSE-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        self.client.force_login(tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        cookie = response.cookies["sessionid"]
+        self.assertEqual(cookie["max-age"], "")
+        self.assertEqual(cookie["expires"], "")
+
 
 class QualificationTests(TestCase):
     def setUp(self):

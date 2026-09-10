@@ -130,9 +130,16 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 # SESSION_SAVE_EVERY_REQUEST 讓有操作的使用者每次請求都重新計時，只有真正閒置才會逾時。
 SESSION_COOKIE_AGE = 60 * 30
 SESSION_SAVE_EVERY_REQUEST = True
+# 2026-09-10 弱點掃描 Batch D (P1-2 item 3,使用者明確決定採用):讓 session cookie 變成
+# 瀏覽器自行管理的「session cookie」(不帶 Max-Age/Expires),完全關閉瀏覽器後就會被
+# 瀏覽器捨棄,下次要重新登入。伺服器端仍以上面的 SESSION_COOKIE_AGE(30 分鐘閒置)為準,
+# 不受這個設定影響——兩者是疊加關係,不是取代。**已知的實際限制**:部分瀏覽器/裝置的
+# 「回復先前分頁」或行動版瀏覽器背景保留機制,不會真的在「關閉」時清掉 session cookie,
+# 這是瀏覽器自己的行為,Django 端無法強制生效,只能提供這個訊號給瀏覽器參考。
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 # 2026-09-10 弱點掃描 Batch D (P1-2 item 1,使用者明確決定採用 Strict):使用者已知悉並
-#接受這個取捨——已登入的使用者從外部頁面(LINE、Email 等分享的連結)點入本站時,瀏覽器
+# 接受這個取捨——已登入的使用者從外部頁面(LINE、Email 等分享的連結)點入本站時,瀏覽器
 # 不會帶上這兩個 cookie,會被當成未登入導去登入頁,即使 session 其實仍然有效;使用者需
 # 再次點擊站內連結或重新登入即可恢復正常,不會遺失資料或真的被登出。換來的安全提升是
 # 額外一層跨站防護,疊加在既有的 Django CSRF token 檢查與 Lax 本來就會擋下的跨站 POST

@@ -55,6 +55,9 @@
 > - **SameSite Strict、`SESSION_EXPIRE_AT_BROWSER_CLOSE`、CSRF cookie HttpOnly 這三項故意先不做**,待使用者決定是否要接受對應的使用體驗取捨後再處理;若最終決定保留現況,依計畫建議缺失報告應具體說明既有補償機制(CSRF token 本身、POST-only、Origin/Referer 檢查、Secure Cookie、CSP),而不是宣稱掃描器誤判就結案。
 >
 > **2026-09-10 師大資中弱點掃描 Batch D 第二項:`SESSION_COOKIE_SAMESITE`/`CSRF_COOKIE_SAMESITE` 改為 `Strict`**(使用者已知悉取捨、明確決定採用):`Lax`→`Strict` 後,**已登入的使用者從外部頁面(LINE、Email 等分享的連結)點入本站時,瀏覽器不會在這第一個跨站請求帶上這兩個 cookie**,會被系統當成未登入導去登入頁,即使 session 本身其實仍有效——使用者只要再點一次站內連結或重新登入即可恢復正常,不會遺失資料或真的被登出;這在系辦/助教常用 LINE、Email 分享登入連結提醒學生的情境下會偶爾發生。換來的安全提升是在既有的 Django CSRF token 檢查、`Lax` 本來就會擋下的跨站 POST 之上,再疊一層防護,增量效益不大,但使用者已確認接受這個取捨。**同站的一般操作(登入表單送出、站內所有 POST)完全不受影響**,因為 `Strict` 只限制跨站請求,站內表單一律是同站送出;已用 test client 模擬真實登入流程(GET 登入頁取得 CSRF cookie 再 POST 登入,`enforce_csrf_checks=True`)確認正常運作。新增回歸測試 `accounts/tests.py::CookieSameSiteTests` 鎖住兩個 cookie 的 `SameSite` 屬性值。372 項測試全數通過,`ruff` 乾淨。
+>
+> **2026-09-10 師大資中弱點掃描 Batch D 第三項:`SESSION_EXPIRE_AT_BROWSER_CLOSE = True`**(使用者明確決定採用):session cookie 從「帶 `Max-Age` 的持久 cookie」改成「不帶 `Max-Age`/`Expires` 的瀏覽器 session cookie」,完全關閉瀏覽器後瀏覽器會自行捨棄,下次要重新登入。**伺服器端既有的 30 分鐘閒置逾時(`SESSION_COOKIE_AGE`)完全不受影響,兩者是疊加關係不是取代**。**已知的實際限制**:部分瀏覽器/裝置的「回復先前分頁」或行動版瀏覽器背景保留機制,不會真的在關閉當下清掉 session cookie——這是瀏覽器自己的行為,Django 端只能提供這個訊號給瀏覽器參考,無法強制生效,不能保證每個瀏覽器都會如預期般在關閉後登出。新增回歸測試確認 cookie 已無 `Max-Age`/`Expires`。373 項測試全數通過,`ruff` 乾淨。
+> - Batch D 剩下最後一項(CSRF cookie 改 `HttpOnly`)尚未處理,計畫本身也建議這項不要為了消除報告就直接改,需先重新設計 `dashboard.js` 讀取 CSRF cookie 做多分頁 token 輪替的機制。
 
 ## 已完成
 
