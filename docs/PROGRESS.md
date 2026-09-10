@@ -42,6 +42,12 @@
 > - **同一個 middleware 新增 `Cross-Origin-Embedder-Policy: require-corp` 與 `Cross-Origin-Resource-Policy: same-origin`**:Django 只有 `SECURE_CROSS_ORIGIN_OPENER_POLICY`(COOP)是內建設定且預設已是 `same-origin`,COEP/CORP 沒有對應的 Django 設定,因此直接在既有的安全 header middleware 手動加。全庫 grep 確認沒有外部 CDN、跨來源圖片/字型或 `<iframe>`/`<embed>`/`<object>`(與 CLAUDE.md 既有的「不加入前端框架或外部 CDN」慣例一致),風險相對低。
 > - 新增回歸測試 `test_csp_enforces_trusted_types_for_scripts`/`test_cross_origin_embedder_and_resource_policy_are_set`(`accounts/tests.py::ContentSecurityPolicyMiddlewareTests`)。368 項測試全數通過,`ruff` 乾淨。
 > - **尚未做瀏覽器實機驗證**(本次無可用瀏覽器工具):已用 Django test client 與 `curl` 確認新標頭正確送出、`dashboard.js` 新版邏輯正確 serve,但 Chrome 主控台是否真的沒有 Trusted Types/COEP violation、Dashboard 分頁切換後標題顯示是否與改版前肉眼一致,尚未實際在瀏覽器裡確認,部署前建議至少找一輪真人在瀏覽器操作 Dashboard 各分頁切換一次。
+> - **後續補充(部署前使用者實機驗證)**:使用者在瀏覽器逐一切換 Dashboard 各分頁,確認標題排版與改版前一致;主控台一開始出現的幾則 CSP/Trusted Types 訊息(`content_main.js`/`read.js`/`content.js` 等檔名)經確認皆來自瀏覽器擴充功能自己注入的 content script(建立自己的 TrustedTypePolicy、載入 Google Fonts 樣式表,兩者都被我們的 CSP 正確擋下),不是本站程式碼觸發,確認無誤後才部署上線。
+>
+> **2026-09-10 師大資中弱點掃描 Batch C 修正(Nginx 全回應標頭一致性,P0-3)**:Django 動態頁已由 `accounts/middleware.py`/`config/settings.py` 送出 HSTS、`X-Content-Type-Options`、`Referrer-Policy`、COOP,但 `/static/`(Nginx `alias` 直接提供)、HTTP→HTTPS 的 301 重導、`/static/errors/413.html` 錯誤頁三者完全繞過 Django,從未附上這些標頭,對應報告裡 COOP/`X-Content-Type-Options`/HSTS/Referrer-Policy 各 1 筆的落差。修法(`deploy/nginx/mpts.conf.example` 與正式 VM 的 `/etc/nginx/sites-enabled/mpts.conf` 同步套用):
+> - 在這三處各自明確加上 `add_header ... always;`(`always` 讓 301/4xx 也套用),值直接複製 Django 實際送出的字串,確保前後端一致。
+> - **刻意不動 `location /` 與 `location /system-admin/`**:這兩處都是 `proxy_pass` 給 Django,Django 本來就會在每個回應上設定這些標頭;若在這兩個 location 也加 `add_header`,由於 Nginx 的 `add_header` 不會移除上游已有的同名標頭,只會疊加成重複標頭。這兩個 location 底下 Nginx 自己合成的 429(`limit_req_status`)等錯誤回應目前仍缺標頭,列為已知、可接受的殘留缺口,不在本批次範圍內。
+> - 部署方式:先在正式 VM 備份現有設定(`/tmp/mpts.conf.bak-<timestamp>`)→ 套用新設定 → `sudo nginx -t` 語法驗證通過 → `systemctl reload nginx`(優雅重載,經使用者確認後才執行,因為是正式站服務層變更)。驗收:分別 `curl -I` 這三個回應確認新標頭都正確送出;另外確認 `/`(動態頁)的 `X-Content-Type-Options` 仍只出現 1 次,證實沒有因為這次改動產生重複標頭;`nginx`/`gunicorn` 錯誤紀錄乾淨,僅有與此次變更時間點無關的既有雜訊(離 VPN 網段外的管理員嘗試連 `/system-admin/`、掃描機器人探測不存在的檔案)。
 
 ## 已完成
 
