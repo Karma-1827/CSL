@@ -242,6 +242,7 @@
   - `class_documents_visible`(既有的全站 context processor `accounts/context_processors.py::class_documents_menu()`,與網站選單顯示「上課文件」用的判斷完全相同):控制第 11 章「合作計畫上課文件」整節與側邊導覽的對應連結,避免導覽列出現指向不存在章節的死連結。
   - 兩者皆為既有、已在其他地方使用中的資格判斷,沒有新增查詢或重複邏輯;只在 Maryland 專屬的內容才顯示的段落順手把措辭簡化(移除「馬里蘭計畫學生」等重複前綴,因為該節現在只會顯示給 Maryland 學生看)。5.2 移除後,5.1/5.3/5.4 與十一章的章節編號留有缺口(5.2、十一)不重新編號,是刻意的取捨——動態重新編號需要把所有靜態數字改成計數器,對兩種讀者都只是很小的排版落差,不值得為此增加複雜度。
   - 新增 2 個測試(`accounts/tests.py::ProfilePageTests`):一般 NTNU 學生(無 `roster_entry`/`program`)看不到上述 Maryland 專屬段落但看得到對應 FAQ;新建立一個 Maryland `RosterEntry`+`User` 確認看得到全部 Maryland 專屬段落且看不到「看不到尋找老師」那則 FAQ。已跑 `ruff check .`、完整測試套件(349 項全過)。無 migration。
+- **2026-09-10 口語能力證明可上傳文件種類移除第 4 項**:使用者要求刪掉「華語師資養成班招生入學口試通過證明（限當學期）」。共用元件 `templates/accounts/qualification_document_note.html`(同時被註冊第二階段表單頁 `register_tutor.html` 與 Dashboard 上傳區 `dashboard/index.html` 引用,只改一處即同步生效)中英文清單皆移除該項,剩下 3 項(教育部證書/成績證明、應華組修課成績單、系上線上語音口試)。這只是提示文字的清單,不影響審核邏輯本身——`QualificationDocument` 審核流程不區分文件種類,Admin 一律人工判斷通過或不通過。更新 `accounts/tests.py::test_tutor_registration_page_shows_nationality_label_and_qualification_document_order` 斷言,移除第 4 項的順序檢查、改為確認該文字已不存在。已跑 `ruff check .`、完整測試套件(349 項全過)。無 migration。
 
 ## 版本規劃
 

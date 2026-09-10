@@ -125,16 +125,16 @@ class RegistrationTests(TestCase):
         content = response.content.decode()
         self.assertContains(response, "國籍 / Nationality")
         self.assertNotContains(response, "國家／地區")
-        # 2026-09-10 reorder: MOE certificate first, then the CSL-program transcript, the
-        # department's own oral interview, and the teacher-training admission interview
-        # last (with a "current semester only" qualifier) — must match the same order and
-        # wording the Admin dashboard's qualification-review tab shows via the same
-        # shared partial (templates/accounts/qualification_document_note.html).
+        # 2026-09-10 reorder: MOE certificate first, then the CSL-program transcript, then
+        # the department's own oral interview — must match the same order and wording the
+        # Admin dashboard's qualification-review tab shows via the same shared partial
+        # (templates/accounts/qualification_document_note.html). The fourth item (teacher-
+        # training admission interview, current semester only) was removed 2026-09-10.
         first = content.index("教育部對外華語教學能力證書")
         second = content.index("應華組「華語正音與口語表達」修課成績單，成績達B-（含）以上")
         third = content.index("系上線上語音口試通過證明")
-        fourth = content.index("華語師資養成班招生入學口試通過證明（限當學期）")
-        self.assertTrue(first < second < third < fourth)
+        self.assertTrue(first < second < third)
+        self.assertNotContains(response, "華語師資養成班招生入學口試通過證明")
 
     def test_registration_requires_roster_entry(self):
         response = self.client.post(reverse("accounts:register"), {"student_id": "UNKNOWN"})
