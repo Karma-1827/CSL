@@ -2,8 +2,13 @@
   {% if release_request %}
     <div class="pairing-release-state">
       <span class="class-status pending">等待解除審核 / Release pending</span>
-      <strong>{{ release_request.get_reason_display }}</strong>
-      {% if release_request.reason_note %}<p>{{ release_request.reason_note }}</p>{% endif %}
+      {% if release_request.requested_by_id == request.user.pk %}
+        <strong>{{ release_request.get_reason_display }}</strong>
+        {% if release_request.reason_note %}<p>{{ release_request.reason_note }}</p>{% endif %}
+      {% else %}
+        <strong>{{ release_request.counterpart_reason_display }}</strong>
+        {% if not release_request.is_sensitive_reason and release_request.reason_note %}<p>{{ release_request.reason_note }}</p>{% endif %}
+      {% endif %}
       {% if release_request.auto_resolve_at %}
         <small>若管理員未處理，預計於 {{ release_request.auto_resolve_at|date:"Y-m-d H:i" }} 自動解除。<br>Automatic release if not reviewed by this time.</small>
       {% else %}

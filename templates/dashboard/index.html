@@ -325,6 +325,7 @@
       </section>
       <section class="dashboard-view is-active" data-dashboard-panel="overview">
         <div class="view-heading"><span>OVERVIEW</span><h2>我的輔導 <small>My tutoring overview</small></h2></div>
+        {% include "dashboard/release_notices.html" %}
         <div class="dashboard-grid overview-grid">
         <section class="panel">
           <span class="eyebrow">CURRENT MATCHES</span>
@@ -418,6 +419,7 @@
       {% include "dashboard/participant_v2_panels.html" %}
       <section class="dashboard-view is-active" data-dashboard-panel="overview">
       <div class="view-heading"><span>OVERVIEW</span><h2>我的輔導 <small>My tutoring overview</small></h2></div>
+        {% include "dashboard/release_notices.html" %}
         <section class="panel panel-wide">
           <span class="eyebrow">CURRENT MATCH</span>
           <h2>我的配對 <small>My matching</small></h2>

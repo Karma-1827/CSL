@@ -479,6 +479,9 @@ class PairingReleaseRequest(models.Model):
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
     review_note = models.TextField("審核備註 / Review note", blank=True)
+    counterpart_acknowledged_at = models.DateTimeField(
+        "對方已讀時間 / Counterpart acknowledged at", null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -501,6 +504,27 @@ class PairingReleaseRequest(models.Model):
             PairingReleaseReason.UNREACHABLE,
             PairingReleaseReason.SCHEDULE_CONFLICT,
         }
+
+    @property
+    def counterpart(self):
+        """The other party in the pairing — whoever did not submit this request."""
+        return self.pairing.tutee if self.requested_by_id == self.pairing.tutor_id else self.pairing.tutor
+
+    @property
+    def is_sensitive_reason(self):
+        """CONDUCT and OTHER are masked from the counterpart (2026-09-10, user-requested
+        after discussion with the department office): telling someone "the other person
+        filed for release over your conduct" can be hurtful or provoke conflict before an
+        admin has even looked at it, so both are shown to the counterpart as a generic
+        "其他原因 / Other" with the free-text note withheld — only NO_SHOW/UNREACHABLE/
+        SCHEDULE_CONFLICT (factual, non-accusatory reasons) are shown as-is."""
+        return self.reason in {PairingReleaseReason.CONDUCT, PairingReleaseReason.OTHER}
+
+    @property
+    def counterpart_reason_display(self):
+        if self.is_sensitive_reason:
+            return PairingReleaseReason.OTHER.label
+        return self.get_reason_display()
 
     def clean(self):
         if self.requested_by_id and self.pairing_id:

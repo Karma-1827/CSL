@@ -381,6 +381,27 @@ def review_pairing_release_request(*, request_id, admin, approve, note="", now=N
 
 
 @transaction.atomic
+def acknowledge_pairing_release_notice(*, request_id, user):
+    """Mark a resolved release request's outcome as seen by the counterpart (2026-09-10,
+    user-requested): only the counterpart (not the requester, not an unrelated user) may
+    acknowledge, and only once the admin has actually decided — the still-pending banner
+    has nothing to acknowledge yet, it simply disappears on its own once resolved."""
+    release_request = PairingReleaseRequest.objects.select_for_update().select_related(
+        "pairing__tutor", "pairing__tutee"
+    ).get(pk=request_id)
+    if user.pk not in {release_request.pairing.tutor_id, release_request.pairing.tutee_id}:
+        raise ValidationError("您不是這筆配對的參與者。 / You are not a participant in this pairing.")
+    if release_request.requested_by_id == user.pk:
+        raise ValidationError("此通知不是給申請人看的。 / This notice is not for the requester.")
+    if release_request.status == PairingReleaseStatus.PENDING:
+        raise ValidationError("此申請尚未有審核結果。 / This request has not been resolved yet.")
+    if release_request.counterpart_acknowledged_at is None:
+        release_request.counterpart_acknowledged_at = timezone.now()
+        release_request.save(update_fields=["counterpart_acknowledged_at", "updated_at"])
+    return release_request
+
+
+@transaction.atomic
 def process_pending_pairing_releases(*, now=None):
     now = now or timezone.now()
     release_requests = PairingReleaseRequest.objects.select_for_update().select_related(

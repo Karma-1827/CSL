@@ -983,6 +983,73 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "解除配對審核")
         self.assertContains(response, "已多次未到")
 
+    def test_counterpart_sees_pending_release_notice_but_requester_does_not(self):
+        """2026-09-10 (user-requested, after discussion with the department office): the
+        counterpart (not the requester, who already knows) must see a notice on their own
+        dashboard while a release request against their pairing is still pending."""
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutor,
+            reason=PairingReleaseReason.NO_SHOW, note="多次缺席",
+        )
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "解除配對申請審核中")
+        self.assertContains(response, "多次缺席")
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "解除配對申請審核中")
+
+    def test_sensitive_release_reason_is_masked_and_note_hidden_from_counterpart(self):
+        """CONDUCT (and OTHER) must not reveal the accusatory reason or the free-text note
+        to the counterpart — both are shown as a generic "其他原因 / Other" instead."""
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutor,
+            reason=PairingReleaseReason.CONDUCT, note="對方態度惡劣，多次口出惡言",
+        )
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "其他原因")
+        self.assertNotContains(response, "態度或行為問題")
+        self.assertNotContains(response, "對方態度惡劣，多次口出惡言")
+
+    def test_counterpart_sees_and_can_acknowledge_resolved_release_outcome(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutor, reason=PairingReleaseReason.NO_SHOW, note="多次缺席",
+        )
+        admin = User.objects.create_superuser(username="NOTICE-ADMIN", password="Admin-password-2026")
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=True)
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "配對已解除")
+        self.assertContains(response, "多次缺席")
+
+        ack_response = self.client.post(
+            reverse("tutoring:acknowledge_pairing_release", args=[release_request.pk])
+        )
+        self.assertRedirects(ack_response, reverse("accounts:dashboard") + "#overview")
+        release_request.refresh_from_db()
+        self.assertIsNotNone(release_request.counterpart_acknowledged_at)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "配對已解除")
+
+    def test_requester_cannot_acknowledge_their_own_release_request(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutor, reason=PairingReleaseReason.NO_SHOW,
+        )
+        admin = User.objects.create_superuser(username="NOTICE-ADMIN2", password="Admin-password-2026")
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=False)
+        self.client.force_login(self.tutor)
+        self.client.post(reverse("tutoring:acknowledge_pairing_release", args=[release_request.pk]))
+        release_request.refresh_from_db()
+        self.assertIsNone(release_request.counterpart_acknowledged_at)
+
     def test_pending_invitation_cap_blocks_new_invitations_for_tutor(self):
         second = self.make_tutee("TUTEE210", "第二位學生", "Second Tutee", self.ntnu_program)
         third = self.make_tutee("TUTEE220", "第三位學生", "Third Tutee", self.ntnu_program)

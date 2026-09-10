@@ -197,6 +197,12 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 - `CONDUCT`、`OTHER`:必填補充說明且永不自動解除,只能由 Admin 決定。
 - 核准/自動解除時:Pairing 變 `ENDED`,未來尚未取消的課程會取消並釋放額度;已結束的課程與時數紀錄保留。
 - Admin 拒絕時 pairing 保持 active。
+- **2026-09-10 起,被解除的一方(未提出申請的另一方)會在 Dashboard「我的首頁」看到通知,涵蓋等待審核與已有結果兩種狀態**(使用者與系辦討論後提出的需求;先前只有申請人自己知情,對方要等配對從畫面上消失才會發現):
+  - **等待審核中**:沿用既有的 `pairing_release_control.html`(配對卡片下方的狀態區塊,原本雙方都看得到、且不分理由一律顯示完整內容),新增依「是否為申請人本人」分流——申請人看到完整理由與補充說明;對方(counterpart)看到 `PairingReleaseRequest.counterpart_reason_display` 與遮蔽後的補充說明。
+  - **已有結果(核准/系統自動解除/拒絕)**:新增獨立的通知區塊 `templates/dashboard/release_notices.html`,顯示在「我的首頁」`目前配對`卡片正上方,只給對方看(申請人排除在外,因為申請人已經知道自己送出過申請),核准/自動解除會標示已解除、拒絕會標示未通過。附一個「我知道了 / Got it」按鈕(`tutoring:acknowledge_pairing_release`,寫入 `PairingReleaseRequest.counterpart_acknowledged_at`),按過之後通知才會消失;在被按之前**每次登入都會持續顯示**,不是只顯示一次。
+  - **理由遮蔽規則(使用者明確要求)**:`NO_SHOW`/`UNREACHABLE`/`SCHEDULE_CONFLICT` 三個理由如實顯示給對方;`CONDUCT`(態度或行為問題)與 `OTHER`(其他)一律顯示成通用的「其他原因 / Other」,**補充說明(`reason_note`)也一併隱藏**,避免把可能帶有指控性質的具體內容直接曝光給被指控的一方引發衝突,只讓對方知道「有申請/已解除」這個事實。這個遮蔽規則同時套用在等待審核中與已有結果兩種畫面。判斷邏輯集中在 `PairingReleaseRequest.is_sensitive_reason`/`counterpart_reason_display`(`tutoring/models.py`),不是在 template 裡重複判斷。
+  - **只通知被解除的一方,申請人沒有對稱通知**(2026-09-10 使用者確認維持現狀,不加做):申請人只有在送出申請當下看到一次性的 flash message,之後管理員核准/拒絕都不會再收到任何提示;這是刻意的範圍限縮,不是遺漏。
+  - 對應 migration:`tutoring/migrations/0034_pairingreleaserequest_counterpart_acknowledged_at.py`(新增 `counterpart_acknowledged_at`,無資料遷移)。
 
 ### 4.5 排課與額度
 

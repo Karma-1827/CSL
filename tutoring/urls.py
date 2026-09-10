@@ -27,6 +27,11 @@ urlpatterns = [
         views.review_pairing_release,
         name="review_pairing_release",
     ),
+    path(
+        "pairing-release-requests/<int:pk>/acknowledge/",
+        views.acknowledge_pairing_release,
+        name="acknowledge_pairing_release",
+    ),
     path("classes/<int:pk>/", views.class_detail, name="class_detail"),
     path(
         "class-records/<int:pk>/attachment/download/",

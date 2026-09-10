@@ -620,6 +620,26 @@ def dashboard(request):
             ).select_related("semester", "tutor", "tutee").order_by("-started_at")
         )
         conversation_pairings = annotate_conversation_summaries(participant_pairings, viewer=request.user)
+        # 2026-09-10 (user-requested, after discussion with the department office): the
+        # counterpart (whoever did not submit the release request) must be told both while
+        # it's pending and once it's resolved — previously a resolved outcome was only
+        # visible by noticing the pairing had quietly disappeared. Pending has nothing to
+        # acknowledge (it just resolves on its own), so this only tracks unseen outcomes.
+        release_notices = list(
+            PairingReleaseRequest.objects.filter(
+                Q(pairing__tutor=request.user) | Q(pairing__tutee=request.user)
+            ).exclude(requested_by=request.user).filter(
+                Q(status=PairingReleaseStatus.PENDING)
+                | Q(
+                    status__in=[
+                        PairingReleaseStatus.APPROVED,
+                        PairingReleaseStatus.AUTO_APPROVED,
+                        PairingReleaseStatus.REJECTED,
+                    ],
+                    counterpart_acknowledged_at__isnull=True,
+                )
+            ).select_related("pairing__tutor", "pairing__tutee", "requested_by").order_by("-created_at")
+        )
         participant_filter = Q(pairing__tutor=request.user) if request.user.role == Role.TUTOR else Q(pairing__tutee=request.user)
         class_sessions = ClassSession.objects.filter(participant_filter).select_related(
             "pairing__semester", "pairing__tutor", "pairing__tutee"
@@ -710,6 +730,7 @@ def dashboard(request):
                 "own_incident_reports": IncidentReport.objects.filter(reporter=request.user)
                 .select_related("session__pairing__tutor", "session__pairing__tutee")
                 .order_by("-created_at"),
+                "release_notices": release_notices,
             }
         )
     elif request.user.role == Role.ADMIN:

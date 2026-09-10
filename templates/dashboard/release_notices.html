@@ -1,0 +1,26 @@
+{% if release_notices %}
+<section class="panel release-notice-panel">
+  <span class="eyebrow">NOTICE</span>
+  <h2>配對異動通知 <small>Pairing update notices</small></h2>
+  {% for notice in release_notices %}
+    <div class="release-notice-row release-notice-{{ notice.status|lower }}">
+      <div>
+        {% if notice.status == 'PENDING' %}
+          <strong>解除配對申請審核中 <small>Release request under review</small></strong>
+          <p>對方已對這筆配對提出解除申請，原因：{{ notice.counterpart_reason_display }}，目前正在等待管理員審核。<br>Your partner has requested to release this pairing (reason: {{ notice.counterpart_reason_display }}). It is awaiting administrator review.</p>
+        {% elif notice.status == 'REJECTED' %}
+          <strong>解除配對申請未通過 <small>Release request not approved</small></strong>
+          <p>對方先前提出的解除配對申請未獲管理員核准，配對維持有效。<br>Your partner's release request was not approved by an administrator; the pairing remains active.</p>
+        {% else %}
+          <strong>配對已解除 <small>Pairing released</small></strong>
+          <p>此配對已解除，原因：{{ notice.counterpart_reason_display }}。<br>This pairing has been released (reason: {{ notice.counterpart_reason_display }}).</p>
+        {% endif %}
+        {% if not notice.is_sensitive_reason and notice.reason_note %}<p class="release-notice-note">{{ notice.reason_note }}</p>{% endif %}
+      </div>
+      {% if notice.status != 'PENDING' %}
+        <form action="{% url 'tutoring:acknowledge_pairing_release' notice.pk %}" method="post">{% csrf_token %}<button class="button button-secondary button-small" type="submit">我知道了 / Got it</button></form>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+{% endif %}

@@ -32,6 +32,7 @@ from .reporting import (
     user_has_hour_records,
 )
 from .services import (
+    acknowledge_pairing_release_notice,
     cancel_class,
     cancel_class_alert,
     cancel_invitation,
@@ -466,6 +467,18 @@ def request_pairing_release(request, pk):
                 request,
                 "解除申請已送出，需由管理員審核。 / Your release request is awaiting administrator review.",
             )
+    return redirect(f"{reverse('accounts:dashboard')}#overview")
+
+
+@login_required
+@require_POST
+def acknowledge_pairing_release(request, pk):
+    if request.user.role not in {Role.TUTOR, Role.TUTEE}:
+        raise Http404
+    try:
+        acknowledge_pairing_release_notice(request_id=pk, user=request.user)
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
     return redirect(f"{reverse('accounts:dashboard')}#overview")
 
 

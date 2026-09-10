@@ -2962,6 +2962,48 @@ td small {
 .pairing-release-review-form .inline-actions {
   margin-top: 3px;
 }
+.release-notice-panel {
+  margin-bottom: 18px;
+}
+.release-notice-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--warning);
+  border-radius: 11px;
+  background: linear-gradient(100deg, var(--warning-soft), #fff 30%);
+}
+.release-notice-row.release-notice-rejected {
+  border-left-color: var(--danger);
+  background: linear-gradient(100deg, var(--danger-soft), #fff 30%);
+}
+.release-notice-row.release-notice-approved,
+.release-notice-row.release-notice-auto_approved {
+  border-left-color: var(--success);
+  background: linear-gradient(100deg, var(--success-soft), #fff 30%);
+}
+.release-notice-row strong {
+  font-size: 0.78rem;
+}
+.release-notice-row strong small {
+  margin-left: 4px;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.release-notice-row p {
+  margin: 4px 0 0;
+  font-size: 0.76rem;
+}
+.release-notice-note {
+  color: var(--ink-muted);
+}
+.release-notice-row form {
+  flex-shrink: 0;
+}
 .qualification-file-links {
   display: grid;
   gap: 3px;
