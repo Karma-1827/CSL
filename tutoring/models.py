@@ -179,6 +179,7 @@ class QualificationDocument(models.Model):
     )
     original_filename = models.CharField(max_length=255)
     status = models.CharField(max_length=16, choices=QualificationStatus.choices, default=QualificationStatus.PENDING)
+    tutor_note = models.TextField("上傳說明 / Note to reviewer", blank=True)
     review_note = models.TextField("審核備註 / Review note", blank=True)
     reviewed_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_qualifications"

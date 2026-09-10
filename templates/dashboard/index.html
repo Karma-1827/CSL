@@ -86,7 +86,7 @@
           {% if pending_qualifications %}
             <div class="table-wrap">
               <table>
-                <thead><tr><th>學生 / Student</th><th>檔案 / File</th><th>送出時間 / Submitted</th><th>操作 / Action</th></tr></thead>
+                <thead><tr><th>學生 / Student</th><th>檔案 / File</th><th>留言 / Note</th><th>送出時間 / Submitted</th><th>操作 / Action</th></tr></thead>
                 <tbody>
                   {% for document in pending_qualifications %}
                     <tr>
@@ -97,6 +97,7 @@
                           <a class="button button-secondary button-small" href="{% url 'accounts:download_qualification' document.pk %}" rel="noopener">下載 / Download</a>
                         </div>
                       </td>
+                      <td>{{ document.tutor_note|default:"—" }}</td>
                       <td>{{ document.uploaded_at|date:"Y-m-d H:i" }}</td>
                       <td>
                         <form action="{% url 'accounts:review_qualification' document.pk %}" method="post" class="qualification-review-form">
@@ -114,6 +115,28 @@
               </table>
             </div>
           {% else %}<div class="empty-state">目前沒有待審核文件。 / No documents are awaiting review.</div>{% endif %}
+        </section>
+        <section class="panel panel-wide">
+          <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div></div>
+          {% if qualification_review_history %}
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>學生 / Student</th><th>結果 / Result</th><th>留言 / Note</th><th>審核備註 / Review note</th><th>審核人員 / Reviewed by</th><th class="col-nowrap">審核時間 / Reviewed at</th></tr></thead>
+                <tbody>
+                  {% for document in qualification_review_history %}
+                    <tr>
+                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
+                      <td><span class="status-badge status-{{ document.status|lower }}">{{ document.get_status_display }}</span></td>
+                      <td>{{ document.tutor_note|default:"—" }}</td>
+                      <td>{{ document.review_note|default:"—" }}</td>
+                      <td>{{ document.reviewed_by.bilingual_name|default:"—" }}</td>
+                      <td class="col-nowrap">{{ document.reviewed_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}<div class="empty-state">目前沒有已審核的文件。 / No reviewed documents yet.</div>{% endif %}
         </section>
       </div>
       <div class="dashboard-view" data-dashboard-panel="activity">
@@ -271,6 +294,7 @@
           {% if qualification %}
             <div class="status-badge status-{{ qualification.status|lower }}">{{ qualification.get_status_display }}</div>
             <p>檔案 / File: <strong>{{ qualification.original_filename }}</strong></p>
+            {% if qualification.tutor_note %}<p>我的留言 / My note：{{ qualification.tutor_note }}</p>{% endif %}
             {% if qualification.review_note %}<p class="review-note">{{ qualification.review_note }}</p>{% endif %}
           {% else %}
             <div class="status-badge status-not_submitted">未提交 / Not submitted</div>
@@ -280,6 +304,7 @@
             {% csrf_token %}
             {{ qualification_form.file }}
             <p class="help-text">{{ qualification_form.file.help_text }}</p>
+            {% include "components/form_field.html" with field=qualification_form.tutor_note %}
             {% include "accounts/qualification_document_note.html" %}
             <button class="button button-primary" type="submit">{% if qualification %}重新送審 / Resubmit{% else %}上傳證明 / Upload{% endif %}</button>
           </form>

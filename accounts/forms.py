@@ -615,7 +615,7 @@ class BilingualSetPasswordForm(SetPasswordForm):
 class QualificationUploadForm(forms.ModelForm):
     class Meta:
         model = QualificationDocument
-        fields = ["file"]
+        fields = ["file", "tutor_note"]
         widgets = {
             "file": forms.ClearableFileInput(attrs={
                 "accept": ".pdf,.jpg,.jpeg,.png",
@@ -628,12 +628,19 @@ class QualificationUploadForm(forms.ModelForm):
                 "data-max-file-bytes": "1000000",
                 "data-max-file-size-label": "1 MB",
             }),
+            "tutor_note": forms.Textarea(attrs={"rows": 2, "maxlength": 300}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         add_form_classes(self)
         self.fields["file"].help_text = "PDF、JPG、PNG，最大 1 MB。\nPDF, JPG, or PNG, up to 1 MB."
+        self.fields["tutor_note"].required = False
+        self.fields["tutor_note"].label = "留言給審核人員（選填） / Note to reviewer (optional)"
+        self.fields["tutor_note"].help_text = (
+            "例如證明文件的取得時間或補充說明，最多 300 字。\n"
+            "e.g. when you obtained the document, or other context — up to 300 characters."
+        )
 
 
 class TutorProfileEditForm(forms.Form):

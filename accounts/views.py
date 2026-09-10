@@ -430,6 +430,9 @@ def dashboard(request):
                 "tutor_total": User.objects.filter(role=Role.TUTOR).count(),
                 "tutee_total": User.objects.filter(role=Role.TUTEE).count(),
                 "pending_qualifications": QualificationDocument.objects.filter(status=QualificationStatus.PENDING).select_related("tutor")[:8],
+                "qualification_review_history": QualificationDocument.objects.exclude(
+                    status=QualificationStatus.PENDING
+                ).select_related("tutor", "reviewed_by").order_by("-reviewed_at")[:30],
                 "recent_logs": AuditLog.objects.select_related("actor", "target_user")[:8],
                 "active_pairing_total": Pairing.objects.filter(status=PairingStatus.ACTIVE).count(),
                 "pending_invitation_total": MatchingInvitation.objects.filter(status=InvitationStatus.PENDING).count(),

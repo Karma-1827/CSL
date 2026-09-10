@@ -1020,6 +1020,40 @@ class QualificationTests(TestCase):
         document.refresh_from_db()
         self.assertEqual(document.status, QualificationStatus.APPROVED)
 
+    def test_tutor_can_leave_a_note_when_uploading_and_admin_sees_it_while_pending(self):
+        self.client.force_login(self.tutor)
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        response = self.client.post(
+            reverse("accounts:upload_qualification"),
+            {"file": upload, "tutor_note": "這是本學期剛考到的口試通過證明。"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        document = QualificationDocument.objects.get(tutor=self.tutor)
+        self.assertEqual(document.tutor_note, "這是本學期剛考到的口試通過證明。")
+
+        self.client.force_login(self.admin)
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "這是本學期剛考到的口試通過證明。")
+
+    def test_qualification_review_history_shows_outcome_note_and_reviewing_admin(self):
+        """2026-09-10 (user-requested): the Admin qualification panel only ever showed the
+        PENDING queue — once reviewed, a document vanished with no way to see who reviewed
+        it or what was said. A history section below the pending table must show this."""
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]),
+            {"action": "reject", "review_note": "證明文件模糊不清，請重新掃描上傳。"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "審核紀錄")
+        self.assertContains(dashboard, self.tutor.bilingual_name)
+        self.assertContains(dashboard, "證明文件模糊不清，請重新掃描上傳。")
+        self.assertContains(dashboard, self.admin.bilingual_name)
+        self.assertNotContains(dashboard, "目前沒有已審核的文件")
+
     def test_non_admin_cannot_review_qualification(self):
         document = self.upload_and_get_document()
         self.client.force_login(self.tutor)
