@@ -36,6 +36,7 @@
 - 舊版「完整欄位」CSV/Excel(.xlsx)匯入(含姓名、學制、身份別、計畫代碼等欄位)保留在同頁籤的「進階匯入」摺疊區塊(`accounts:roster_import`),仍提供範本下載。
 - 進階完整欄位匯入仍是 only-new；快速匯入則是「新增學號，或只補既有空白身分別」。兩者都不覆蓋既有非空白資料。快速匯入遇到不合法學號或未知身分別時略過該列並提示，不擋下其他合法列；進階完整欄位匯入仍對逐列必填/合法性驗證維持 all-or-nothing。
 - 自訂 Admin dashboard 顯示名冊/註冊/角色/配對/邀請統計。
+- **2026-09-10 新增前台「學生名冊」瀏覽頁籤**(Admin dashboard `#roster`):使用者反映一般管理員(`is_staff=False`,如 §2 Admin 節下方提到的多位 TA/老師帳號)點「系統總覽」的名冊人數/已註冊/老師/學生統計卡或側邊欄「學生名冊」連結時,原本直接連到 Django Admin 的 `RosterEntry`/`User` changelist(`/system-admin/...`),沒有後台權限的帳號會被導去登入頁卡住。新增的 `#roster` 頁籤(`accounts/views.py::dashboard()` 的 ADMIN 分支新增 `roster_q`/`roster_role`/`roster_program`/`roster_claimed`/`roster_page` 查詢與分頁,`templates/dashboard/admin_v2_panels.html` 新增對應區塊)重現 Django Admin `RosterEntryAdmin` 的**查詢能力**(學號/中英文姓名關鍵字、身分、合作計畫、註冊狀態四個篩選條件,30 筆一頁),但刻意只做唯讀瀏覽,不含新增/編輯/刪除——這些仍留在 Django Admin(僅 `is_staff=True` 可用),避免在前台重新做一套獨立於既有 Admin 表單驗證之外的寫入邏輯。原本 4 張統計卡與側邊欄連結、「口語能力審核」頁籤裡的「管理名冊」按鈕都已改連到這個頁籤(側邊欄連結與按鈕用純前端頁籤切換,4 張統計卡因為需要帶入不同篩選查詢字串,改用真的重新整理頁面的連結,不是 `data-dashboard-target`)。已通過的口語能力/課程/配對細節仍照舊分別連到各自既有的頁面,這次只處理「名冊」這一塊的可見性落差。
 - 審核 Tutor 口語能力證明。
 - 設定學期、修改學期、手動封存學期。
 - 查看解除配對申請並核准/拒絕;查看歷史結果。

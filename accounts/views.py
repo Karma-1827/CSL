@@ -398,6 +398,31 @@ def dashboard(request):
                 {"user": user, "program_ids": " ".join(export_program_ids_by_user.get(user.pk, []))}
             )
 
+        # 2026-09-10 (user-requested): non-superuser Admin accounts (is_staff=False) can't
+        # reach /system-admin/, so the "名冊人數"/"已註冊"/"老師"/"學生" overview cards and
+        # the sidebar "學生名冊" link — which all used to point straight at Django Admin's
+        # RosterEntry/User changelists — were a dead end for them. This read-only roster
+        # browse tab mirrors RosterEntryAdmin's search/filter/list capability (not its
+        # add/edit/delete) so every Admin, regardless of is_staff, can look someone up.
+        roster_q = request.GET.get("roster_q", "").strip()
+        roster_role = request.GET.get("roster_role", "")
+        roster_program = request.GET.get("roster_program", "")
+        roster_claimed = request.GET.get("roster_claimed", "")
+        roster_rows = RosterEntry.objects.select_related("program", "user").order_by("student_id")
+        if roster_q:
+            roster_rows = roster_rows.filter(
+                Q(student_id__icontains=roster_q) | Q(name_zh__icontains=roster_q) | Q(name_en__icontains=roster_q)
+            )
+        if roster_role in {Role.TUTOR, Role.TUTEE}:
+            roster_rows = roster_rows.filter(role=roster_role)
+        if roster_program:
+            roster_rows = roster_rows.filter(program_id=roster_program)
+        if roster_claimed == "yes":
+            roster_rows = roster_rows.filter(claimed_at__isnull=False)
+        elif roster_claimed == "no":
+            roster_rows = roster_rows.filter(claimed_at__isnull=True)
+        roster_page = Paginator(roster_rows, 30).get_page(request.GET.get("roster_page"))
+
         context.update(
             {
                 "roster_total": RosterEntry.objects.count(),
@@ -448,6 +473,12 @@ def dashboard(request):
                 "class_document_programs": class_document_programs,
                 "class_document_rows": class_document_rows,
                 "new_class_document_form": ClassDocumentUploadForm(),
+                "roster_q": roster_q,
+                "roster_role": roster_role,
+                "roster_program": roster_program,
+                "roster_claimed": roster_claimed,
+                "roster_page": roster_page,
+                "roster_programs": PartnerProgram.objects.order_by("name_zh"),
             }
         )
     elif request.user.role == Role.TUTOR:

@@ -62,6 +62,54 @@
   </section>
 </section>
 
+<section class="dashboard-view" data-dashboard-panel="roster">
+  <div class="view-heading"><span>ROSTER</span><h2>學生名冊 <small>Student roster</small></h2><p>查詢名冊與註冊狀態；新增／修改名冊資料請至「名冊匯入」，需要編輯單筆資料請洽系統管理員。 / Look up roster entries and registration status; add or update rosters under "名冊匯入 / Roster import".</p></div>
+  <form class="class-overview-filter" action="{% url 'accounts:dashboard' %}#roster" method="get">
+    <label>搜尋 / Search<input name="roster_q" value="{{ roster_q }}" placeholder="學號、中文或英文姓名 / Student ID or name"></label>
+    <label>身分 / Role<select name="roster_role">
+        <option value=""{% if not roster_role %} selected{% endif %}>全部 / All</option>
+        <option value="TUTOR"{% if roster_role == 'TUTOR' %} selected{% endif %}>老師 / Teacher</option>
+        <option value="TUTEE"{% if roster_role == 'TUTEE' %} selected{% endif %}>學生 / Student</option>
+    </select></label>
+    <label>合作計畫 / Program<select name="roster_program">
+        <option value=""{% if not roster_program %} selected{% endif %}>全部 / All</option>
+        {% for program in roster_programs %}<option value="{{ program.pk }}"{% if roster_program == program.pk|stringformat:"s" %} selected{% endif %}>{{ program.name_zh }}</option>{% endfor %}
+    </select></label>
+    <label>註冊狀態 / Registration<select name="roster_claimed">
+        <option value=""{% if not roster_claimed %} selected{% endif %}>全部 / All</option>
+        <option value="yes"{% if roster_claimed == 'yes' %} selected{% endif %}>已註冊 / Registered</option>
+        <option value="no"{% if roster_claimed == 'no' %} selected{% endif %}>尚未註冊 / Not registered</option>
+    </select></label>
+    <button class="button button-secondary" type="submit">篩選 / Filter</button>
+  </form>
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">ROSTER</span><h2>名冊清單 <small>Roster entries</small></h2></div><span class="result-count">{{ roster_page.paginator.count }} 筆 / entries</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>學號 / ID</th><th>姓名 / Name</th><th>身分 / Role</th><th>類別 / Category</th><th>學制 / Level</th><th>計畫 / Program</th><th>可註冊 / Enabled</th><th>註冊狀態 / Registration</th><th>行政檔案 / Profile</th></tr></thead>
+        <tbody>
+          {% for entry in roster_page %}
+            <tr>
+              <td>{{ entry.student_id }}</td>
+              <td>{{ entry.name_zh }}{% if entry.name_en %}<br><small>{{ entry.name_en }}</small>{% endif %}</td>
+              <td>{{ entry.get_role_display }}</td>
+              <td>{{ entry.get_identity_category_display|default:"—" }}</td>
+              <td>{{ entry.get_education_level_display }}</td>
+              <td>{{ entry.program.name_zh|default:"—" }}</td>
+              <td>{% if entry.is_enabled %}<span class="status-badge status-approved">可註冊 / Enabled</span>{% else %}<span class="status-badge status-rejected">已停用 / Disabled</span>{% endif %}</td>
+              <td>{% if entry.claimed_at %}<span class="status-badge status-approved">已註冊 / Registered</span>{% else %}<span class="status-badge">尚未註冊 / Not registered</span>{% endif %}</td>
+              <td>{% if entry.user %}<a href="{% url 'accounts:admin_user_profile' entry.user.pk %}">查看檔案 / View →</a>{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state">找不到符合條件的名冊資料。 / No roster entries match the filters.</div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if roster_page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="名冊分頁 / Roster pages">{% if roster_page.has_previous %}<a href="?roster_q={{ roster_q|urlencode }}&roster_role={{ roster_role }}&roster_program={{ roster_program }}&roster_claimed={{ roster_claimed }}&roster_page={{ roster_page.previous_page_number }}#roster">← 上一頁 / Previous</a>{% endif %}<span>{{ roster_page.number }} / {{ roster_page.paginator.num_pages }}</span>{% if roster_page.has_next %}<a href="?roster_q={{ roster_q|urlencode }}&roster_role={{ roster_role }}&roster_program={{ roster_program }}&roster_claimed={{ roster_claimed }}&roster_page={{ roster_page.next_page_number }}#roster">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+  </section>
+</section>
+
 <section class="dashboard-view" data-dashboard-panel="export">
   <div class="view-heading"><span>DATA EXPORT</span><h2>資料匯出 <small>Data export</small></h2></div>
   <form class="data-export-form" action="{% url 'tutoring:export_excel' %}" method="post">{% csrf_token %}

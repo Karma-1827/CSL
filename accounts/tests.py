@@ -1242,13 +1242,17 @@ class AdminDashboardNavigationTests(TestCase):
         User.objects.create_user(username="NAV-TUTEE", password="Tutee-password-2026", role=Role.TUTEE)
         self.client.force_login(self.admin)
 
-    def test_overview_stat_cards_link_to_filtered_management_views(self):
+    def test_overview_stat_cards_link_to_the_front_end_roster_tab(self):
+        """2026-09-10 (user-requested): non-superuser Admin accounts can't reach
+        /system-admin/, so these cards used to be a dead end for them — they now point
+        at the front-end "學生名冊" tab (#roster) instead of the Django Admin changelist."""
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("admin:accounts_rosterentry_changelist"))
-        self.assertContains(response, "?role__in=TUTOR%2CTUTEE")
-        self.assertContains(response, "?role__exact=TUTOR")
-        self.assertContains(response, "?role__exact=TUTEE")
+        self.assertNotContains(response, reverse("admin:accounts_rosterentry_changelist"))
+        self.assertNotContains(response, reverse("admin:accounts_user_changelist"))
+        self.assertContains(response, "?roster_claimed=yes#roster")
+        self.assertContains(response, "?roster_role=TUTOR#roster")
+        self.assertContains(response, "?roster_role=TUTEE#roster")
         self.assertContains(response, 'data-dashboard-target="matching"', count=3)
 
     def test_registered_user_filter_is_accepted_by_django_admin(self):
@@ -1296,6 +1300,45 @@ class AdminDashboardNavigationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         result_ids = {entry.pk for entry in response.context["cl"].result_list}
         self.assertEqual(result_ids, {matching.pk})
+
+    def test_non_superuser_admin_can_browse_roster_from_the_front_end_tab(self):
+        """2026-09-10 (user-requested): non-superuser Admin accounts (e.g. TAs/faculty
+        onboarded without Django Admin access) got stuck trying to check the roster from
+        "系統總覽", since the old cards/sidebar link went straight to /system-admin/, which
+        they can't reach. The front-end "學生名冊" tab must work for them without is_staff,
+        and its search/role/claimed filters must actually narrow the result set."""
+        non_superuser_admin = User.objects.create_user(
+            username="TA-ADMIN", password="Admin-password-2026", role=Role.ADMIN,
+            is_staff=False, is_superuser=False,
+        )
+        RosterEntry.objects.create(
+            student_id="ROSTER-BROWSE-TUTOR", name_zh="瀏覽測試老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+            claimed_at=timezone.now(),
+        )
+        RosterEntry.objects.create(
+            student_id="ROSTER-BROWSE-TUTEE", name_zh="瀏覽測試學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=PartnerProgram.objects.get(code="NTNU"),
+        )
+        self.client.force_login(non_superuser_admin)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ROSTER-BROWSE-TUTOR")
+        self.assertContains(response, "ROSTER-BROWSE-TUTEE")
+
+        by_role = self.client.get(reverse("accounts:dashboard"), {"roster_role": "TUTOR"})
+        self.assertContains(by_role, "ROSTER-BROWSE-TUTOR")
+        self.assertNotContains(by_role, "ROSTER-BROWSE-TUTEE")
+
+        by_search = self.client.get(reverse("accounts:dashboard"), {"roster_q": "瀏覽測試學生"})
+        self.assertContains(by_search, "ROSTER-BROWSE-TUTEE")
+        self.assertNotContains(by_search, "ROSTER-BROWSE-TUTOR")
+
+        by_claimed = self.client.get(reverse("accounts:dashboard"), {"roster_claimed": "no"})
+        self.assertContains(by_claimed, "ROSTER-BROWSE-TUTEE")
+        self.assertNotContains(by_claimed, "ROSTER-BROWSE-TUTOR")
 
 
 class IdleAccountFilterTests(TestCase):

@@ -26,10 +26,10 @@
             <a class="sidebar-link" href="#semesters" data-dashboard-target="semesters"><span aria-hidden="true">▣</span><b>學期設定<small>Semesters</small></b></a>
             <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#export" data-dashboard-target="export"><span aria-hidden="true">⇩</span><b>資料匯出<small>Data export</small></b></a>
+            <a class="sidebar-link" href="#roster" data-dashboard-target="roster"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
             <a class="sidebar-link" href="#roster-import" data-dashboard-target="roster-import"><span aria-hidden="true">⇧</span><b>名冊匯入<small>Roster import</small></b></a>
             <a class="sidebar-link" href="#class-documents" data-dashboard-target="class-documents"><span aria-hidden="true">▤</span><b>上課文件<small>Class documents</small></b></a>
             <a class="sidebar-link" href="#activity" data-dashboard-target="activity"><span aria-hidden="true">◷</span><b>系統紀錄<small>Activity</small></b></a>
-            <a class="sidebar-link sidebar-link-external" href="{% url 'admin:accounts_rosterentry_changelist' %}"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
           {% elif request.user.role == 'TUTOR' %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力證明<small>Oral proficiency</small></b></a>
@@ -68,10 +68,10 @@
       <section class="dashboard-view is-active" data-dashboard-panel="overview">
       <div class="view-heading"><span>OVERVIEW</span><h2>系統總覽 <small>System overview</small></h2><p>快速掌握名冊、註冊與配對狀態。 / A concise view of registration and matching activity.</p></div>
       <section class="stat-grid" aria-label="系統統計 / System statistics">
-        <a class="stat-card stat-card-link" href="{% url 'admin:accounts_rosterentry_changelist' %}"><span>名冊人數 / Roster</span><strong>{{ roster_total }}</strong><em>查看名冊 / View roster →</em></a>
-        <a class="stat-card stat-card-link" href="{% url 'admin:accounts_user_changelist' %}?role__in=TUTOR%2CTUTEE"><span>已註冊 / Registered</span><strong>{{ registered_total }}</strong><em>查看使用者 / View users →</em></a>
-        <a class="stat-card stat-card-link" href="{% url 'admin:accounts_user_changelist' %}?role__exact=TUTOR"><span>老師 / Teachers</span><strong>{{ tutor_total }}</strong><em>查看老師 / View teachers →</em></a>
-        <a class="stat-card stat-card-link" href="{% url 'admin:accounts_user_changelist' %}?role__exact=TUTEE"><span>學生 / Students</span><strong>{{ tutee_total }}</strong><em>查看學生 / View students →</em></a>
+        <a class="stat-card stat-card-link" href="{% url 'accounts:dashboard' %}#roster"><span>名冊人數 / Roster</span><strong>{{ roster_total }}</strong><em>查看名冊 / View roster →</em></a>
+        <a class="stat-card stat-card-link" href="{% url 'accounts:dashboard' %}?roster_claimed=yes#roster"><span>已註冊 / Registered</span><strong>{{ registered_total }}</strong><em>查看使用者 / View users →</em></a>
+        <a class="stat-card stat-card-link" href="{% url 'accounts:dashboard' %}?roster_role=TUTOR#roster"><span>老師 / Teachers</span><strong>{{ tutor_total }}</strong><em>查看老師 / View teachers →</em></a>
+        <a class="stat-card stat-card-link" href="{% url 'accounts:dashboard' %}?roster_role=TUTEE#roster"><span>學生 / Students</span><strong>{{ tutee_total }}</strong><em>查看學生 / View students →</em></a>
         <a class="stat-card stat-card-link" href="#matching" data-dashboard-target="matching"><span>輔導中 / Active matches</span><strong>{{ active_pairing_total }}</strong><em>查看配對 / View matches →</em></a>
         <a class="stat-card stat-card-link" href="#matching" data-dashboard-target="matching"><span>待回覆邀請 / Pending invites</span><strong>{{ pending_invitation_total }}</strong><em>查看邀請 / View invites →</em></a>
       </section>
@@ -81,7 +81,7 @@
         <section class="panel panel-wide">
           <div class="panel-heading">
             <div><span class="eyebrow">REVIEW</span><h2>口語能力證明待審核 <small>Pending reviews</small></h2></div>
-            <a class="button button-secondary" href="{% url 'admin:accounts_rosterentry_changelist' %}">管理名冊 / Manage roster</a>
+            <a class="button button-secondary" href="#roster" data-dashboard-target="roster">查看名冊 / View roster</a>
           </div>
           {% if pending_qualifications %}
             <div class="table-wrap">
