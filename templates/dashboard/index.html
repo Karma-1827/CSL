@@ -81,7 +81,6 @@
         <section class="panel panel-wide">
           <div class="panel-heading">
             <div><span class="eyebrow">REVIEW</span><h2>口語能力證明待審核 <small>Pending reviews</small></h2></div>
-            <a class="button button-secondary" href="#roster" data-dashboard-target="roster">查看名冊 / View roster</a>
           </div>
           <details class="candidate-filter-disclosure">
             <summary class="candidate-filter-toggle">比對系辦語音通過名單 <small>Match department oral exam list</small></summary>
@@ -99,7 +98,7 @@
                 <tbody>
                   {% for document in pending_qualifications %}
                     <tr>
-                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint %}<br><span class="status-badge status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
+                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
