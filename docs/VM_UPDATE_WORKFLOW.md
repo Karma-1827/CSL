@@ -293,6 +293,12 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-11(五十八)**:操作者 Claude Code(依使用者指示執行)。上一版 `0d327e2` → 新版 `32a4fda`(codex review 對弱掃整改的兩項回饋修正,詳見 `docs/PROGRESS.md`):
+  1. **口語能力證明重新送審行為缺陷**:`accounts/views.py::upload_qualification()` 原本的修法(缺 `file` 欄位時靜默沿用舊檔案但仍重置審核狀態)會讓 Tutor 免上傳新證據就能撤銷 Admin 已完成的審核結果,已改為沒有真的上傳新檔案就直接拒絕整個請求,不建立/不修改任何欄位。
+  2. **Nginx 端 429/5xx/403 標頭**(同批次一併处理,`deploy/nginx/mpts.conf.example`):`location /`、`location /system-admin/` 這兩個 proxy_pass 給 Django 的 location,改用 `proxy_hide_header` 先移除 Django 已送出的 6 個安全標頭,再用 `add_header ... always;` 由 Nginx 統一送出,讓 Nginx 自己合成、完全不經過 Django 的 429(`limit_req_status`)、5xx、`/system-admin/` 的 403 也有這些標頭。
+  **無 migration、無相依套件變更**;**有 Nginx 設定變更**。374 項測試全數通過,`ruff` 乾淨。部署前備份:`/var/backups/mpts/20260911-120956`。`git checkout --detach` 再次卡在根目錄下的 `CLAUDE.md`(同前幾次記錄的既有落差),已用 `sudo -n -u mpts git checkout HEAD -- CLAUDE.md` 補救。因無 migration/靜態資源異動,先 `systemctl restart mpts-gunicorn.service` 套用程式碼修正。驗收(1):用 `TEST-SCAN-TUTOR-NTNU`(已有既有文件)對 `/qualification/upload/` 送出缺 `file` 欄位的請求,確認回應 302 且文件的 `status`/`review_note`/`reviewed_by`/`original_filename` 完全不變。
+  Nginx 部分:對照 `deploy/nginx/mpts.conf.example` 本次修改與正式 VM 現行設定,確認除 TODO 佔位字串外完全一致。備份現行設定 → 上傳新版設定 → `sudo nginx -t` 語法驗證通過 → 經使用者確認後 `sudo systemctl reload nginx`。驗收(2):對 `https://mpts.tcsl.ntnu.edu.tw/` 發送短時間大量並發請求(60 個)實際觸發 Nginx 的 `limit_req` 429,抓到一筆 429 回應確認 6 個標頭皆已正確送出;確認正常 200 回應這 6 個標頭仍各只出現 1 次,無重複;`/system-admin/`(校網 IP 內,實際回應 302 導去登入頁而非 403,但同樣驗證到標頭皆正確)。`sudo tail /var/log/nginx/mpts_error.log` 只看到這次測試自己觸發的 `limiting requests` 訊息,`journalctl -u mpts-gunicorn.service` 僅有既有的無關訊息。程式碼層已同步 commit `32a4fda`,推上 remote。臨時 sudo 授權依使用者指示維持開啟。
+
 - **2026-09-11(五十七,Nginx 設定變更,非應用程式碼部署)**:操作者 Claude Code(依使用者指示執行)。整理弱掃缺失處理報告表草稿時發現 Batch C(五十三)只補了 HSTS/`X-Content-Type-Options`/`Referrer-Policy`/COOP 四項,COEP/CORP 沒有一併加到 Nginx 直接處理的三處回應,依使用者指示補齊(詳見 `docs/PROGRESS.md`)。
   - `HTTP→HTTPS 301 重導`、`location /static/`、`location = /static/errors/413.html` 三處新增 `add_header Cross-Origin-Embedder-Policy "require-corp" always;`、`add_header Cross-Origin-Resource-Policy "same-origin" always;`,值與 `accounts/middleware.py::ContentSecurityPolicyMiddleware` 對動態頁送出的值一致。**刻意不動 `location /`、`location /system-admin/`**(同 Batch C 理由,避免與 Django 已送出的標頭疊成重複)。
   - 部署前:對照 `deploy/nginx/mpts.conf.example` 本次修改與正式 VM 現行設定,確認除 TODO 佔位字串外完全一致。備份現行設定 `sudo cp /etc/nginx/sites-enabled/mpts.conf /tmp/mpts.conf.bak-<timestamp>`。上傳新版設定 → `sudo nginx -t` 語法驗證通過 → 經使用者確認後 `sudo systemctl reload nginx`。
