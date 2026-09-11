@@ -1180,20 +1180,23 @@ def download_class_document(request, pk):
 @require_POST
 def upload_qualification(request):
     current = QualificationDocument.objects.filter(tutor=request.user).first()
+    # 2026-09-08 師大資中弱點掃描發現的第二個真實 500(見
+    # docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md 應用程式錯誤分類),經
+    # codex review 進一步指出原本的修法還不夠:重新送審時若送出的表單根本沒有 "file"
+    # 這個欄位(例如殘缺的 multipart 送出 file[]=...,或單純忘記選檔案),Django
+    # FileField.clean() 會依既有慣例回退使用 instance 上的舊檔案讓 form.is_valid() 仍為
+    # True——若照這個結果繼續送出,會在沒有任何新證據的情況下,把已核准/已拒絕的文件
+    # 狀態重置回 PENDING、清空審核備註與審核人員,等同讓 Tutor 靠著送一個空白表單就能
+    # 撤銷 Admin 的審核結果。改成直接檢查 request.FILES,沒有真的上傳新檔案就在表單驗證
+    # 之前拒絕,不建立/不修改任何欄位(原檔案、審核狀態、留言皆維持原樣)。
+    if "file" not in request.FILES:
+        messages.error(request, "此欄位為必填欄位")
+        return redirect(reverse("accounts:dashboard") + "#qualification")
     form = QualificationUploadForm(request.POST, request.FILES, instance=current)
     if form.is_valid():
         document = form.save(commit=False)
         document.tutor = request.user
-        # 2026-09-08 師大資中弱點掃描發現的第二個真實 500(見
-        # docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md 應用程式錯誤分類):
-        # 重新送審時若送出的表單根本沒有 "file" 這個欄位(例如殘缺的 multipart 送出
-        # file[]=...),Django FileField.clean() 會依既有慣例回退使用 instance 上的舊檔案
-        # 讓 form.is_valid() 仍為 True,但 request.FILES 裡完全沒有 "file" 這個 key,直接
-        # 用 request.FILES["file"] 會丟出未攔截的 KeyError/500。改用 .get() 判斷是否真的
-        # 有上傳新檔案,沒有就沿用既有的 original_filename(維持既有審核紀錄的檔名顯示)。
-        new_upload = request.FILES.get("file")
-        if new_upload is not None:
-            document.original_filename = new_upload.name
+        document.original_filename = request.FILES["file"].name
         document.status = QualificationStatus.PENDING
         document.review_note = ""
         document.reviewed_by = None

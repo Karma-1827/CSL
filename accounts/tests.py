@@ -1075,18 +1075,39 @@ class QualificationTests(TestCase):
         self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
         self.assertFalse(QualificationDocument.objects.filter(tutor=self.tutor).exists())
 
-    def test_missing_file_field_on_resubmission_keeps_existing_file_without_crashing(self):
+    def test_missing_file_field_on_resubmission_is_rejected_without_crashing(self):
         """真實回歸測試(非假設性):修正前,已有既有文件時重新送出完全沒有 "file" 欄位
-        的表單(同上,殘缺的 multipart file[]=... 或單純漏帶檔案),Django FileField 會
+        的表單(例如殘缺的 multipart file[]=... 或單純漏帶檔案),Django FileField 會
         依既有慣例回退使用 instance 上的舊檔案,is_valid() 仍為 True,但 view 直接用
-        request.FILES["file"] 取檔名會丟出未攔截的 KeyError → 500。"""
+        request.FILES["file"] 取檔名會丟出未攔截的 KeyError → 500。
+        codex review 進一步指出:光是不 500 還不夠——不能因為缺檔案就靜默接受這次送出,
+        那樣等於讓 Tutor 免上傳新檔案就能把文件重置回 PENDING。修正後這種送出必須被
+        直接拒絕,原文件的任何欄位(含 tutor_note)都不得被更動。"""
         document = self.upload_and_get_document()
         original_name = document.original_filename
         response = self.client.post(reverse("accounts:upload_qualification"), {"tutor_note": "just a note update"})
         self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
         document.refresh_from_db()
         self.assertEqual(document.original_filename, original_name)
-        self.assertEqual(document.tutor_note, "just a note update")
+        self.assertEqual(document.tutor_note, "")
+        self.assertEqual(document.status, QualificationStatus.PENDING)
+
+    def test_missing_file_field_on_resubmission_does_not_reset_a_reviewed_document(self):
+        """codex review 指出的核心風險:重新送出沒有帶新檔案的表單,不得讓 Tutor 免提供
+        任何新證據就把已核准/已拒絕的文件重置回 PENDING、清空 Admin 的審核備註。"""
+        document = self.upload_and_get_document()
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]),
+            {"action": "reject", "review_note": "證明文件模糊不清，請重新掃描上傳。"},
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("accounts:upload_qualification"), {})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.REJECTED)
+        self.assertEqual(document.review_note, "證明文件模糊不清，請重新掃描上傳。")
+        self.assertEqual(document.reviewed_by, self.admin)
 
     def test_empty_file_upload_is_rejected_not_saved(self):
         self.client.force_login(self.tutor)
