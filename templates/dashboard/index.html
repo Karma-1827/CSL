@@ -271,7 +271,7 @@
             <div class="makeup-review-list">
               {% for report in pending_incident_reports %}
                 <article class="makeup-review-row class-alert-row">
-                  <div><strong>{% if report.session %}{{ report.session.class_date|date:"Y-m-d" }} · {{ report.session.start_time|time:"H:i" }}{% else %}{{ report.created_at|date:"Y-m-d H:i" }} · 未指定課程 / No class specified{% endif %}</strong><span>通報者 / Reporter：{{ report.reporter.bilingual_name }}</span><small>{{ report.get_category_display }}</small><p>{{ report.content }}</p></div>
+                  <div><strong>{{ report.created_at|date:"Y-m-d H:i" }}</strong><span>通報者 / Reporter：{{ report.reporter.bilingual_name }}</span><small>{{ report.get_category_display }}</small><p>{{ report.content }}</p></div>
                   <form action="{% url 'tutoring:resolve_incident_report' report.pk %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="紀錄備註 / Log note"><div class="inline-actions"><button class="button button-small button-success" type="submit">標記已紀錄 / Mark as logged</button></div></form>
                 </article>
               {% endfor %}
@@ -282,8 +282,8 @@
           <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>紀錄 <small>Logged reports</small></h2></div></div>
           {% if incident_report_history %}
             <div class="table-wrap"><table>
-              <thead><tr><th>課程 / Class</th><th>通報者 / Reporter</th><th>分類 / Category</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th></tr></thead>
-              <tbody>{% for report in incident_report_history %}<tr><td>{% if report.session %}{{ report.session.class_date|date:"Y-m-d" }}{% else %}未指定 / N/A{% endif %}</td><td>{{ report.reporter.bilingual_name }}</td><td>{{ report.get_category_display }}</td><td>{{ report.resolution_note }}</td><td>{{ report.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ report.resolved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+              <thead><tr><th>送出時間 / Submitted</th><th>通報者 / Reporter</th><th>分類 / Category</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th></tr></thead>
+              <tbody>{% for report in incident_report_history %}<tr><td>{{ report.created_at|date:"Y-m-d H:i" }}</td><td>{{ report.reporter.bilingual_name }}</td><td>{{ report.get_category_display }}</td><td>{{ report.resolution_note }}</td><td>{{ report.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ report.resolved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
             </table></div>
           {% else %}<div class="empty-state">目前沒有已紀錄的回報。 / No logged reports yet.</div>{% endif %}
         </section>

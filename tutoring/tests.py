@@ -2066,13 +2066,8 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_incident_report_is_not_restricted_to_class_time_window(self):
-        class_date = timezone.localdate() - timedelta(days=3)
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
+        """2026-09-11(使用者要求):IncidentReport 完全不綁定課程,任何時候都能送出。"""
         report = submit_incident_report(
-            session_id=session.pk,
             reporter=self.tutor,
             category=IncidentReportCategory.STUDENT_ABSENT,
             content="學生當天未出席，也聯絡不上。",
@@ -2080,152 +2075,40 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(report.status, IncidentReportStatus.PENDING)
         self.assertEqual(report.reporter, self.tutor)
 
-    def test_incident_report_rejects_non_participant(self):
-        class_date = timezone.localdate()
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
-        bystander = User.objects.create_user(
-            username="BYSTANDER", password="Test-password-2026", role=Role.TUTOR
-        )
-        with self.assertRaises(ValidationError):
-            submit_incident_report(
-                session_id=session.pk,
-                reporter=bystander,
-                category=IncidentReportCategory.OTHER,
-                content="不是這堂課的參與者。",
-            )
-
     def test_incident_report_requires_valid_category_and_content(self):
-        class_date = timezone.localdate()
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
         with self.assertRaises(ValidationError):
-            submit_incident_report(
-                session_id=session.pk, reporter=self.tutor, category="NOT_A_CATEGORY", content="測試"
-            )
+            submit_incident_report(reporter=self.tutor, category="NOT_A_CATEGORY", content="測試")
         with self.assertRaises(ValidationError):
-            submit_incident_report(
-                session_id=session.pk,
-                reporter=self.tutor,
-                category=IncidentReportCategory.OTHER,
-                content="   ",
-            )
+            submit_incident_report(reporter=self.tutor, category=IncidentReportCategory.OTHER, content="   ")
 
-    def test_incident_report_can_be_submitted_without_a_session(self):
-        """2026-09-11(使用者要求):回報不一定限於課程才能回報，session 改為選填，
-        且刻意不要求指定配對/對象——完全自由填寫分類與內容。"""
+    def test_incident_report_accepts_the_system_issue_category(self):
+        """2026-09-11(使用者要求):新增「系統問題」分類。"""
         report = submit_incident_report(
-            reporter=self.tutor,
-            category=IncidentReportCategory.OTHER,
-            content="與課程無關的整體學習狀況疑慮。",
+            reporter=self.tutor, category=IncidentReportCategory.SYSTEM_ISSUE, content="下載時數證明時頁面出現錯誤。"
         )
-        self.assertIsNone(report.session)
-        self.assertEqual(report.reporter, self.tutor)
-        self.assertEqual(report.status, IncidentReportStatus.PENDING)
-
-    def test_standalone_incident_report_session_field_is_optional_on_the_dashboard(self):
-        self.client.force_login(self.tutor)
-        response = self.client.post(
-            reverse("tutoring:incident_report"),
-            {"session": "", "category": "OTHER", "content": "不指定任何課程或對象。"},
-        )
-        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
-        report = IncidentReport.objects.get(reporter=self.tutor, session__isnull=True)
-        self.assertEqual(report.category, "OTHER")
-        log = AuditLog.objects.get(event_type="INCIDENT_REPORT_SUBMITTED")
-        self.assertIsNone(log.metadata["session_id"])
-
-        dashboard = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(dashboard, "不指定任何課程或對象")
-
-    def test_admin_dashboard_renders_sessionless_incident_report_history(self):
-        report = submit_incident_report(
-            reporter=self.tutee,
-            category=IncidentReportCategory.SAFETY,
-            content="與人身安全有關但不特定於某堂課的疑慮。",
-        )
-        admin = User.objects.create_superuser(username="INCIDENT-ADMIN-2", password="Admin-password-2026")
-        self.client.force_login(admin)
-        response = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(response, "與人身安全有關但不特定於某堂課的疑慮")
-
-        response = self.client.post(
-            reverse("tutoring:resolve_incident_report", args=[report.pk]), {"note": "已知悉"}
-        )
-        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
-        response = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(response, "已知悉")
+        self.assertEqual(report.category, IncidentReportCategory.SYSTEM_ISSUE)
 
     def test_standalone_incident_report_can_be_submitted_from_the_dashboard(self):
-        """2026-09-10: incident reports moved from a per-class form (bound to a session via
-        the class detail page's URL) to their own dashboard tab, with the session itself
-        picked from a dropdown — see docs/PROGRESS.md."""
-        class_date = timezone.localdate()
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
+        """2026-09-11(使用者要求):課程欄位完全拿掉——跟當堂課有關的問題已有 ClassAlert
+        (課堂通報)可用,異常回報保留給其餘所有情境,不再需要選課程或配對對象。"""
         self.client.force_login(self.tutor)
         response = self.client.post(
             reverse("tutoring:incident_report"),
-            {"session": session.pk, "category": "STUDENT_ABSENT", "content": "學生當天未出席。"},
+            {"category": "STUDENT_ABSENT", "content": "學生當天未出席。"},
         )
         self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
-        report = IncidentReport.objects.get(session=session, reporter=self.tutor)
+        report = IncidentReport.objects.get(reporter=self.tutor)
         self.assertEqual(report.category, "STUDENT_ABSENT")
         log = AuditLog.objects.get(event_type="INCIDENT_REPORT_SUBMITTED")
         self.assertEqual(log.actor, self.tutor)
-        self.assertEqual(log.metadata["session_id"], session.pk)
+        self.assertNotIn("session_id", log.metadata)
 
-    def test_standalone_incident_report_session_choices_are_restricted_to_own_classes(self):
-        class_date = timezone.localdate()
-        own_session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
-        other_tutor = User.objects.create_user(username="OTHER-CLASS-TUTOR", password="Test-password-2026", role=Role.TUTOR)
-        other_tutee = User.objects.create_user(username="OTHER-CLASS-TUTEE", password="Test-password-2026", role=Role.TUTEE)
-        other_pairing = Pairing.objects.create(semester=self.semester, tutor=other_tutor, tutee=other_tutee)
-        other_session = schedule_classes(
-            tutor=other_tutor, pairing=other_pairing, class_date=class_date,
-            start_time=time(14), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
-
-        self.client.force_login(self.tutor)
         dashboard = self.client.get(reverse("accounts:dashboard"))
-        form = dashboard.context["incident_report_form"]
-        session_choices = set(form.fields["session"].queryset.values_list("pk", flat=True))
-        self.assertIn(own_session.pk, session_choices)
-        self.assertNotIn(other_session.pk, session_choices)
-        # 2026-09-10: the dropdown label must not fall back to ClassSession.__str__(),
-        # which interpolates Pairing.__str__() and leaks both sides' usernames.
-        option_label = str(form["session"])
-        self.assertIn(self.tutee.name_zh, option_label)
-        self.assertNotIn(self.tutee.username, option_label)
-        self.assertNotIn(self.tutor.username, option_label)
-
-        response = self.client.post(
-            reverse("tutoring:incident_report"),
-            {"session": other_session.pk, "category": "OTHER", "content": "不是我的課程。"},
-        )
-        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
-        self.assertFalse(IncidentReport.objects.filter(session=other_session).exists())
+        self.assertContains(dashboard, "學生當天未出席")
 
     def test_admin_can_resolve_incident_report_and_dashboard_history_updates(self):
-        class_date = timezone.localdate()
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
         report = submit_incident_report(
-            session_id=session.pk,
-            reporter=self.tutee,
-            category=IncidentReportCategory.VENUE_ISSUE,
-            content="教室臨時被佔用。",
+            reporter=self.tutee, category=IncidentReportCategory.VENUE_ISSUE, content="教室臨時被佔用。"
         )
         admin = User.objects.create_superuser(username="INCIDENT-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
@@ -2247,16 +2130,8 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "已協調改到 202 教室")
 
     def test_non_admin_cannot_resolve_incident_report(self):
-        class_date = timezone.localdate()
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
-        )[0]
         report = submit_incident_report(
-            session_id=session.pk,
-            reporter=self.tutor,
-            category=IncidentReportCategory.OTHER,
-            content="測試內容",
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="測試內容"
         )
         with self.assertRaises(ValidationError):
             resolve_incident_report(report_id=report.pk, admin=self.tutee, note="")
@@ -2397,8 +2272,10 @@ class V2FeatureTests(TestCase):
         ClassAlert.objects.create(
             session=session, reporter=self.tutor, subject=self.tutee, reason=ClassAlertReason.CANNOT_REACH,
         )
+        # 2026-09-11(使用者要求):IncidentReport 不再綁定課程,行政檔案頁只依「本人送出過的回報」
+        # 呈現,不再靠課程配對反查——因此這筆只會出現在 self.tutee(送出者)的頁面上。
         IncidentReport.objects.create(
-            session=session, reporter=self.tutee, category=IncidentReportCategory.VENUE_ISSUE, content="教室有問題",
+            reporter=self.tutee, category=IncidentReportCategory.VENUE_ISSUE, content="教室有問題",
         )
         admin = User.objects.create_superuser(username="PROFILE-ADMIN", password="Admin-password-2026")
         HourAdjustment.objects.create(
@@ -2410,7 +2287,6 @@ class V2FeatureTests(TestCase):
         response = self.client.get(reverse("accounts:admin_user_profile", args=[self.tutor.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.tutee.bilingual_name)
-        self.assertContains(response, "場地問題 / Venue issue")
         self.assertContains(response, "舊紙本資料補登測試")
         self.assertContains(response, "+2.5 小時")
 

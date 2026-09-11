@@ -116,7 +116,7 @@
       <div class="panel-heading"><div><span class="eyebrow">INCIDENT REPORTS</span><h2>異常回報紀錄 <small>Incident reports</small></h2></div></div>
       <div class="admin-class-list">
         {% for report in incident_reports %}
-          <a href="{% url 'tutoring:class_detail' report.session_id %}"><time>{{ report.created_at|date:"Y-m-d" }}<small>{{ report.created_at|date:"H:i" }}</small></time><span><strong>{{ report.get_category_display }}</strong><small>{% if report.reporter_id == subject.pk %}由此人回報 / Reported by this person{% else %}此人所屬課程的回報 / Reported on this person's class{% endif %} · {{ report.get_status_display }}</small></span><b>查看 / View →</b></a>
+          <div><time>{{ report.created_at|date:"Y-m-d" }}<small>{{ report.created_at|date:"H:i" }}</small></time><span><strong>{{ report.get_category_display }}</strong><small>{{ report.content|truncatechars:60 }} · {{ report.get_status_display }}</small></span></div>
         {% empty %}<div class="empty-state compact">目前沒有異常回報紀錄。 / No incident reports.</div>{% endfor %}
       </div>
     </section>

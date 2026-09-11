@@ -3,7 +3,6 @@ from datetime import time
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-from django.db.models import Q
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
@@ -229,44 +228,17 @@ class ClassAlertForm(forms.ModelForm):
         widgets = {"note": forms.Textarea(attrs={"rows": 3})}
 
 
-class _OwnSessionChoiceField(forms.ModelChoiceField):
-    """Labels each class by date/time and the *other* participant's name — not
-    ClassSession.__str__(), which interpolates Pairing.__str__() and so leaks both
-    sides' usernames (2026-09-10: same fix as PairingChoiceField, applied here too since
-    this dropdown is built independently)."""
-
-    def __init__(self, *args, viewer=None, **kwargs):
-        self.viewer = viewer
-        super().__init__(*args, **kwargs)
-
-    def label_from_instance(self, obj):
-        counterpart = obj.pairing.tutee if self.viewer and self.viewer.pk == obj.pairing.tutor_id else obj.pairing.tutor
-        return f"{obj.class_date} {obj.start_time:%H:%M} · {counterpart.bilingual_name}"
-
-
 class StandaloneIncidentReportForm(forms.ModelForm):
     """Filed from the "異常回報 / Incident reports" dashboard tab (2026-09-10), not tied
-    to a specific class's detail page — the session itself is a field, picked from a
-    dropdown of the user's own classes, rather than being bound via a URL argument.
+    to a specific class's detail page.
 
-    2026-09-11(使用者要求):session 改為選填——回報不一定是針對特定一堂課發生的事,
-    刻意不改成必選「配對」代替,使用者明確表示不需要指定對象,完全自由填寫。"""
+    2026-09-11(使用者要求):完全拿掉課程欄位——跟當堂課有關的問題已有 ClassAlert
+    (課堂通報)可用,異常回報保留給其餘所有情境,兩者定位不重疊,不需要在這裡選課程或配對。"""
 
     class Meta:
         model = IncidentReport
-        fields = ("session", "category", "content")
+        fields = ("category", "content")
         widgets = {"content": forms.Textarea(attrs={"rows": 3})}
-        field_classes = {"session": _OwnSessionChoiceField}
-
-    def __init__(self, *args, user, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["session"].viewer = user
-        self.fields["session"].queryset = ClassSession.objects.filter(
-            Q(pairing__tutor=user) | Q(pairing__tutee=user)
-        ).select_related("pairing__tutor", "pairing__tutee").order_by("-class_date", "-start_time")
-        self.fields["session"].label = "課程（選填） / Class (optional)"
-        self.fields["session"].required = False
-        self.fields["session"].empty_label = "不指定特定課程 / Not tied to a specific class"
 
 
 class MakeupReasonForm(forms.Form):

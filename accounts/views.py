@@ -793,10 +793,8 @@ def dashboard(request):
                     pairing for pairing in conversation_pairings if pairing.status == PairingStatus.ENDED
                 ],
                 "unread_message_total": sum(pairing.unread_count for pairing in conversation_pairings),
-                "incident_report_form": StandaloneIncidentReportForm(user=request.user),
-                "own_incident_reports": IncidentReport.objects.filter(reporter=request.user)
-                .select_related("session__pairing__tutor", "session__pairing__tutee")
-                .order_by("-created_at"),
+                "incident_report_form": StandaloneIncidentReportForm(),
+                "own_incident_reports": IncidentReport.objects.filter(reporter=request.user).order_by("-created_at"),
                 "release_notices": release_notices,
             }
         )
@@ -848,10 +846,10 @@ def dashboard(request):
         ).select_related("session__pairing__semester", "reporter", "resolved_by")[:30]
         context["pending_incident_reports"] = IncidentReport.objects.filter(
             status=IncidentReportStatus.PENDING
-        ).select_related("session__pairing__semester", "reporter")
+        ).select_related("reporter")
         context["incident_report_history"] = IncidentReport.objects.filter(
             status=IncidentReportStatus.RESOLVED
-        ).select_related("session__pairing__semester", "reporter", "resolved_by")[:30]
+        ).select_related("reporter", "resolved_by")[:30]
     return render(request, "dashboard/index.html", context)
 
 
@@ -984,9 +982,11 @@ def admin_user_profile(request, user_id):
     context["class_alerts"] = ClassAlert.objects.filter(
         Q(reporter=subject) | Q(subject=subject)
     ).select_related("session__pairing", "resolved_by").order_by("-created_at")[:20]
+    # 2026-09-11(使用者要求):IncidentReport 不再綁定課程/配對,無法再依「是否為該堂課的
+    # 參與者」反查;改成只看這位使用者自己送出過的回報。
     context["incident_reports"] = IncidentReport.objects.filter(
-        Q(session__pairing__tutor=subject) | Q(session__pairing__tutee=subject)
-    ).select_related("session__pairing", "reporter", "resolved_by").order_by("-created_at")[:20]
+        reporter=subject
+    ).select_related("resolved_by").order_by("-created_at")[:20]
 
     return render(request, "accounts/admin_user_profile.html", context)
 

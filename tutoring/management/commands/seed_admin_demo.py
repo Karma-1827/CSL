@@ -360,17 +360,11 @@ class Command(BaseCommand):
         return session
 
     def _seed_incident_classes(self, pairing, tutor, tutee, class_date):
-        pending_session = self._create_past_session(pairing=pairing, tutor=tutor, class_date=class_date, start_time=time(9, 0))
-        submit_incident_report(
-            session_id=pending_session.pk, reporter=tutee, category="VENUE_ISSUE",
-            content="教室冷氣故障，課堂進行到一半必須換教室。",
-        )
-        resolved_session = self._create_past_session(
-            pairing=pairing, tutor=tutor, class_date=class_date - timedelta(days=1), start_time=time(9, 0),
-        )
+        # 2026-09-11(使用者要求):IncidentReport 不再綁定任何課程,這裡不再需要建立
+        # 對應的 ClassSession,直接送出回報即可。
+        submit_incident_report(reporter=tutee, category="VENUE_ISSUE", content="教室冷氣故障，課堂進行到一半必須換教室。")
         report = submit_incident_report(
-            session_id=resolved_session.pk, reporter=tutor, category="LEARNING_PROGRESS",
-            content="學生本週進度落後，建議增加練習時間。",
+            reporter=tutor, category="LEARNING_PROGRESS", content="學生本週進度落後，建議增加練習時間。"
         )
         admin = User.objects.filter(role=Role.ADMIN).first()
         if admin:

@@ -813,24 +813,20 @@ def resolve_alert(request, alert_id):
 @require_POST
 def incident_report(request):
     """Standalone dashboard version (2026-09-10): originally only reachable from a
-    specific class's detail page (tied to that class via the URL); now the class itself
-    is a field on the form, filed from the "異常回報 / Incident reports" dashboard tab
-    instead — see docs/PROGRESS.md for why. StandaloneIncidentReportForm's own queryset
-    already restricts `session` to the user's classes, and submit_incident_report()
-    re-checks participation itself, so an unrelated session id can't slip through either
-    layer."""
+    specific class's detail page; now filed from the "異常回報 / Incident reports"
+    dashboard tab, unrelated to any single class — 2026-09-11(使用者要求):the class
+    field was removed entirely, since a report about the current class belongs in that
+    class's own ClassAlert (課堂通報) instead."""
     if request.user.role not in {Role.TUTOR, Role.TUTEE}:
         raise Http404
-    form = StandaloneIncidentReportForm(request.POST, user=request.user)
+    form = StandaloneIncidentReportForm(request.POST)
     if not form.is_valid():
         for errors in form.errors.values():
             for error in errors:
                 messages.error(request, error)
         return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
-    session = form.cleaned_data["session"]
     try:
         report = submit_incident_report(
-            session_id=session.pk if session else None,
             reporter=request.user,
             category=form.cleaned_data["category"],
             content=form.cleaned_data["content"],
@@ -842,11 +838,7 @@ def incident_report(request):
             actor=request.user,
             event_type="INCIDENT_REPORT_SUBMITTED",
             description="送出異常回報 / Incident report submitted",
-            metadata={
-                "report_id": report.pk,
-                "session_id": session.pk if session else None,
-                "category": report.category,
-            },
+            metadata={"report_id": report.pk, "category": report.category},
         )
         messages.success(request, "異常回報已送出。 / Incident report submitted.")
     return redirect(f"{reverse('accounts:dashboard')}#incident-reports")

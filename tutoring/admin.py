@@ -142,8 +142,8 @@ class ClassAlertAdmin(admin.ModelAdmin):
 
 @admin.register(IncidentReport)
 class IncidentReportAdmin(admin.ModelAdmin):
-    list_display = ("session", "reporter", "category", "status", "created_at", "resolved_by")
-    list_filter = ("status", "category", "session__pairing__semester")
+    list_display = ("reporter", "category", "status", "created_at", "resolved_by")
+    list_filter = ("status", "category")
     search_fields = ("reporter__username", "content")
     readonly_fields = ("created_at", "resolved_at")
 
