@@ -203,6 +203,7 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
   - **理由遮蔽規則(使用者明確要求)**:`NO_SHOW`/`UNREACHABLE`/`SCHEDULE_CONFLICT` 三個理由如實顯示給對方;`CONDUCT`(態度或行為問題)與 `OTHER`(其他)一律顯示成通用的「其他原因 / Other」,**補充說明(`reason_note`)也一併隱藏**,避免把可能帶有指控性質的具體內容直接曝光給被指控的一方引發衝突,只讓對方知道「有申請/已解除」這個事實。這個遮蔽規則同時套用在等待審核中與已有結果兩種畫面。判斷邏輯集中在 `PairingReleaseRequest.is_sensitive_reason`/`counterpart_reason_display`(`tutoring/models.py`),不是在 template 裡重複判斷。
   - **只通知被解除的一方,申請人沒有對稱通知**(2026-09-10 使用者確認維持現狀,不加做):申請人只有在送出申請當下看到一次性的 flash message,之後管理員核准/拒絕都不會再收到任何提示;這是刻意的範圍限縮,不是遺漏。
   - 對應 migration:`tutoring/migrations/0034_pairingreleaserequest_counterpart_acknowledged_at.py`(新增 `counterpart_acknowledged_at`,無資料遷移)。
+  - **2026-09-11 Admin dashboard「解除配對審核」處理紀錄的「結果 / Result」欄位改用 `.result-text`**(使用者要求):原本用 `.status-badge` 背景色塊呈現,比照口語能力審核紀錄(見上)已有的既有慣例,改成純文字並套用 `.status-approved`/`.status-rejected` 顏色但拿掉背景。
 
 ### 4.5 排課與額度
 
