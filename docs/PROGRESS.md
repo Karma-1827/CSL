@@ -72,6 +72,9 @@
 > - Admin dashboard「口語能力審核」頁籤新增收合式上傳區塊(`accounts:import_oral_exam_pass_list`);待審核表格比對到的列會顯示綠色「系辦名冊：語音通過」徽章。
 > - 用使用者提供的真實檔案(1169 列、兩個工作表)在本機實測:正確比對到 309 筆「語音」恰好為「通過」的學號,正確略過沒有語音欄位的「海華碩」分頁;測試後已清除本機資料庫裡由該次實測產生的紀錄,不留真實學生個資在本機開發環境。
 > - 新增 6 項回歸測試(`accounts/tests.py::OralExamPassListImportTests`),重現真實檔案的混亂結構(標題列、不一致的語音值、多工作表)作為測試資料,而非用一份乾淨假資料。380 項測試全數通過,`ruff` 乾淨,新 migration `accounts/0019_departmentoralexampass`。
+> - 後續使用者微調(同日):口語能力審核面板移除「查看名冊」按鈕;語音通過提示改用 `.result-text status-approved`(純色文字,無背景色塊),沿用既有的「結果 / Result」欄用色慣例。
+>
+> **2026-09-11 Admin 側邊欄新增「系統現況」小卡(使用者要求)**:顯示目前啟用中學期名稱、目前在線人數、累計登入次數,見 `CLAUDE.md` 第 2 節。「目前在線」刻意定義為「未過期且已登入的 session 數」(逐一解碼 session payload,檢查 `_auth_user_id`),不是即時頁面瀏覽或 WebSocket 在線狀態——這兩者本專案刻意不做(見系統邊界),詢問使用者具體要哪種「人數」後才動工,避免蓋錯功能。「累計登入次數」直接讀 `AuditLog` 的 `LOGIN_SUCCESS` 筆數,每次登入都算,不去重。新增 `accounts/services.py::count_online_users()` 與 4 項回歸測試(`accounts/tests.py::AdminSidebarStatusTests`)。384 項測試全數通過,`ruff` 乾淨,無 migration。
 
 ## 已完成
 

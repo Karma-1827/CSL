@@ -15,7 +15,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from tutoring.models import QualificationDocument, QualificationStatus, TuteeProfile, TutorProfile
+from tutoring.models import QualificationDocument, QualificationStatus, Semester, TuteeProfile, TutorProfile
 
 from .forms import client_ip
 from .services import import_department_oral_exam_pass_list
@@ -1585,6 +1585,47 @@ class IdleAccountFilterTests(TestCase):
         self.never_logged_in.refresh_from_db()
         self.assertEqual(self.idle.account_status, AccountStatus.ACTIVE)
         self.assertEqual(self.never_logged_in.account_status, AccountStatus.ACTIVE)
+
+
+class AdminSidebarStatusTests(TestCase):
+    """2026-09-11(使用者要求):側邊欄「系統現況」小卡——目前啟用中學期名稱、目前在線
+    人數(未過期且已登入的 session 數)、累計登入次數(LOGIN_SUCCESS AuditLog 筆數)。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="STATUS-ADMIN", password="Admin-password-2026")
+
+    def test_current_semester_label_shows_the_active_semester_name(self):
+        today = timezone.localdate()
+        Semester.objects.create(
+            name_zh="115學年度第1學期", name_en="115-1 Semester",
+            starts_on=today - timedelta(days=10), ends_on=today + timedelta(days=90),
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "115學年度第1學期")
+
+    def test_current_semester_label_falls_back_when_nothing_is_active(self):
+        Semester.objects.all().delete()
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "無啟用中學期 / No active semester")
+
+    def test_online_count_reflects_logged_in_sessions_only(self):
+        tutor = User.objects.create_user(username="STATUS-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        other_client = Client()
+        other_client.force_login(tutor)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "目前在線 / Online now：2")
+
+    def test_total_login_count_matches_login_success_audit_log(self):
+        self.client.force_login(self.admin)
+        # force_login() doesn't fire the LOGIN_SUCCESS log_event() call (that only runs on
+        # a real POST through CSLLoginView), so drive an actual login through the view.
+        AuditLog.objects.create(actor=self.admin, event_type="LOGIN_SUCCESS", description="test")
+        AuditLog.objects.create(actor=self.admin, event_type="LOGIN_SUCCESS", description="test")
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "累計登入次數 / Total logins：2")
 
 
 class AdminAuditLogMirrorTests(TestCase):

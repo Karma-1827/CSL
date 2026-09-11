@@ -4,8 +4,10 @@ import re
 from dataclasses import dataclass, field
 
 import openpyxl
+from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from .models import DepartmentOralExamPass, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry
 
@@ -419,3 +421,20 @@ def import_department_oral_exam_pass_list(uploaded_file, *, admin):
     return OralExamPassListImportResult(
         matched_count=len(matched_student_ids), created_count=created_count, sheets_used=sheets_used
     )
+
+
+def count_online_users():
+    """Approximate "currently online" as the number of unexpired sessions that belong to
+    a logged-in user (2026-09-11,使用者要求). This is the closest honest proxy available
+    without adding new tracking infrastructure: it rides on the existing 30 分鐘閒置逾時
+    (SESSION_COOKIE_AGE)+SESSION_SAVE_EVERY_REQUEST behavior already used for auto-logout,
+    so "online" here means "has a valid session within that same 30-minute window" — not a
+    real-time page-view or WebSocket presence signal (this project deliberately doesn't have
+    either, see CLAUDE.md 系統邊界). Session data has to be decoded one row at a time because
+    `_auth_user_id` lives inside the encoded payload, not as a queryable column.
+    """
+    count = 0
+    for session in Session.objects.filter(expire_date__gt=timezone.now()).iterator():
+        if session.get_decoded().get("_auth_user_id"):
+            count += 1
+    return count

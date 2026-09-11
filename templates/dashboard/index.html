@@ -14,6 +14,16 @@
           <span class="sidebar-avatar" aria-hidden="true">{{ request.user.bilingual_name|slice:":1" }}</span>
           <div><strong>{{ request.user.bilingual_name }}</strong><small>{{ request.user.get_role_display }}</small></div>
         </div>
+        {% if request.user.role == 'ADMIN' %}
+          <div class="sidebar-note sidebar-status">
+            <span>系統現況 / System status</span>
+            <small>
+              目前學期 / Current semester：{{ current_semester_label }}<br>
+              目前在線 / Online now：{{ online_user_count }}<br>
+              累計登入次數 / Total logins：{{ total_login_count }}
+            </small>
+          </div>
+        {% endif %}
         <nav class="sidebar-nav">
           {% if request.user.role == 'ADMIN' %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>系統總覽<small>Overview</small></b></a>

@@ -107,6 +107,7 @@ from .models import (
 from .services import (
     OralExamPassListImportError,
     RosterImportFileError,
+    count_online_users,
     import_department_oral_exam_pass_list,
     import_roster_entries,
     import_roster_ids,
@@ -464,12 +465,27 @@ def dashboard(request):
         for document in pending_qualifications:
             document.oral_exam_pass_hint = document.tutor.username in passed_student_ids
 
+        # 2026-09-11(使用者要求):側邊欄的系統現況小卡——目前啟用中學期名稱、目前在線
+        # 人數、累計登入次數。多個合作計畫目前若剛好是同一個學期名稱(如 115 學年度第 1
+        # 學期同時是 NTNU 與 MARYLAND 的啟用期間),只顯示一次,不重複列出。
+        today = timezone.localdate()
+        current_semester_names = list(
+            Semester.objects.filter(is_active=True, starts_on__lte=today, ends_on__gte=today)
+            .order_by("starts_on")
+            .values_list("name_zh", flat=True)
+            .distinct()
+        )
+        current_semester_label = "、".join(current_semester_names) if current_semester_names else "無啟用中學期 / No active semester"
+
         context.update(
             {
                 "roster_total": RosterEntry.objects.count(),
                 "registered_total": User.objects.exclude(role=Role.ADMIN).count(),
                 "tutor_total": User.objects.filter(role=Role.TUTOR).count(),
                 "tutee_total": User.objects.filter(role=Role.TUTEE).count(),
+                "current_semester_label": current_semester_label,
+                "online_user_count": count_online_users(),
+                "total_login_count": AuditLog.objects.filter(event_type="LOGIN_SUCCESS").count(),
                 "pending_qualifications": pending_qualifications,
                 "oral_exam_pass_import_form": OralExamPassListImportForm(),
                 "qualification_review_history": QualificationDocument.objects.exclude(
