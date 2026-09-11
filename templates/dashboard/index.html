@@ -74,9 +74,11 @@
         <a class="stat-card stat-card-link" href="{% url 'accounts:dashboard' %}?roster_role=TUTEE#roster"><span>學生 / Students</span><strong>{{ tutee_total }}</strong><em>查看學生 / View students →</em></a>
         <a class="stat-card stat-card-link" href="#matching" data-dashboard-target="matching"><span>輔導中 / Active matches</span><strong>{{ active_pairing_total }}</strong><em>查看配對 / View matches →</em></a>
         <a class="stat-card stat-card-link" href="#matching" data-dashboard-target="matching"><span>待回覆邀請 / Pending invites</span><strong>{{ pending_invitation_total }}</strong><em>查看邀請 / View invites →</em></a>
-        <div class="stat-card"><span>目前在線 / Online now</span><strong>{{ online_user_count }}</strong></div>
-        <div class="stat-card"><span>累計登入次數 / Total logins</span><strong>{{ total_login_count }}</strong></div>
       </section>
+      <div class="stat-card-wide">
+        <div><span>目前在線 / Online now</span><strong>{{ online_user_count }}</strong></div>
+        <div><span>累計登入次數 / Total logins</span><strong>{{ total_login_count }}</strong></div>
+      </div>
       </section>
       <div class="dashboard-view" data-dashboard-panel="qualifications">
       <div class="view-heading"><span>REVIEW</span><h2>口語能力審核 <small>Oral proficiency review</small></h2><p>集中處理老師送出的口語能力證明。 / Review teacher oral proficiency documents.</p></div>

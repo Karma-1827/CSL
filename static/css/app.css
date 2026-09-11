@@ -1986,6 +1986,30 @@ a {
   font-style: normal;
   font-weight: 750;
 }
+.stat-card-wide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  margin-bottom: 22px;
+  padding: 18px 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #fff 55%, rgba(221, 230, 237, 0.58));
+  box-shadow: 0 7px 24px rgba(39, 55, 77, 0.06);
+}
+.stat-card-wide > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.stat-card-wide span {
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+}
+.stat-card-wide strong {
+  font-size: 1.3rem;
+  color: var(--navy);
+}
 .dashboard-view > .panel + .panel,
 .dashboard-view > .invitation-stack + .panel {
   margin-top: 18px;
