@@ -611,6 +611,14 @@ def class_detail(request, pk):
     own_alert = ClassAlert.objects.filter(
         session=session, reporter=request.user, status=ClassAlertStatus.ACTIVE
     ).first()
+    # 2026-09-12(使用者要求):管理員標記課堂通報為「已紀錄」時留的備註,原本一旦標記
+    # 就從 own_alert(只抓 ACTIVE)消失,通報者完全看不到——比照異常回報既有的做法補上,
+    # 讓通報者仍能看到已紀錄的通報與管理員備註;不含自己取消的通報,因為本人已經知情。
+    own_resolved_alerts = list(
+        ClassAlert.objects.filter(
+            session=session, reporter=request.user, status=ClassAlertStatus.RESOLVED
+        ).order_by("-resolved_at")
+    )
     now = timezone.now()
     form = ClassRecordForm(request.POST or None, request.FILES or None, instance=own_record, author=request.user)
     reschedule_form = RescheduleClassForm(
@@ -649,6 +657,7 @@ def class_detail(request, pk):
             "counterpart_attendance": counterpart_attendance,
             "own_confirmation": own_confirmation,
             "own_alert": own_alert,
+            "own_resolved_alerts": own_resolved_alerts,
             "alert_form": ClassAlertForm(),
             "checkin_requires_makeup_reason": now > session.ends_at + timedelta(minutes=30),
             "record_requires_makeup_reason": own_record is None and now > session.ends_at + timedelta(hours=24),

@@ -268,6 +268,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - Admin 可標記為已紀錄(內部狀態值仍是 `RESOLVED`,`resolve_class_alert`)並留備註;已紀錄與通報者自行取消(`CANCELLED`)都是終點狀態,已紀錄後不能再取消,已取消後也不能再標記已紀錄。
 - 用詞刻意選「已紀錄」而非「已處理」:很多通報(尤其人身安全等)系辦不一定能真的解決,Admin 這個動作只代表「已知悉並留存記錄,後續再討論」,不代表問題已解決。
 - Admin dashboard「課堂通報」頁籤有 PENDING 待處理 + HISTORY 已紀錄兩區塊,紀錄含紀錄人、紀錄時間、備註。
+- **2026-09-12 起通報者本人也看得到管理員標記已紀錄時留的備註(使用者要求,比照異常回報既有的做法)**:先前 `tutoring/views.py::class_detail()` 的 `own_alert` 只查 `status=ACTIVE`,一旦 Admin 標記已紀錄,這筆通報就從課程詳情頁完全消失,通報者看不到「已被處理」這件事,更看不到備註。已新增 `own_resolved_alerts`(查 `status=RESOLVED`,依 `resolved_at` 倒序),`templates/tutoring/class_detail.html` 在原本的通報表單/取消按鈕區塊下方,用 `.completion-box`(沿用簽到完成既有的綠色完成樣式)逐筆列出已紀錄的通報與管理員備註(`resolution_note`)。已取消(`CANCELLED`)的通報不顯示,因為是通報者自己取消,本人已經知情。
 
 **異常回報**(事後、可分類的回報,`tutoring/services.py` 的 `submit_incident_report`/`resolve_incident_report`):
 

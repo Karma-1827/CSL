@@ -48,6 +48,9 @@
           {% else %}
             <div class="empty-state compact">課堂通報僅於上課時間內開放。<br>Class alerts are available only during class time.</div>
           {% endif %}
+          {% for alert in own_resolved_alerts %}
+            <div class="completion-box"><strong>已紀錄 / Logged</strong><span>{{ alert.get_reason_display }}</span>{% if alert.note %}<p>{{ alert.note }}</p>{% endif %}{% if alert.resolution_note %}<p><em>管理員備註 / Admin note：{{ alert.resolution_note }}</em></p>{% endif %}</div>
+          {% endfor %}
         </section>
 
         </div>

@@ -2026,6 +2026,29 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "已與雙方確認過情況")
         self.assertContains(response, "目前沒有待處理的課堂通報")
 
+    def test_reporter_sees_admin_note_after_class_alert_is_resolved(self):
+        """2026-09-12(使用者要求):管理員標記課堂通報為已紀錄並留備註後,通報者本人在課程
+        詳情頁仍應看得到這則備註,比照異常回報既有的做法——先前一旦標記已紀錄,own_alert
+        (只抓 ACTIVE)就直接找不到這筆,備註完全不會顯示給通報者看。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        alert = report_class_alert(
+            session_id=session.pk,
+            reporter=self.tutor,
+            reason=ClassAlertReason.CANNOT_REACH,
+            now=self.aware(class_date, time(10, 15)),
+        )
+        admin = User.objects.create_superuser(username="ALERT-NOTE-ADMIN", password="Admin-password-2026")
+        resolve_class_alert(alert_id=alert.pk, admin=admin, note="已聯繫雙方確認情況")
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "已紀錄")
+        self.assertContains(response, "已聯繫雙方確認情況")
+
     def test_resolved_class_alert_cannot_be_cancelled_and_active_cannot_be_resolved_twice(self):
         class_date = timezone.localdate()
         session = schedule_classes(
