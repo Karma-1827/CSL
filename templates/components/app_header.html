@@ -17,6 +17,7 @@
         <a href="{% url 'accounts:profile' %}" role="menuitem"><span aria-hidden="true">○</span><b>個人資料<small>Profile</small></b></a>
         {% if class_documents_visible %}<a href="{% url 'accounts:class_documents' %}" role="menuitem"><span aria-hidden="true">▥</span><b>上課文件<small>Class documents</small></b></a>{% endif %}
         <a href="{% url 'accounts:handbook' %}" role="menuitem"><span aria-hidden="true">▤</span><b>使用手冊<small>User guide</small></b></a>
+        {% if request.user.is_superuser %}<a href="{% url 'admin:index' %}" role="menuitem"><span aria-hidden="true">⚙</span><b>Django 後台<small>Django Admin</small></b></a>{% endif %}
       </div>
     </div>
     <form action="{% url 'accounts:logout' %}" method="post">

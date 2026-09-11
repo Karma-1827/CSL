@@ -1474,6 +1474,38 @@ class AdminDashboardNavigationTests(TestCase):
         self.assertContains(response, "?roster_role=TUTEE#roster")
         self.assertContains(response, 'data-dashboard-target="matching"', count=3)
 
+    def test_superuser_sees_django_admin_link_in_account_menu(self):
+        """2026-09-11 (user-reported "後台入口不見了"): the 2026-09-10 change above
+        replaced the *prominent* direct links to Django Admin (stat cards, roster button)
+        with front-end equivalents, but never added a general entry point back anywhere
+        for superusers — leaving no obvious way in for the one account type that actually
+        needs it (PartnerProgram/HourAdjustment/DepartmentOralExamPass corrections etc.
+        are Django-Admin-only). Restored as a superuser-only link in the account dropdown
+        menu (components/app_header.html). Note this is distinct from a handful of
+        pre-existing, narrower Django Admin links elsewhere in the dashboard (e.g. the
+        pending-invitations panel's "管理全部" button, the partner-program empty states)
+        that are shown to every Admin regardless of staff/superuser status — those aren't
+        touched here and are a separate, narrower concern (non-staff Admin accounts would
+        hit Django's own admin login wall on those, not something this change addresses).
+        Checking for the "Django 後台" label specifically (not just any /system-admin/
+        substring) avoids false positives against those other links."""
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, reverse("admin:index"))
+        self.assertContains(response, "Django 後台")
+
+    def test_non_superuser_admin_does_not_see_django_admin_link(self):
+        non_superuser_admin = User.objects.create_user(
+            username="NAV-ADMIN2", password="Admin-password-2026", role=Role.ADMIN, name_zh="一般管理員"
+        )
+        self.client.force_login(non_superuser_admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "Django 後台")
+
+    def test_tutor_does_not_see_django_admin_link(self):
+        self.client.force_login(User.objects.get(username="NAV-TUTOR"))
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "Django 後台")
+
     def test_registered_user_filter_is_accepted_by_django_admin(self):
         response = self.client.get(
             f"{reverse('admin:accounts_user_changelist')}?role__in=TUTOR%2CTUTEE"

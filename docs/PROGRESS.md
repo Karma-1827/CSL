@@ -82,6 +82,8 @@
 > - **缺檔錯誤訊息補齊雙語**:`accounts/views.py::upload_qualification()` 的 `messages.error(request, "此欄位為必填欄位")` 是手動組出的訊息,不會經過 `add_form_classes()` 統一設定的 `error_messages["required"]`(該處刻意維持中文單語,是全站既有慣例,不受此次影響),所以需要自己明確寫成雙語,改成 `"此欄位為必填欄位。 / This field is required."`。更新／新增 2 項測試(`MessageStorageTests::test_flash_message_still_renders_on_the_next_request`、`QualificationTests::test_missing_file_field_on_first_upload_is_rejected_not_500`)實際斷言完整雙語字串,不是只斷言子字串。
 > - **缺失處理報告測試數量更新**:`docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md` 完成定義自我檢查那條仍寫「373 項」,已更新為實際的「384/384」,並把 `check --deploy`/`pip check`/`pip-audit` 的敘述改成已確認全過(不再寫「待正式 VM 環境變數齊全後執行」)。
 > - 384 項測試全數通過,`ruff` 乾淨,無 migration。
+>
+> **2026-09-11 使用者回報「後台入口不見了」**:2026-09-10 移除 Django Admin 直接連結(統計卡、側邊欄名冊連結等)改連前台頁籤時,沒有同時補一個給 superuser 用的一般性入口,導致 superuser 完全沒有 UI 路徑能回到 Django Admin 處理只有後台才能做的事(`PartnerProgram`、`HourAdjustment`、`accounts.models.DepartmentOralExamPass` 訂正等)。已在帳號選單(`templates/components/app_header.html`)補上一個 `{% if request.user.is_superuser %}` 包住的「Django 後台 / Django Admin」連結,放在「使用手冊」下方。**過程中額外發現**儀表板裡還有幾處既有的、未限制身分的 Django Admin 連結(待回覆邀請面板的「管理全部」按鈕、合作計畫相關空狀態提示),目前對所有 Admin 角色都會顯示,非 `is_staff` 的一般管理員點下去會卡在 Django Admin 自己的登入頁——這是先前就存在的落差,這次沒有一併處理,已記錄在 `CLAUDE.md` 供之後決定是否收斂。新增 3 項回歸測試(`accounts/tests.py::AdminDashboardNavigationTests`),387 項測試全數通過,`ruff` 乾淨,無 migration。
 
 ## 已完成
 
