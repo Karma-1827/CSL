@@ -293,6 +293,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-11(六十)**:操作者 Claude Code(依使用者指示執行)。上一版 `eadd05c` → 新版 `91fbbbc`(口語能力審核畫面微調,使用者要求:移除「查看名冊」按鈕;語音通過提示改用 `.result-text status-approved` 純色文字,拿掉背景色塊)。**純 template 變更,無 migration、無相依套件、無靜態資源異動**,380 項測試全數通過。部署前備份:`/var/backups/mpts/20260911-131917`。`git checkout --detach` 這次乾淨無衝突(未觸及 `CLAUDE.md`)。只執行 `systemctl restart mpts-gunicorn.service`。驗收:`curl -I` 首頁回應 200;用正式站 superuser 對 `/dashboard/` 發請求確認「查看名冊」按鈕已從口語能力審核面板消失;`journalctl` 僅有既有的 gunicorn `Control server error` 無關訊息。臨時 sudo 授權依使用者指示維持開啟。
+
 - **2026-09-11(五十九)**:操作者 Claude Code(依使用者指示執行)。上一版 `77898cf` → 新版 `076b8a2`(新增系辦語音通過名單交叉比對,詳見 `docs/PROGRESS.md`/`CLAUDE.md`)。新增 `accounts.models.DepartmentOralExamPass`,Admin 可上傳系辦「碩士生修業概況一覽表」Excel,比對「語音」欄位恰好為「通過」的學號,在口語能力審核待審核列表加提示徽章,**純輔助資訊,不自動核准/拒絕/修改任何 `QualificationDocument`**。**含 1 個 migration**:`accounts.0019_departmentoralexampass`(單純新增資料表,無資料遷移,`migrate --plan` 確認)。無相依套件變更、無靜態資源變更(只有 template 變更,不需 `collectstatic`)。380 項測試全數通過。部署前備份:`/var/backups/mpts/20260911-125116`。`git checkout --detach` 再次卡在根目錄下的 `CLAUDE.md`(同前幾次記錄的既有落差),已用 `sudo -n -u mpts git checkout HEAD -- CLAUDE.md` 補救。`migrate accounts` 套用 migration 後 `makemigrations --check --dry-run` 確認無殘留差異,`systemctl restart mpts-gunicorn.service`。驗收:`curl -I` 首頁回應 200;用正式站的 superuser 帳號對 `/dashboard/` 發請求確認回應 200 且頁面含新的上傳表單;`journalctl` 僅有既有的 gunicorn `Control server error` 無關訊息。**本機開發環境曾用使用者提供的真實系辦 Excel 檔案(1169 列)實測比對邏輯,測試後已清除本機資料庫裡由該次實測產生的紀錄,原始檔案本身未進版控、未上傳到正式站**。臨時 sudo 授權依使用者指示維持開啟。
 
 - **2026-09-11(五十八)**:操作者 Claude Code(依使用者指示執行)。上一版 `0d327e2` → 新版 `32a4fda`(codex review 對弱掃整改的兩項回饋修正,詳見 `docs/PROGRESS.md`):
