@@ -2115,6 +2115,51 @@ class ClassWorkflowTests(TestCase):
                 content="   ",
             )
 
+    def test_incident_report_can_be_submitted_without_a_session(self):
+        """2026-09-11(使用者要求):回報不一定限於課程才能回報，session 改為選填，
+        且刻意不要求指定配對/對象——完全自由填寫分類與內容。"""
+        report = submit_incident_report(
+            reporter=self.tutor,
+            category=IncidentReportCategory.OTHER,
+            content="與課程無關的整體學習狀況疑慮。",
+        )
+        self.assertIsNone(report.session)
+        self.assertEqual(report.reporter, self.tutor)
+        self.assertEqual(report.status, IncidentReportStatus.PENDING)
+
+    def test_standalone_incident_report_session_field_is_optional_on_the_dashboard(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("tutoring:incident_report"),
+            {"session": "", "category": "OTHER", "content": "不指定任何課程或對象。"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+        report = IncidentReport.objects.get(reporter=self.tutor, session__isnull=True)
+        self.assertEqual(report.category, "OTHER")
+        log = AuditLog.objects.get(event_type="INCIDENT_REPORT_SUBMITTED")
+        self.assertIsNone(log.metadata["session_id"])
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "不指定任何課程或對象")
+
+    def test_admin_dashboard_renders_sessionless_incident_report_history(self):
+        report = submit_incident_report(
+            reporter=self.tutee,
+            category=IncidentReportCategory.SAFETY,
+            content="與人身安全有關但不特定於某堂課的疑慮。",
+        )
+        admin = User.objects.create_superuser(username="INCIDENT-ADMIN-2", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "與人身安全有關但不特定於某堂課的疑慮")
+
+        response = self.client.post(
+            reverse("tutoring:resolve_incident_report", args=[report.pk]), {"note": "已知悉"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "已知悉")
+
     def test_standalone_incident_report_can_be_submitted_from_the_dashboard(self):
         """2026-09-10: incident reports moved from a per-class form (bound to a session via
         the class detail page's URL) to their own dashboard tab, with the session itself

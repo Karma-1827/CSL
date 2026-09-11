@@ -758,7 +758,12 @@ class IncidentReportCategory(models.TextChoices):
 
 
 class IncidentReport(models.Model):
-    session = models.ForeignKey(ClassSession, on_delete=models.CASCADE, related_name="incident_reports")
+    # 2026-09-11(使用者要求):選填,不再強制綁定某一堂課——回報不一定是針對特定課程
+    # 發生的事(例如整體學習狀況、跟教學無關的疑慮等),硬性要求選一堂課會擋掉這些情境。
+    # 刻意不改成綁定「配對」代替:使用者明確表示不需要指定對象,完全自由填寫分類與內容。
+    session = models.ForeignKey(
+        ClassSession, on_delete=models.CASCADE, related_name="incident_reports", null=True, blank=True
+    )
     reporter = models.ForeignKey(User, on_delete=models.PROTECT, related_name="reported_incident_reports")
     category = models.CharField("分類 / Category", max_length=20, choices=IncidentReportCategory.choices)
     content = models.TextField("回報內容 / Report content")

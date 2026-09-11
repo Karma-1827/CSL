@@ -84,6 +84,8 @@
 > - 384 項測試全數通過,`ruff` 乾淨,無 migration。
 >
 > **2026-09-11 使用者回報「後台入口不見了」**:2026-09-10 移除 Django Admin 直接連結(統計卡、側邊欄名冊連結等)改連前台頁籤時,沒有同時補一個給 superuser 用的一般性入口,導致 superuser 完全沒有 UI 路徑能回到 Django Admin 處理只有後台才能做的事(`PartnerProgram`、`HourAdjustment`、`accounts.models.DepartmentOralExamPass` 訂正等)。已在帳號選單(`templates/components/app_header.html`)補上一個 `{% if request.user.is_superuser %}` 包住的「Django 後台 / Django Admin」連結,放在「使用手冊」下方。**過程中額外發現**儀表板裡還有幾處既有的、未限制身分的 Django Admin 連結(待回覆邀請面板的「管理全部」按鈕、合作計畫相關空狀態提示),目前對所有 Admin 角色都會顯示,非 `is_staff` 的一般管理員點下去會卡在 Django Admin 自己的登入頁——這是先前就存在的落差,這次沒有一併處理,已記錄在 `CLAUDE.md` 供之後決定是否收斂。新增 3 項回歸測試(`accounts/tests.py::AdminDashboardNavigationTests`),387 項測試全數通過,`ruff` 乾淨,無 migration。
+>
+> **2026-09-11 異常回報改為不強制綁定課程(使用者要求)**:使用者指出「tutor/tutee 的異常回報不用放課程,因為不一定限於課程才能回報」,並在追問是否至少要指定配對/對象後明確回答「不用,完全自由填寫,不需要指定對象」。`tutoring/models.py::IncidentReport.session` 改為 `null=True, blank=True`(`tutoring/migrations/0035_alter_incidentreport_session`),刻意**不**新增替代的「配對」欄位。`tutoring/services.py::submit_incident_report()` 的 `session_id` 改為選填關鍵字參數,只有提供時才做 `_counterpart()` 參與者驗證。`tutoring/forms.py::StandaloneIncidentReportForm` 的 `session` 欄位改 `required=False`,`empty_label` 顯示「不指定特定課程 / Not tied to a specific class」。`tutoring/views.py::incident_report()` 的 `session_id=session.pk` 改為 `session.pk if session else None` 避免 `session` 為 `None` 時的 `AttributeError`。畫面端(`templates/dashboard/participant_v2_panels.html` 的「我送出的回報」清單、`templates/dashboard/index.html` 的 Admin 待處理/已紀錄清單)在 `report.session` 為空時改顯示送出時間與「未指定課程 / No class specified」,不再無條件存取 `report.session.class_date`。新增 3 項回歸測試(無課程送出、dashboard 表單允許留空、Admin 端正確渲染無課程紀錄),390 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。已同步更新 `CLAUDE.md` 第 4.7 節。
 
 ## 已完成
 

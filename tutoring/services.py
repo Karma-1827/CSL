@@ -1178,11 +1178,15 @@ def resolve_class_alert(*, alert_id, admin, note=""):
 
 
 @transaction.atomic
-def submit_incident_report(*, session_id, reporter, category, content):
-    session = ClassSession.objects.select_for_update().select_related(
-        "pairing__tutor", "pairing__tutee"
-    ).get(pk=session_id)
-    _counterpart(session, reporter)
+def submit_incident_report(*, reporter, category, content, session_id=None):
+    # 2026-09-11(使用者要求):session_id 改為選填——回報不一定針對特定課程,提供時仍要
+    # 驗證回報者確實是該堂課的參與者;沒提供時完全不需要指定配對/課程對象。
+    session = None
+    if session_id is not None:
+        session = ClassSession.objects.select_for_update().select_related(
+            "pairing__tutor", "pairing__tutee"
+        ).get(pk=session_id)
+        _counterpart(session, reporter)
     if category not in IncidentReportCategory.values:
         raise ValidationError("請選擇回報分類。 / Select a report category.")
     content = content.strip()

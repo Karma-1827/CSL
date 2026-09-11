@@ -247,7 +247,10 @@ class _OwnSessionChoiceField(forms.ModelChoiceField):
 class StandaloneIncidentReportForm(forms.ModelForm):
     """Filed from the "異常回報 / Incident reports" dashboard tab (2026-09-10), not tied
     to a specific class's detail page — the session itself is a field, picked from a
-    dropdown of the user's own classes, rather than being bound via a URL argument."""
+    dropdown of the user's own classes, rather than being bound via a URL argument.
+
+    2026-09-11(使用者要求):session 改為選填——回報不一定是針對特定一堂課發生的事,
+    刻意不改成必選「配對」代替,使用者明確表示不需要指定對象,完全自由填寫。"""
 
     class Meta:
         model = IncidentReport
@@ -261,7 +264,9 @@ class StandaloneIncidentReportForm(forms.ModelForm):
         self.fields["session"].queryset = ClassSession.objects.filter(
             Q(pairing__tutor=user) | Q(pairing__tutee=user)
         ).select_related("pairing__tutor", "pairing__tutee").order_by("-class_date", "-start_time")
-        self.fields["session"].label = "課程 / Class"
+        self.fields["session"].label = "課程（選填） / Class (optional)"
+        self.fields["session"].required = False
+        self.fields["session"].empty_label = "不指定特定課程 / Not tied to a specific class"
 
 
 class MakeupReasonForm(forms.Form):

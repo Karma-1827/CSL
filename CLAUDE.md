@@ -271,7 +271,8 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 **異常回報**(事後、可分類的回報,`tutoring/services.py` 的 `submit_incident_report`/`resolve_incident_report`):
 
 - 分類:學生缺席、老師缺席、場地問題、學習進度問題、人身安全、其他(`IncidentReportCategory`)。
-- 不限上課時段,課程參與者(Tutor/Tutee)任何時候都能對自己參與的課程送出回報,可對同一堂課回報多次。
+- 不限上課時段,Tutor/Tutee 任何時候都能送出回報,可對同一堂課回報多次。
+- **2026-09-11 起 `session` 改為選填**(使用者要求:「不一定限於課程才能回報」):回報不一定針對特定一堂課發生的事(例如整體學習狀況、跟教學無關的疑慮等),硬性要求選一堂課會擋掉這些情境。使用者明確表示「完全自由填寫,不需要指定對象」,因此刻意**不**改成必選「配對」代替——沒有課程可選時,回報只有分類與內容,沒有任何身分/對象欄位。`tutoring/models.py::IncidentReport.session` 為 `null=True, blank=True`(`tutoring/migrations/0035`);`submit_incident_report(session_id=None, ...)` 只在有提供 `session_id` 時才做課程參與者驗證;`StandaloneIncidentReportForm` 的 `session` 欄位 `required=False` 且 `empty_label` 為「不指定特定課程 / Not tied to a specific class」。Admin 與 Tutor/Tutee 端的清單畫面在 `report.session` 為空時改顯示送出時間(`created_at`)與「未指定課程 / No class specified」,不再無條件存取 `report.session.class_date`。
 - 通報者送出後不能自行撤回,只有 Admin 能標記為已紀錄(內部狀態值仍是 `RESOLVED`)並留備註,同樣是「已知悉留存」而非「已解決」的語意。
 - 無附件上傳。
 - Admin dashboard「異常回報」頁籤有 PENDING 待處理 + HISTORY 已紀錄兩區塊,紀錄含紀錄人、紀錄時間、備註。

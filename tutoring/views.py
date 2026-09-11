@@ -830,7 +830,7 @@ def incident_report(request):
     session = form.cleaned_data["session"]
     try:
         report = submit_incident_report(
-            session_id=session.pk,
+            session_id=session.pk if session else None,
             reporter=request.user,
             category=form.cleaned_data["category"],
             content=form.cleaned_data["content"],
@@ -842,7 +842,11 @@ def incident_report(request):
             actor=request.user,
             event_type="INCIDENT_REPORT_SUBMITTED",
             description="送出異常回報 / Incident report submitted",
-            metadata={"report_id": report.pk, "session_id": session.pk, "category": report.category},
+            metadata={
+                "report_id": report.pk,
+                "session_id": session.pk if session else None,
+                "category": report.category,
+            },
         )
         messages.success(request, "異常回報已送出。 / Incident report submitted.")
     return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
