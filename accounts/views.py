@@ -465,25 +465,24 @@ def dashboard(request):
         for document in pending_qualifications:
             document.oral_exam_pass_hint = document.tutor.username in passed_student_ids
 
-        # 2026-09-11(使用者要求):側邊欄的系統現況小卡——目前啟用中學期名稱、目前在線
-        # 人數、累計登入次數。多個合作計畫目前若剛好是同一個學期名稱(如 115 學年度第 1
-        # 學期同時是 NTNU 與 MARYLAND 的啟用期間),只顯示一次,不重複列出。
-        today = timezone.localdate()
-        current_semester_names = list(
+        # 2026-09-11(使用者要求):Admin 沒有唯一所屬計畫,`user_program(admin)` 一律回傳
+        # None,導致最上方共用的「目前學期」小方塊(page-heading 的 .semester-chip,
+        # Tutor/Tutee 本來就有的同一個既有 UI 元件)查不到值,顯示「尚未設定」。這裡直接
+        # 覆寫成所有合作計畫裡最先開始的一筆啟用中學期,讓 Admin 也能用同一個既有元件看到
+        # 目前學期,不需要另外新增一個獨立的顯示區塊。
+        current_admin_semester = (
             Semester.objects.filter(is_active=True, starts_on__lte=today, ends_on__gte=today)
             .order_by("starts_on")
-            .values_list("name_zh", flat=True)
-            .distinct()
+            .first()
         )
-        current_semester_label = "、".join(current_semester_names) if current_semester_names else "無啟用中學期 / No active semester"
 
         context.update(
             {
+                "current_semester": current_admin_semester,
                 "roster_total": RosterEntry.objects.count(),
                 "registered_total": User.objects.exclude(role=Role.ADMIN).count(),
                 "tutor_total": User.objects.filter(role=Role.TUTOR).count(),
                 "tutee_total": User.objects.filter(role=Role.TUTEE).count(),
-                "current_semester_label": current_semester_label,
                 "online_user_count": count_online_users(),
                 "total_login_count": AuditLog.objects.filter(event_type="LOGIN_SUCCESS").count(),
                 "pending_qualifications": pending_qualifications,

@@ -1588,13 +1588,16 @@ class IdleAccountFilterTests(TestCase):
 
 
 class AdminSidebarStatusTests(TestCase):
-    """2026-09-11(使用者要求):側邊欄「系統現況」小卡——目前啟用中學期名稱、目前在線
-    人數(未過期且已登入的 session 數)、累計登入次數(LOGIN_SUCCESS AuditLog 筆數)。"""
+    """2026-09-11(使用者要求,同日依使用者回饋調整呈現位置):
+    - 「目前學期」重用 Tutor/Tutee 本來就有的 page-heading `.semester-chip` 元件,不是
+      獨立新元件——Admin 沒有唯一所屬計畫(`user_program()` 對 Admin 一律回傳 None),
+      `dashboard()` 因此在 ADMIN 分支另外覆寫 `current_semester`。
+    - 「目前在線」「累計登入次數」移到「系統總覽」面板的統計卡格線裡,不是側邊欄。"""
 
     def setUp(self):
         self.admin = User.objects.create_superuser(username="STATUS-ADMIN", password="Admin-password-2026")
 
-    def test_current_semester_label_shows_the_active_semester_name(self):
+    def test_current_semester_chip_shows_the_active_semester_name(self):
         today = timezone.localdate()
         Semester.objects.create(
             name_zh="115學年度第1學期", name_en="115-1 Semester",
@@ -1603,12 +1606,13 @@ class AdminSidebarStatusTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "115學年度第1學期")
+        self.assertNotContains(response, "尚未設定 / Not configured")
 
-    def test_current_semester_label_falls_back_when_nothing_is_active(self):
+    def test_current_semester_chip_falls_back_when_nothing_is_active(self):
         Semester.objects.all().delete()
         self.client.force_login(self.admin)
         response = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(response, "無啟用中學期 / No active semester")
+        self.assertContains(response, "尚未設定 / Not configured")
 
     def test_online_count_reflects_logged_in_sessions_only(self):
         tutor = User.objects.create_user(username="STATUS-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
@@ -1616,16 +1620,18 @@ class AdminSidebarStatusTests(TestCase):
         other_client.force_login(tutor)
         self.client.force_login(self.admin)
         response = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(response, "目前在線 / Online now：2")
+        self.assertContains(response, "目前在線 / Online now")
+        self.assertEqual(response.context["online_user_count"], 2)
 
     def test_total_login_count_matches_login_success_audit_log(self):
         self.client.force_login(self.admin)
         # force_login() doesn't fire the LOGIN_SUCCESS log_event() call (that only runs on
-        # a real POST through CSLLoginView), so drive an actual login through the view.
+        # a real POST through CSLLoginView), so write the audit log rows directly.
         AuditLog.objects.create(actor=self.admin, event_type="LOGIN_SUCCESS", description="test")
         AuditLog.objects.create(actor=self.admin, event_type="LOGIN_SUCCESS", description="test")
         response = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(response, "累計登入次數 / Total logins：2")
+        self.assertContains(response, "累計登入次數 / Total logins")
+        self.assertEqual(response.context["total_login_count"], 2)
 
 
 class AdminAuditLogMirrorTests(TestCase):
