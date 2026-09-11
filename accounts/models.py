@@ -334,3 +334,37 @@ class AuditLog(models.Model):
                 kwargs.get("event_type"), getattr(kwargs.get("target_user"), "pk", None),
             )
             return None
+
+
+class DepartmentOralExamPass(models.Model):
+    """系辦匯入的「碩士生修業概況一覽表」語音欄位通過名單(2026-09-11,使用者要求)。
+
+    這跟 `RosterEntry`(系統註冊用名冊)是完全不同的資料來源與用途:系辦內部的畢業條件
+    追蹤表混雜學術倫理、外語、論文倫理等各種欄位,且「語音」欄位的值並不一致(通過/完成/
+    有皆曾出現,語意不明確),因此匯入時只挑出值**恰好**是「通過」的列,其餘一律不視為
+    通過。這裡只記錄「通過」的學號,用來在 Admin 審核 Tutor 自行上傳的
+    `tutoring.models.QualificationDocument` 時提供交叉比對提示,**不會、也不應該自動
+    改變任何審核狀態**——最終核准/拒絕永遠是 Admin 手動決定,這裡只是輔助資訊。
+
+    比對邏輯採累加式(比照 `import_roster_ids()` 的既有慣例:只新增/更新,不刪除),重新
+    匯入不會清掉先前已存在的紀錄;如需訂正錯誤資料,由 Admin 在 Django Admin 手動刪除
+    該筆。
+    """
+
+    student_id = models.CharField("學號 / Student ID", max_length=24, unique=True)
+    imported_at = models.DateTimeField("匯入時間 / Imported at", auto_now=True)
+    imported_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="imported_oral_exam_passes", verbose_name="匯入者 / Imported by"
+    )
+
+    class Meta:
+        ordering = ["student_id"]
+        verbose_name = "系辦語音通過名單 / Department oral exam pass record"
+        verbose_name_plural = "系辦語音通過名單 / Department oral exam pass records"
+
+    def clean(self):
+        if self.student_id:
+            self.student_id = self.student_id.strip().upper()
+
+    def __str__(self):
+        return self.student_id

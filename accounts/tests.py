@@ -18,10 +18,12 @@ from django.utils import timezone
 from tutoring.models import QualificationDocument, QualificationStatus, TuteeProfile, TutorProfile
 
 from .forms import client_ip
+from .services import import_department_oral_exam_pass_list
 
 from .models import (
     AccountStatus,
     AuditLog,
+    DepartmentOralExamPass,
     EducationLevel,
     IdentityCategory,
     PartnerProgram,
@@ -1922,6 +1924,113 @@ class QuickRosterImportTests(TestCase):
         )
         self.assertRedirects(response, reverse("accounts:dashboard"))
         self.assertFalse(RosterEntry.objects.filter(student_id="S30700001").exists())
+
+
+class OralExamPassListImportTests(TestCase):
+    """2026-09-11(使用者要求):系辦「碩士生修業概況一覽表」比對,見
+    accounts/services.py::import_department_oral_exam_pass_list()。來源檔案本身結構混亂
+    (標題列在第一列、「語音」欄位值不一致、可能有多個工作表),這裡的測試資料刻意重現
+    這些真實踩過的問題,而不是用一份乾淨的假資料。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="ORALEXAM-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(username="ORALEXAMTUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+
+    def _xlsx_upload(self, filename, sheets):
+        """`sheets` is a list of (title, rows) pairs; the first sheet reuses the
+        workbook's default active sheet, additional ones are created."""
+        workbook = openpyxl.Workbook()
+        for index, (title, rows) in enumerate(sheets):
+            sheet = workbook.active if index == 0 else workbook.create_sheet()
+            sheet.title = title
+            for row in rows:
+                sheet.append(list(row))
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        return SimpleUploadedFile(
+            filename, buffer.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    def _realistic_upload(self):
+        """Reproduces the real file's shape: a title row, then the header, with the
+        "語音" column using inconsistent values (通過/完成/有) across rows, plus a
+        second sheet that has no "語音" column at all."""
+        return self._xlsx_upload(
+            "碩士生修業概況一覽表.xlsx",
+            [
+                (
+                    "工作表1",
+                    [
+                        ("碩士生修業概況一覽表",),
+                        ("學號", "姓名", "修課", "學術倫理", "外語", "發表", "語音", "教學實習"),
+                        ("ORALEXAMTUTOR", "測試老師", "完成", "完成", "L6", "不用", "通過", None),
+                        ("60484041I", "劉真辰", "完成", "不用", 800, "不用", "完成", None),
+                        ("60684012I", "張伃涵", "完成", "完成", 935, "完成", "有", None),
+                    ],
+                ),
+                (
+                    "海華碩",
+                    [
+                        ("學號", "姓名", "修課", "外語", "發表", "開題"),
+                        ("60080056I", "常育甄", "完成", "L4", "111/8/17", "111/1"),
+                    ],
+                ),
+            ],
+        )
+
+    def test_only_exact_pass_value_is_matched(self):
+        result = import_department_oral_exam_pass_list(self._realistic_upload(), admin=self.admin)
+        self.assertEqual(result.matched_count, 1)
+        self.assertEqual(result.sheets_used, ["工作表1"])
+        self.assertTrue(DepartmentOralExamPass.objects.filter(student_id="ORALEXAMTUTOR").exists())
+        self.assertFalse(DepartmentOralExamPass.objects.filter(student_id="60484041I").exists())
+        self.assertFalse(DepartmentOralExamPass.objects.filter(student_id="60684012I").exists())
+
+    def test_reimport_is_additive_and_does_not_remove_existing_records(self):
+        DepartmentOralExamPass.objects.create(student_id="PRE-EXISTING", imported_by=self.admin)
+        import_department_oral_exam_pass_list(self._realistic_upload(), admin=self.admin)
+        self.assertTrue(DepartmentOralExamPass.objects.filter(student_id="PRE-EXISTING").exists())
+        self.assertTrue(DepartmentOralExamPass.objects.filter(student_id="ORALEXAMTUTOR").exists())
+
+    def test_upload_view_creates_records_and_audit_log(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:import_oral_exam_pass_list"), {"file": self._realistic_upload()}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
+        self.assertTrue(DepartmentOralExamPass.objects.filter(student_id="ORALEXAMTUTOR").exists())
+        log = AuditLog.objects.get(event_type="ORAL_EXAM_PASS_LIST_IMPORTED")
+        self.assertEqual(log.metadata["matched_count"], 1)
+
+    def test_non_admin_cannot_import(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("accounts:import_oral_exam_pass_list"), {"file": self._realistic_upload()}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertFalse(DepartmentOralExamPass.objects.exists())
+
+    def test_dashboard_shows_hint_for_matched_tutor_without_changing_review_status(self):
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        self.client.force_login(self.tutor)
+        self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
+        document = QualificationDocument.objects.get(tutor=self.tutor)
+        DepartmentOralExamPass.objects.create(student_id=self.tutor.username, imported_by=self.admin)
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "系辦名冊：語音通過")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.PENDING)
+
+    def test_dashboard_does_not_show_hint_for_unmatched_tutor(self):
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        self.client.force_login(self.tutor)
+        self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "系辦名冊：語音通過")
 
 
 class ProfileEditTests(TestCase):

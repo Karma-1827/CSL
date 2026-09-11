@@ -7,7 +7,7 @@ import openpyxl
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from .models import EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry
+from .models import DepartmentOralExamPass, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry
 
 ROSTER_IMPORT_COLUMNS = [
     "student_id",
@@ -345,4 +345,77 @@ def import_roster_ids(uploaded_file, *, role, program=None):
         updated_ids=sorted(updated_ids),
         skipped_existing_ids=sorted(skipped_existing_ids),
         skipped_invalid=skipped_invalid,
+    )
+
+
+class OralExamPassListImportError(Exception):
+    """檔案本身無法解析，或找不到任何一個含「學號」與「語音」欄位的工作表。"""
+
+
+@dataclass
+class OralExamPassListImportResult:
+    matched_count: int = 0
+    created_count: int = 0
+    sheets_used: list = field(default_factory=list)
+
+
+def import_department_oral_exam_pass_list(uploaded_file, *, admin):
+    """匯入系辦的「碩士生修業概況一覽表」，只挑出「語音」欄位值恰好是「通過」的學號。
+
+    來源檔案是系辦內部畢業條件追蹤表，不是專門匯出的口語通過名單:標題列不固定在第一列
+    (常見於第一列是報表標題、第二列才是真正的欄位標題)，且可能有多個工作表，只有部分
+    工作表含「語音」欄位。因此逐一工作表掃描前幾列找出同時含「學號」與「語音」的標題列，
+    找不到的工作表(例如本專案實際踩過的「海華碩」分頁，只有外語沒有語音欄位)直接跳過，
+    不視為錯誤。
+
+    「語音」欄位的值在系辦這份表格裡並不一致(通過/完成/有皆曾出現)，這裡刻意只認**完全
+    等於**「通過」的儲存格，其餘一律不算通過——這是 2026-09-11 使用者實際核對過原始檔案
+    後明確要求的比對規則，不得放寬比對其他相近字串。
+    """
+    try:
+        workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+    except Exception as exc:
+        raise OralExamPassListImportError("檔案不是有效的 Excel 檔案。 / The file is not a valid Excel file.") from exc
+
+    matched_student_ids = set()
+    sheets_used = []
+    for sheet in workbook.worksheets:
+        rows_iter = sheet.iter_rows(values_only=True)
+        header = None
+        for _, row in zip(range(5), rows_iter):
+            candidate = [str(cell).strip() if cell is not None else "" for cell in row]
+            if "學號" in candidate and "語音" in candidate:
+                header = candidate
+                break
+        if header is None:
+            continue
+        sheets_used.append(sheet.title)
+        student_id_index = header.index("學號")
+        oral_index = header.index("語音")
+        for row in rows_iter:
+            student_id = row[student_id_index] if student_id_index < len(row) else None
+            oral_value = row[oral_index] if oral_index < len(row) else None
+            if not student_id or not isinstance(oral_value, str) or oral_value.strip() != "通過":
+                continue
+            candidate_id = str(student_id).strip().upper()
+            if _STUDENT_ID_PATTERN.match(candidate_id):
+                matched_student_ids.add(candidate_id)
+
+    if not sheets_used:
+        raise OralExamPassListImportError(
+            "找不到任何同時含「學號」與「語音」欄位的工作表。 / "
+            "No worksheet with both a \"學號\" and a \"語音\" column was found."
+        )
+
+    created_count = 0
+    with transaction.atomic():
+        for student_id in matched_student_ids:
+            _, created = DepartmentOralExamPass.objects.update_or_create(
+                student_id=student_id, defaults={"imported_by": admin}
+            )
+            if created:
+                created_count += 1
+
+    return OralExamPassListImportResult(
+        matched_count=len(matched_student_ids), created_count=created_count, sheets_used=sheets_used
     )

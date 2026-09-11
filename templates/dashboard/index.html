@@ -83,6 +83,15 @@
             <div><span class="eyebrow">REVIEW</span><h2>口語能力證明待審核 <small>Pending reviews</small></h2></div>
             <a class="button button-secondary" href="#roster" data-dashboard-target="roster">查看名冊 / View roster</a>
           </div>
+          <details class="candidate-filter-disclosure">
+            <summary class="candidate-filter-toggle">比對系辦語音通過名單 <small>Match department oral exam list</small></summary>
+            <form action="{% url 'accounts:import_oral_exam_pass_list' %}" method="post" enctype="multipart/form-data" class="stack-form">
+              {% csrf_token %}
+              {% include "components/form_field.html" with field=oral_exam_pass_import_form.file %}
+              <p class="section-intro">上傳系辦的「碩士生修業概況一覽表」，系統只讀取「語音」欄位恰好是「通過」的學號，在下方待審核列表加上提示；審核結果仍須由管理員逐筆手動核准或拒絕。<br>Upload the department's graduate progress tracking sheet — only rows whose "語音" column reads exactly "通過" are matched, shown as a hint below; the actual approval decision always stays manual.</p>
+              <button class="button button-secondary button-small" type="submit">上傳比對 / Upload &amp; match</button>
+            </form>
+          </details>
           {% if pending_qualifications %}
             <div class="table-wrap">
               <table>
@@ -90,7 +99,7 @@
                 <tbody>
                   {% for document in pending_qualifications %}
                     <tr>
-                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
+                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint %}<br><span class="status-badge status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>

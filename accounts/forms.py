@@ -912,3 +912,21 @@ class RosterImportForm(forms.Form):
         if not (name.endswith(".csv") or name.endswith(".xlsx")):
             raise ValidationError("僅支援 .csv 或 .xlsx 檔案。 / Only .csv or .xlsx files are supported.")
         return upload
+
+
+class OralExamPassListImportForm(forms.Form):
+    file = forms.FileField(label="檔案 / File", widget=forms.ClearableFileInput(attrs={"accept": ".xlsx"}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+        self.fields["file"].help_text = (
+            "系辦的「碩士生修業概況一覽表」Excel（.xlsx）。\n"
+            "The department's Excel export (.xlsx) of the graduate progress tracking sheet."
+        )
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        if not upload.name.lower().endswith(".xlsx"):
+            raise ValidationError("僅支援 .xlsx 檔案。 / Only .xlsx files are supported.")
+        return upload

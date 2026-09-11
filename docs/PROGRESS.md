@@ -65,6 +65,13 @@
 > - **Nginx 錯誤回應標頭進一步補強**:`location /`、`location /system-admin/` 這兩個 proxy_pass 給 Django 的 location,原本 Batch C 是刻意跳過(視為「已知、可接受的殘留缺口」),因為 Django 已經在正常回應上設定這些標頭,直接加 `add_header` 會疊出重複標頭。codex 指出這樣會讓 Nginx 自己合成的 429(`limit_req_status`/`limit_conn_status`)、5xx(上游逾時/錯誤)、`/system-admin/` 的 `deny all` 403 這些**完全不會經過 Django** 的回應繼續缺標頭。修法:改用 `proxy_hide_header` 先移除上游(Django)已送出的同名標頭,再用 `add_header ... always;` 由 Nginx 統一送出同一份值——這樣不論回應是 Django 產生還是 Nginx 自己合成的,最終都只有一份、值一致的標頭。CSP/Permissions-Policy 刻意不搬到 Nginx(這兩個字串完全由 Django 動態決定,搬過去等於多開一個要手動同步的來源,且錯誤頁本身沒有需要 CSP 限制的內嵌腳本)。**已知邊界**:真正在路由到任一 location 之前就發生的畸形請求層級 400,Nginx 尚未進入任何 location context,這裡的 `add_header` 不會套用,這是 Nginx 架構本身的限制。
 > - **口語能力證明重新送審的行為缺陷**:codex 指出 Batch A 當時修的「缺 `file` 欄位不再 500」還不夠完整——修正後的行為是「沒有新檔案就靜默沿用舊檔案,但仍然照常把狀態重置回 PENDING、清空審核備註與審核人員」,等於讓 Tutor 送一個空白表單就能撤銷 Admin 已經做出的審核結果(核准或拒絕),且完全不需要提供任何新證據。已改為:`accounts/views.py::upload_qualification()` 在建構表單之前先檢查 `"file" not in request.FILES`,沒有真的上傳新檔案就直接拒絕(顯示「此欄位為必填欄位」),不建立、不修改任何欄位——原檔案、審核狀態、審核備註、審核人員一律維持原樣。改寫回歸測試 `test_missing_file_field_on_resubmission_is_rejected_without_crashing`(確認拒絕且 `tutor_note` 未被更新),新增 `test_missing_file_field_on_resubmission_does_not_reset_a_reviewed_document`(確認已核准/已拒絕的文件不會被免上傳新檔案就重置)。374 項測試全數通過,`ruff` 乾淨。
 > - 已同步更新 `docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md` 反映這兩項修正(下一次讀取該文件時會看到最新狀態)。
+>
+> **2026-09-11 新增系辦語音通過名單交叉比對(使用者要求,`accounts.models.DepartmentOralExamPass`)**:使用者提供一份系辦「碩士生修業概況一覽表」Excel,詢問能否用來輔助口語能力審核。實際讀檔後發現這份表格結構混亂:標題列在第一列、可能有多個工作表(部分工作表沒有「語音」欄位,例如實測到的「海華碩」分頁)、且「語音」欄位的值不一致(通過/完成/有皆曾出現於同一份真實檔案,語意不明確)。與使用者確認後定案:**只認值恰好等於「通過」的儲存格**,比對結果**只做為 Admin 待審核列表上的輔助提示**,不自動核准/拒絕/修改任何 `QualificationDocument`——最終審核永遠是人工決定。
+> - 新模型 `accounts.models.DepartmentOralExamPass`(學號 + 匯入時間 + 匯入者),累加式匯入(比照 `import_roster_ids()` 既有慣例,只新增/更新、不刪除),已在 Django Admin 註冊供人工訂正錯誤資料。
+> - `accounts/services.py::import_department_oral_exam_pass_list()` 逐一工作表掃描前 5 列找出同時含「學號」與「語音」的標題列,找不到就跳過該工作表(不視為錯誤,只要至少一個工作表比對成功即可)。
+> - Admin dashboard「口語能力審核」頁籤新增收合式上傳區塊(`accounts:import_oral_exam_pass_list`);待審核表格比對到的列會顯示綠色「系辦名冊：語音通過」徽章。
+> - 用使用者提供的真實檔案(1169 列、兩個工作表)在本機實測:正確比對到 309 筆「語音」恰好為「通過」的學號,正確略過沒有語音欄位的「海華碩」分頁;測試後已清除本機資料庫裡由該次實測產生的紀錄,不留真實學生個資在本機開發環境。
+> - 新增 6 項回歸測試(`accounts/tests.py::OralExamPassListImportTests`),重現真實檔案的混亂結構(標題列、不一致的語音值、多工作表)作為測試資料,而非用一份乾淨假資料。380 項測試全數通過,`ruff` 乾淨,新 migration `accounts/0019_departmentoralexampass`。
 
 ## 已完成
 

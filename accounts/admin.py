@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .forms import ThrottledAdminAuthenticationForm
-from .models import AuditLog, PartnerProgram, Role, RosterEntry, SecurityQuestionAnswer, User
+from .models import AuditLog, DepartmentOralExamPass, PartnerProgram, Role, RosterEntry, SecurityQuestionAnswer, User
 
 IDLE_ACCOUNT_THRESHOLD_DAYS = 180
 
@@ -153,6 +153,16 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(DepartmentOralExamPass)
+class DepartmentOralExamPassAdmin(admin.ModelAdmin):
+    """2026-09-11: 系辦語音通過名單比對紀錄,僅供內部訂正錯誤資料用(見 model docstring)。
+    這裡刪除一筆只會拿掉口語能力審核頁面的提示標記,不影響任何 QualificationDocument。"""
+
+    list_display = ("student_id", "imported_by", "imported_at")
+    search_fields = ("student_id",)
+    readonly_fields = ("imported_at",)
 
 
 @admin.register(SecurityQuestionAnswer)

@@ -82,6 +82,7 @@ from .forms import (
     AdminProfileEditForm,
     BilingualAuthenticationForm,
     BilingualSetPasswordForm,
+    OralExamPassListImportForm,
     QualificationUploadForm,
     client_ip,
     RecoveryLookupForm,
@@ -95,6 +96,7 @@ from .forms import (
 )
 from .models import (
     AuditLog,
+    DepartmentOralExamPass,
     PartnerProgram,
     RegistrationDraft,
     Role,
@@ -103,7 +105,9 @@ from .models import (
     User,
 )
 from .services import (
+    OralExamPassListImportError,
     RosterImportFileError,
+    import_department_oral_exam_pass_list,
     import_roster_entries,
     import_roster_ids,
     roster_template_csv_bytes,
@@ -447,13 +451,27 @@ def dashboard(request):
             roster_rows = roster_rows.filter(claimed_at__isnull=True)
         roster_page = Paginator(roster_rows, 30).get_page(request.GET.get("roster_page"))
 
+        # 2026-09-11(使用者要求):在待審核列表上附加系辦語音通過名單的比對提示。純粹是
+        # 顯示用的提示,不影響審核結果或任何欄位,Admin 仍要自行按核准/拒絕。
+        pending_qualifications = list(
+            QualificationDocument.objects.filter(status=QualificationStatus.PENDING).select_related("tutor")[:8]
+        )
+        passed_student_ids = set(
+            DepartmentOralExamPass.objects.filter(
+                student_id__in=[document.tutor.username for document in pending_qualifications]
+            ).values_list("student_id", flat=True)
+        )
+        for document in pending_qualifications:
+            document.oral_exam_pass_hint = document.tutor.username in passed_student_ids
+
         context.update(
             {
                 "roster_total": RosterEntry.objects.count(),
                 "registered_total": User.objects.exclude(role=Role.ADMIN).count(),
                 "tutor_total": User.objects.filter(role=Role.TUTOR).count(),
                 "tutee_total": User.objects.filter(role=Role.TUTEE).count(),
-                "pending_qualifications": QualificationDocument.objects.filter(status=QualificationStatus.PENDING).select_related("tutor")[:8],
+                "pending_qualifications": pending_qualifications,
+                "oral_exam_pass_import_form": OralExamPassListImportForm(),
                 "qualification_review_history": QualificationDocument.objects.exclude(
                     status=QualificationStatus.PENDING
                 ).select_related("tutor", "reviewed_by").order_by("-reviewed_at")[:30],
@@ -1312,6 +1330,47 @@ def roster_import(request):
                 f"Skipped {len(result.skipped_existing_ids)} student ID(s) already on the roster (kept as-is)."
             )
         messages.success(request, success_text)
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def import_oral_exam_pass_list(request):
+    """2026-09-11(使用者要求):比對系辦「碩士生修業概況一覽表」的語音欄位,只作為
+    口語能力審核頁面的輔助提示(見 dashboard() 的 pending_qualifications 標記),不會
+    自動核准/拒絕任何 QualificationDocument——那一律仍由 Admin 手動決定。"""
+    redirect_target = reverse("accounts:dashboard") + "#qualifications"
+    form = OralExamPassListImportForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(redirect_target)
+
+    uploaded_file = form.cleaned_data["file"]
+    try:
+        result = import_department_oral_exam_pass_list(uploaded_file, admin=request.user)
+    except OralExamPassListImportError as exc:
+        messages.error(request, str(exc))
+        return redirect(redirect_target)
+
+    log_event(
+        request,
+        "ORAL_EXAM_PASS_LIST_IMPORTED",
+        f"匯入系辦語音通過名單，比對到 {result.matched_count} 位 / "
+        f"Imported department oral exam pass list, matched {result.matched_count}",
+        metadata={
+            "matched_count": result.matched_count,
+            "created_count": result.created_count,
+            "sheets_used": result.sheets_used,
+            "filename": uploaded_file.name,
+        },
+    )
+    messages.success(
+        request,
+        f"已比對 {result.matched_count} 位語音通過的學號（新增 {result.created_count} 筆）。 / "
+        f"Matched {result.matched_count} passed student ID(s) ({result.created_count} newly added).",
+    )
     return redirect(redirect_target)
 
 
