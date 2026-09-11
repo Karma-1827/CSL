@@ -293,6 +293,8 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-09-11(五十九)**:操作者 Claude Code(依使用者指示執行)。上一版 `77898cf` → 新版 `076b8a2`(新增系辦語音通過名單交叉比對,詳見 `docs/PROGRESS.md`/`CLAUDE.md`)。新增 `accounts.models.DepartmentOralExamPass`,Admin 可上傳系辦「碩士生修業概況一覽表」Excel,比對「語音」欄位恰好為「通過」的學號,在口語能力審核待審核列表加提示徽章,**純輔助資訊,不自動核准/拒絕/修改任何 `QualificationDocument`**。**含 1 個 migration**:`accounts.0019_departmentoralexampass`(單純新增資料表,無資料遷移,`migrate --plan` 確認)。無相依套件變更、無靜態資源變更(只有 template 變更,不需 `collectstatic`)。380 項測試全數通過。部署前備份:`/var/backups/mpts/20260911-125116`。`git checkout --detach` 再次卡在根目錄下的 `CLAUDE.md`(同前幾次記錄的既有落差),已用 `sudo -n -u mpts git checkout HEAD -- CLAUDE.md` 補救。`migrate accounts` 套用 migration 後 `makemigrations --check --dry-run` 確認無殘留差異,`systemctl restart mpts-gunicorn.service`。驗收:`curl -I` 首頁回應 200;用正式站的 superuser 帳號對 `/dashboard/` 發請求確認回應 200 且頁面含新的上傳表單;`journalctl` 僅有既有的 gunicorn `Control server error` 無關訊息。**本機開發環境曾用使用者提供的真實系辦 Excel 檔案(1169 列)實測比對邏輯,測試後已清除本機資料庫裡由該次實測產生的紀錄,原始檔案本身未進版控、未上傳到正式站**。臨時 sudo 授權依使用者指示維持開啟。
+
 - **2026-09-11(五十八)**:操作者 Claude Code(依使用者指示執行)。上一版 `0d327e2` → 新版 `32a4fda`(codex review 對弱掃整改的兩項回饋修正,詳見 `docs/PROGRESS.md`):
   1. **口語能力證明重新送審行為缺陷**:`accounts/views.py::upload_qualification()` 原本的修法(缺 `file` 欄位時靜默沿用舊檔案但仍重置審核狀態)會讓 Tutor 免上傳新證據就能撤銷 Admin 已完成的審核結果,已改為沒有真的上傳新檔案就直接拒絕整個請求,不建立/不修改任何欄位。
   2. **Nginx 端 429/5xx/403 標頭**(同批次一併处理,`deploy/nginx/mpts.conf.example`):`location /`、`location /system-admin/` 這兩個 proxy_pass 給 Django 的 location,改用 `proxy_hide_header` 先移除 Django 已送出的 6 個安全標頭,再用 `add_header ... always;` 由 Nginx 統一送出,讓 Nginx 自己合成、完全不經過 Django 的 429(`limit_req_status`)、5xx、`/system-admin/` 的 403 也有這些標頭。
