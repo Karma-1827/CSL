@@ -991,7 +991,13 @@ class MessageStorageTests(TestCase):
         self.client.force_login(tutor)
         response = self.client.post(reverse("accounts:upload_qualification"), {}, follow=True)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "此欄位為必填欄位")
+        # 2026-09-11(codex review): this specific message is a raw messages.error() call,
+        # not routed through Django form field validation's error_messages["required"]
+        # (accounts/forms.py::add_form_classes(), which stays Chinese-only by existing
+        # sitewide convention, see CLAUDE.md 第 7 節) — it must be explicitly bilingual on
+        # its own, and the deficiency report cites it as evidence of that, so assert the
+        # full string, not just a substring that would also match the monolingual version.
+        self.assertContains(response, "此欄位為必填欄位。 / This field is required.")
 
 
 class CookieSameSiteTests(TestCase):
@@ -1073,9 +1079,16 @@ class QualificationTests(TestCase):
         (例如殘缺的 multipart 送出 file[]=... 而非 file=...),表單必為 invalid(file
         為必填),必須回到原頁並顯示錯誤,不能是 500,也不能建立任何紀錄。"""
         self.client.force_login(self.tutor)
-        response = self.client.post(reverse("accounts:upload_qualification"), {"tutor_note": "no file"})
+        response = self.client.post(
+            reverse("accounts:upload_qualification"), {"tutor_note": "no file"}, follow=True
+        )
         self.assertRedirects(response, reverse("accounts:dashboard") + "#qualification")
         self.assertFalse(QualificationDocument.objects.filter(tutor=self.tutor).exists())
+        # 2026-09-11(codex review): confirm the flash message shown for this rejection is
+        # actually bilingual, not just the Chinese-only string form validation uses
+        # elsewhere by convention — this exact message is cited as evidence in
+        # docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md.
+        self.assertContains(response, "此欄位為必填欄位。 / This field is required.")
 
     def test_missing_file_field_on_resubmission_is_rejected_without_crashing(self):
         """真實回歸測試(非假設性):修正前,已有既有文件時重新送出完全沒有 "file" 欄位

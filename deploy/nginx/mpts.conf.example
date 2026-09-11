@@ -60,6 +60,29 @@ server {
     listen 443 ssl http2;
     server_name mpts.tcsl.ntnu.edu.tw;
 
+    # 2026-09-11 (codex review, correcting an inaccurate claim made in an earlier version
+    # of this file): these 6 headers live at the *server* level — not only inside
+    # individual `location` blocks — specifically so they still apply to a response
+    # generated before Nginx has matched any location at all, e.g. a malformed-request
+    # 400 (bad request line, invalid header syntax) rejected during request parsing.
+    # TLS SNI has already selected this server block by that point, so a server-level
+    # `add_header ... always;` does apply even there; a location-scoped one would not,
+    # which is exactly the gap a live re-test against the malformed-400 case on
+    # production found (see docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md #3–5,
+    # #12–13, #19). `location /` and `location /system-admin/` (proxied to Django) rely on
+    # this inherited copy — they must NOT declare their own `add_header` for these names,
+    # because a location that declares any `add_header` stops inheriting the parent's
+    # entirely; they instead `proxy_hide_header` Django's own copy so only one, Nginx-
+    # sourced value reaches the client either way. `location /static/` and the `413.html`
+    # error page already declare their own `add_header` (for `Cache-Control` etc.), which
+    # breaks that same inheritance, so they keep explicit copies of all 6 below.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+
     client_header_timeout 15s;
     client_body_timeout 30s;
     keepalive_timeout 30s;
@@ -119,23 +142,10 @@ server {
     # (not required, just to pick up new files — nginx reads the directory live) after
     # every deploy that changes static/.
     #
-    # 2026-09-10 弱點掃描 Batch C (P0-3): these 4 responses (this location, the 413 page
-    # above, and the plain-HTTP 301 above) are served directly by Nginx and never reach
-    # Django, so they never got the security headers Django's own middleware adds to
-    # every dynamic response — this is what the scan's COOP/X-Content-Type-Options/HSTS/
-    # Referrer-Policy findings were actually pointing at (see
-    # docs/VULNERABILITY_SCAN_REPORT_2026-09-08_ACTION_PLAN.md P0-3). Values are copied
-    # verbatim from what Django already sends (config/settings.py,
-    # accounts/middleware.py) so a client sees one consistent policy site-wide.
-    # 2026-09-11: added Cross-Origin-Embedder-Policy/Cross-Origin-Resource-Policy too,
-    # closing the residual gap noted in
-    # docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md #3/#5.
-    # `location /` and `location /system-admin/` handle this differently (see below):
-    # they proxy to Django, which already sets these on every response it generates, so
-    # a plain `add_header` there would just duplicate them — those two locations instead
-    # pair `proxy_hide_header` with `add_header` so nginx's own synthetic error responses
-    # (e.g. the 429 from limit_req_status) get exactly one, Nginx-sourced copy too
-    # (2026-09-11, closing what was originally left as an accepted residual gap here).
+    # This location declares its own Cache-Control, so — unlike `location /` and
+    # `location /system-admin/` below — it does NOT inherit the 6 headers declared at the
+    # server level above (see the comment there for why); they're repeated here
+    # explicitly instead, same values as Django sends on its own dynamic responses.
     location /static/ {
         alias TODO/opt/mpts/staticfiles/;
         expires 30d;
@@ -169,22 +179,15 @@ server {
     # 的範圍**，只是從已觀察到的多個 /24 反推「乾脆整段開放」比較實際；正式
     # 書面核准的完整校內網段清單一旦取得，應評估是否收斂回精確範圍。不可用
     # 0.0.0.0/0 或留空等同開放。
-    # 2026-09-11 弱點掃描 Batch C 補強(codex review):`location /` 與
-    # `location /system-admin/` 這兩個 proxy_pass 給 Django 的 location 底下,Nginx 自己
-    # 合成的 429（`limit_req_status`/`limit_conn_status`）、5xx(上游逾時或錯誤)、以及
-    # `/system-admin/` 的 `deny all` 403,完全不會經過 Django,先前一直缺這 6 個安全標頭,
-    # 列為 Batch C 當時「已知、可接受的殘留缺口」——這次改成真正補上,不再留白。**已知
-    # 邊界**:真正在路由到任一 location 之前就發生的畸形請求層級 400(例如整個 request
-    # line 無法解析),此時 Nginx 尚未進入任何 location context,這裡的 `add_header` 不會
-    # 套用,這是 Nginx 架構本身的限制,不是這裡能解的;實務上 AppScan 這類針對「已知有效
-    # URL」的掃描,絕大多數請求本來就會先成功路由到某個 location,不受此邊界影響。做法是
-    # `proxy_hide_header` 先把 Django
-    # 已經送出的同名標頭從上游回應中拿掉,再用 `add_header ... always;` 統一由 Nginx
-    # 送出同一份值:這樣不論回應是 Django 產生的（200/302/4xx 表單錯誤等）還是 Nginx
-    # 自己合成的（429/5xx，Django 根本沒看到這個請求），最終都只有 Nginx 這一份標頭,
-    # 不會重複也不會兩邊值不一致。CSP 與 Permissions-Policy 刻意不搬到這裡：那兩個字串
-    # 完全是 Django 動態決定（依路徑/角色而變化的可能性），搬到 Nginx 等於多開一個要手動
-    # 保持同步的來源，錯誤頁本身也沒有需要 CSP 限制的內嵌腳本/表單，效益遠低於風險。
+    # `location /` and `location /system-admin/` below proxy to Django, which already
+    # sets these 6 headers on every response it generates. Neither location declares its
+    # own `add_header`, so both inherit the server-level copies declared above verbatim
+    # (including for their own Nginx-generated responses that never reach Django at all —
+    # the 429 from `limit_req_status`/`limit_conn_status`, 5xx from an unreachable
+    # upstream, and `/system-admin/`'s own `deny all` 403). `proxy_hide_header` strips
+    # Django's copy first so the client only ever sees the one, Nginx-sourced value —
+    # `add_header` never removes an existing same-named header from a proxied response,
+    # so without this step a normal Django-served page would show each header twice.
     location /system-admin/ {
         allow 140.122.0.0/16;        # 師大全網段（涵蓋 VPN 網段 57，非書面確認範圍，見上）
         deny all;
@@ -195,12 +198,6 @@ server {
         proxy_hide_header Cross-Origin-Opener-Policy;
         proxy_hide_header Cross-Origin-Embedder-Policy;
         proxy_hide_header Cross-Origin-Resource-Policy;
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Referrer-Policy "same-origin" always;
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
-        add_header Cross-Origin-Resource-Policy "same-origin" always;
 
         proxy_pass http://mpts_app;
         include proxy_params_mpts.conf;
@@ -213,12 +210,6 @@ server {
         proxy_hide_header Cross-Origin-Opener-Policy;
         proxy_hide_header Cross-Origin-Embedder-Policy;
         proxy_hide_header Cross-Origin-Resource-Policy;
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Referrer-Policy "same-origin" always;
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
-        add_header Cross-Origin-Resource-Policy "same-origin" always;
 
         proxy_pass http://mpts_app;
         include proxy_params_mpts.conf;

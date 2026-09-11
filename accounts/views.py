@@ -1223,7 +1223,11 @@ def upload_qualification(request):
     # 撤銷 Admin 的審核結果。改成直接檢查 request.FILES,沒有真的上傳新檔案就在表單驗證
     # 之前拒絕,不建立/不修改任何欄位(原檔案、審核狀態、留言皆維持原樣)。
     if "file" not in request.FILES:
-        messages.error(request, "此欄位為必填欄位")
+        # 2026-09-11(codex review):這是手動組出的 messages.error(),不會經過
+        # accounts/forms.py::add_form_classes() 幫表單欄位統一設定的
+        # error_messages["required"](該處刻意維持中文單語,是全站既有慣例,見
+        # CLAUDE.md 第 7 節),所以這裡要自己明確寫成雙語,不能只複製那組慣例的中文字串。
+        messages.error(request, "此欄位為必填欄位。 / This field is required.")
         return redirect(reverse("accounts:dashboard") + "#qualification")
     form = QualificationUploadForm(request.POST, request.FILES, instance=current)
     if form.is_valid():

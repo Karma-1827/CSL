@@ -75,7 +75,13 @@
 > - 後續使用者微調(同日):口語能力審核面板移除「查看名冊」按鈕;語音通過提示改用 `.result-text status-approved`(純色文字,無背景色塊),沿用既有的「結果 / Result」欄用色慣例。
 >
 > **2026-09-11 Admin 側邊欄新增「系統現況」小卡(使用者要求)**:顯示目前啟用中學期名稱、目前在線人數、累計登入次數,見 `CLAUDE.md` 第 2 節。「目前在線」刻意定義為「未過期且已登入的 session 數」(逐一解碼 session payload,檢查 `_auth_user_id`),不是即時頁面瀏覽或 WebSocket 在線狀態——這兩者本專案刻意不做(見系統邊界),詢問使用者具體要哪種「人數」後才動工,避免蓋錯功能。「累計登入次數」直接讀 `AuditLog` 的 `LOGIN_SUCCESS` 筆數,每次登入都算,不去重。新增 `accounts/services.py::count_online_users()` 與 4 項回歸測試(`accounts/tests.py::AdminSidebarStatusTests`)。384 項測試全數通過,`ruff` 乾淨,無 migration。
-> - **同日使用者回饋調整呈現位置**:「系統現況」側邊欄小卡拆掉,改成兩個較符合視覺習慣的位置——目前在線/累計登入次數移到「系統總覽」面板的統計卡格線裡(與名冊人數等既有卡片同一排);目前學期則發現 Tutor/Tutee 本來就有一個共用的頁首「目前學期」小方塊(`.semester-chip`),只是 Admin 因為 `user_program()` 對 Admin 一律回傳 `None` 而顯示「尚未設定」——直接讓 `dashboard()` 的 ADMIN 分支改覆寫這個既有的 `current_semester` context 值,不用另外做新元件,使用者回饋「這樣顯示比較直覺」。更新 4 項回歸測試對應新的呈現位置。
+> - **同日使用者回饋調整呈現位置**:「系統現況」側邊欄小卡拆掉,改成兩個較符合視覺習慣的位置——目前在線/累計登入次數移到「系統總覽」面板的統計卡格線裡(與名冊人數等既有卡片同一排);目前學期則發現 Tutor/Tutee 本來就有一個共用的頁首「目前學期」小方塊(`.semester-chip`),只是 Admin 因為 `user_program()` 對 Admin 一律回傳 `None` 而顯示「尚未設定」——直接讓 `dashboard()` 的 ADMIN 分支改覆寫這個既有的 `current_semester` context 值,不用另外做新元件,使用者回饋「這樣顯示比較直覺」。更新 4 項回歸測試對應新的呈現位置。之後再依使用者回饋把這兩個統計改成獨立的橫向卡片(`.stat-card-wide`),跟上排的主要統計卡視覺區隔開來。
+>
+> **2026-09-11 codex review 第二輪回饋,三項修正**:
+> - **Nginx 400 標頭修正(更正上一輪的不精確結論)**:上一輪把 6 個安全標頭的 `add_header` 加在 `location /`/`location /system-admin/` 區塊裡,並宣稱「路由前發生的畸形請求 400 是 Nginx 架構限制、無法處理」。codex 在正式站實際重現一筆畸形 400(`GET / HTTP/1.1` 不帶 `Host` 標頭)證實這個結論不準確,並指出可以把標頭提升到 443 `server` 區塊層級,再由各 `location` 用 `proxy_hide_header` 移除 Django 的重複標頭。已改用此法:`deploy/nginx/mpts.conf.example` 把 6 個 `add_header` 移到 `server` 區塊,`location /`/`location /system-admin/` 完全不再宣告自己的 `add_header`(改為繼承 server 層級設定,只保留 `proxy_hide_header`);`location /static/`/`413.html` 因為已宣告 `Cache-Control` 會中斷繼承鏈,維持個別重複宣告全部 6 項不變。已在正式站重現使用者回報的原始畸形 400(`content-length: 150` 與回報完全吻合),確認修正前後差異:修正前只有 `Server`/`Content-Type`/`Content-Length`,修正後 6 個標頭全部出現;另確認一般 200 回應每個標頭仍只出現 1 次,無重複。
+> - **缺檔錯誤訊息補齊雙語**:`accounts/views.py::upload_qualification()` 的 `messages.error(request, "此欄位為必填欄位")` 是手動組出的訊息,不會經過 `add_form_classes()` 統一設定的 `error_messages["required"]`(該處刻意維持中文單語,是全站既有慣例,不受此次影響),所以需要自己明確寫成雙語,改成 `"此欄位為必填欄位。 / This field is required."`。更新／新增 2 項測試(`MessageStorageTests::test_flash_message_still_renders_on_the_next_request`、`QualificationTests::test_missing_file_field_on_first_upload_is_rejected_not_500`)實際斷言完整雙語字串,不是只斷言子字串。
+> - **缺失處理報告測試數量更新**:`docs/VULNERABILITY_SCAN_DEFICIENCY_REPORT_2026-09-08.md` 完成定義自我檢查那條仍寫「373 項」,已更新為實際的「384/384」,並把 `check --deploy`/`pip check`/`pip-audit` 的敘述改成已確認全過(不再寫「待正式 VM 環境變數齊全後執行」)。
+> - 384 項測試全數通過,`ruff` 乾淨,無 migration。
 
 ## 已完成
 
