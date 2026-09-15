@@ -10,6 +10,6 @@
   </div>
   <div class="admin-record-section">
     <h3>確認結果 / Confirmation</h3>
-    {% if confirmation %}<p class="review-result">{{ confirmation.get_status_display }}{% if confirmation.note %}<br>{{ confirmation.note }}{% endif %}</p>{% else %}<div class="empty-state compact">尚未確認 / Not confirmed</div>{% endif %}
+    {% if confirmation %}<p class="review-result review-result-{{ confirmation.status|lower }}">{{ confirmation.get_status_display }}{% if confirmation.note %}<br>{{ confirmation.note }}{% endif %}</p>{% else %}<div class="empty-state compact">尚未確認 / Not confirmed</div>{% endif %}
   </div>
 </section>

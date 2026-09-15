@@ -1439,6 +1439,29 @@ class ClassWorkflowTests(TestCase):
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
 
+    def test_admin_class_detail_shows_confirmation_result_with_status_color_class(self):
+        """2026-09-15(使用者要求):Admin 的課堂審核介面(admin_record_card.html)原本的
+        「確認結果」不論狀態一律套用同一個中性樣式,使用者要求跟 Tutor/Tutee 端(2026-09-15
+        已改成綠/紅兩色)同步——這裡補上跟 class_detail.html 相同的
+        `review-result-{{ status|lower }}` class,共用同一組 CSS 規則。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=normal_now
+        )
+        confirm_counterpart(
+            session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.REVISION, note="請補充內容"
+        )
+        admin = User.objects.create_superuser(username="CONFIRM-COLOR-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "review-result-revision")
+
     def test_class_record_materials_used_and_individual_progress_saved_and_shown_to_counterpart_and_admin(self):
         class_date = timezone.localdate()
         session = schedule_classes(
