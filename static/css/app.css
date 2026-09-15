@@ -3884,16 +3884,14 @@ td small {
   background: var(--mist);
   font-size: 0.68rem;
 }
-/* 封測老師端回饋 P2-05 (2026-09): 統一狀態色——綠=完成、黃=等待、紅=問題,
-   跟 .class-status 用的同一組顏色,不是另外發明一套。 */
+/* 封測老師端回饋 P2-05 (2026-09): 統一狀態色——綠=完成、紅=尚待確認。
+   2026-09-15(使用者要求):REVISION 原本另外用黃色,使用者要求只留綠/紅兩色,
+   確認無誤才算完成,其餘(請對方修改/回報問題)一律視為需留意的紅色狀態。 */
 .review-result-confirmed {
   color: #17683d;
   background: #dff4e8;
 }
-.review-result-revision {
-  color: #765b00;
-  background: #fff3c5;
-}
+.review-result-revision,
 .review-result-issue {
   color: #963b3b;
   background: #f8e2e2;
