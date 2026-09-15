@@ -3032,6 +3032,11 @@ td small {
   display: grid;
   gap: 3px;
   justify-items: start;
+  min-width: 0;
+}
+.qualification-file-links a:not(.button) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .qualification-review-form {
   display: grid;

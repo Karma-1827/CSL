@@ -92,6 +92,8 @@
 > **2026-09-11 Admin「解除配對審核」結果欄位拿掉背景色塊(使用者要求)**:「處理紀錄」表格的「結果 / Result」欄位原本用 `.status-badge` 呈現(通過/未通過各自的背景色塊),使用者要求「字的格式也把背景拿掉,只留顏色」,比照口語能力審核紀錄(見第 2 節)已有的既有慣例,改用 `.result-text` 套用相同的 `.status-approved`/`.status-rejected` 顏色但拿掉背景。純 template class 置換,無 migration、無靜態資源異動,386 項測試全數通過。
 >
 > **2026-09-12 課堂通報補上「管理員備註對通報者可見」(使用者提問後確認要做)**:使用者問「課堂通報或異常回報,管理員有留言都要在 tutor/tutee 顯示,目前有這個功能嗎?」,查code後發現異常回報(IncidentReport)已經有這功能(`own_incident_reports` 不分狀態都會顯示,已紀錄的會顯示 `resolution_note`),但課堂通報(ClassAlert)沒有——`tutoring/views.py::class_detail()` 的 `own_alert` 只查 `status=ACTIVE`,一旦 Admin 標記已紀錄,該筆通報整個從課程詳情頁消失,備註完全看不到。確認使用者要做之後,新增 `own_resolved_alerts`(查 `status=RESOLVED`,依 `resolved_at` 倒序,不含通報者自行取消的 `CANCELLED`),`templates/tutoring/class_detail.html` 在原本通報表單下方用 `.completion-box`(沿用既有簽到完成的綠色樣式,無新增 CSS)逐筆顯示已紀錄的通報與管理員備註。新增 1 項回歸測試 `test_reporter_sees_admin_note_after_class_alert_is_resolved`,387 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 migration。已同步更新 `CLAUDE.md` 第 4.7 節。
+>
+> **2026-09-15 Admin「口語能力審核」檔案名稱過長時強制換行(使用者要求)**:使用者反映檔案名稱太長時,會把待審核/審核紀錄表格的其他欄位一起撐開變形——原因是表格 `table-layout: auto`,`<a>` 檔名連結預設不能斷行,瀏覽器會把該欄寬度撐到符合完整檔名的 min-content 寬度,連帶影響其餘欄位版面。`static/css/app.css::.qualification-file-links` 新增 `min-width: 0`,並新增 `.qualification-file-links a:not(.button)` 規則套用 `overflow-wrap: anywhere`(沿用全站既有慣例,同一手法已用在候選卡片等 10 處,不是新發明的樣式規則;`:not(.button)` 排除同一容器內的「下載 / Download」按鈕,該按鈕文字短、且 `.button` 本身已有 `white-space: nowrap` 不該被影響)。純 CSS 變更,無 migration、無 Python 變更,`templates/base.html` 的 `app.css` cache-busting 版本號已更新為 `?v=20260915-qualification-filename-wrap`。
 
 ## 已完成
 
