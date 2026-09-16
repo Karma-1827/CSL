@@ -254,6 +254,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - `class_is_valid()` 的唯一有效條件:課程未取消、剛好 2 筆 attendance、2 筆 class record、2 筆完整 CONFIRMED confirmation、且 `ClassReview.status == APPROVED`——**不再有「非補登可略過審核」的例外**。
 - **此規則變更不溯及既往**(使用者確認只套用到之後完成互認的課程):`tutoring/migrations/0031` 是一次性資料遷移,把「規則生效當下、已符合舊版有效時數條件(互認完成但尚未有任何審核紀錄)」的課程直接建立一筆 `status=APPROVED` 的 `ClassReview`(`reviewed_by=None`,`review_note` 註明是規則變更時自動核准、非人工審核),確保已下載證明、已結案學期的有效時數不會因為這次規則變更而消失或需要重新審核。規則生效後才完成互認的課程,一律走正常的 `PENDING` 流程,沒有這層自動核准。
 - Admin dashboard 原本的「補登審核 / Makeup review」頁籤已更名為「課程審核 / Class review」,`category_label` 新增「一般課程 / Regular class」分類(雙方皆非補登時顯示),原有的「補簽到」「補課堂紀錄」「補簽到＋補課堂紀錄」分類不變。
+- **2026-09-16 課程審核新增「撤回 / Revert」功能(使用者要求)**:比照口語能力審核既有的撤回機制(`accounts/views.py::review_qualification` 的 `action=revert`),`tutoring/services.py::revert_class_review(session_id, admin)` 讓已 `APPROVED`/`REJECTED` 的 `ClassReview` 能撤回重新審核——狀態改回 `PENDING`(不是 `WAITING`,因為雙方互相確認的狀態沒有改變,只是審核結果作廢)、清空 `reviewed_by`/`review_note`/`reviewed_at`。`WAITING`(尚未完成互相確認)或本來就是 `PENDING` 的課程呼叫會擋下,因為沒有審核結果可撤回。UI 入口有兩處:Admin dashboard「課程審核」頁籤的已核准/未核准列表新增「撤回 / Revert」按鈕;`tutoring:class_detail`(Admin 版課程詳情頁,`admin_class_detail.html`)的審核結果區塊同樣新增此按鈕,兩處共用同一個 `tutoring:review_class` URL(`action=revert`)。沒有審核人員身分限制,任何 Admin 都可以撤回任一筆,與口語能力審核撤回、其餘審核類操作的既有慣例一致。
 - 「已排時數 / Reserved」與「有效時數 / Verified」是不同概念,不可混用。
 
 ### 4.7 課堂通報與異常回報

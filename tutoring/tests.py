@@ -76,6 +76,7 @@ from .services import (
     resolve_class_alert,
     resolve_incident_report,
     review_class_session,
+    revert_class_review,
     report_class_alert,
     process_pending_pairing_releases,
     review_pairing_release_request,
@@ -1331,6 +1332,71 @@ class ClassWorkflowTests(TestCase):
             reverse("tutoring:review_class", args=[session.pk]), {"action": "approve"}
         )
         self.assertRedirects(response, reverse("accounts:dashboard") + "#class-review")
+
+    def test_revert_class_review_resets_approved_result_back_to_pending(self):
+        """2026-09-16(使用者要求):比照口語能力審核既有的撤回機制,課程審核也要能撤回
+        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。"""
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="REVERT-REVIEW-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, approve=True, note="已確認")
+        reverted = revert_class_review(session_id=session.pk, admin=admin)
+        self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
+        self.assertIsNone(reverted.reviewed_by)
+        self.assertEqual(reverted.review_note, "")
+        self.assertIsNone(reverted.reviewed_at)
+
+    def test_revert_class_review_rejects_pending_or_waiting_review(self):
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="REVERT-PENDING-ADMIN", password="Admin-password-2026")
+        with self.assertRaises(ValidationError):
+            revert_class_review(session_id=session.pk, admin=admin)
+
+    def test_non_admin_cannot_revert_class_review(self):
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="REVERT-ADMIN-OWNER", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, approve=False, note="不通過")
+        with self.assertRaises(ValidationError):
+            revert_class_review(session_id=session.pk, admin=self.tutor)
+
+    def test_admin_can_revert_class_review_from_dashboard_and_class_detail(self):
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="REVERT-VIEW-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, approve=True, note="已確認")
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "撤回 / Revert")
+
+        response = self.client.post(
+            reverse("tutoring:review_class", args=[session.pk]), {"action": "revert"}
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#class-review")
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+
+        review_class_session(session_id=session.pk, admin=admin, approve=False, note="再次不通過")
+        response = self.client.post(
+            reverse("tutoring:review_class", args=[session.pk]), {"action": "revert", "next": "detail"}
+        )
+        self.assertRedirects(response, reverse("tutoring:class_detail", args=[session.pk]))
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
 
     def test_schedule_reserves_weekly_quota_and_dashboard_shows_class(self):
         # Anchor to the Tuesday/Wednesday of a future week instead of "today + 1/+2 days":

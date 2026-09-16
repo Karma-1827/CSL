@@ -1130,6 +1130,24 @@ def review_class_session(*, session_id, admin, approve, note=""):
 
 
 @transaction.atomic
+def revert_class_review(*, session_id, admin):
+    # 2026-09-16(使用者要求):比照口語能力審核既有的撤回機制(accounts/views.py::
+    # review_qualification 的 action=revert),讓 Admin 誤按核准/不核准時能撤回重新審核。
+    # 撤回後回到 PENDING(不是 WAITING),因為雙方互相確認的狀態並未改變,只是審核結果作廢。
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以撤回課程審核。 / Only administrators may revert a class review.")
+    review = ClassReview.objects.select_for_update().select_related("session").get(session_id=session_id)
+    if review.status not in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED}:
+        raise ValidationError("此課程尚未有審核結果,無法撤回。 / This class has no review result to revert yet.")
+    review.status = ClassReviewStatus.PENDING
+    review.reviewed_by = None
+    review.review_note = ""
+    review.reviewed_at = None
+    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    return review
+
+
+@transaction.atomic
 def report_class_alert(*, session_id, reporter, reason, note="", now=None):
     now = now or timezone.now()
     session = ClassSession.objects.select_for_update().select_related(

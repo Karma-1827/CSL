@@ -32,8 +32,13 @@
           <div class="inline-actions"><button class="button button-success" name="action" value="approve">核准 / Approve</button><button class="button button-danger" name="action" value="reject">不核准 / Reject</button></div>
         </form>
       </section>
+    {% elif class_review.status == 'WAITING' %}
+      <section class="panel"><div class="completion-box"><strong>{{ class_review.get_status_display }}</strong></div></section>
     {% elif class_review %}
-      <section class="panel"><div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_by %}<small>{{ class_review.reviewed_by.bilingual_name }} · {{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div></section>
+      <section class="panel">
+        <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_by %}<small>{{ class_review.reviewed_by.bilingual_name }} · {{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div>
+        <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
+      </section>
     {% endif %}
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>

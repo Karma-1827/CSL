@@ -48,6 +48,7 @@ from .services import (
     resolve_incident_report,
     review_pairing_release_request,
     review_class_session,
+    revert_class_review,
     schedule_classes,
     send_invitation,
     submit_incident_report,
@@ -745,17 +746,21 @@ def class_reschedule(request, pk):
 def review_class(request, pk):
     if request.user.role != Role.ADMIN:
         raise Http404
+    action = request.POST.get("action")
     try:
-        review_class_session(
-            session_id=pk,
-            admin=request.user,
-            approve=request.POST.get("action") == "approve",
-            note=request.POST.get("note", ""),
-        )
+        if action == "revert":
+            revert_class_review(session_id=pk, admin=request.user)
+            messages.success(request, "已撤回審核結果，回到待審核。 / Review result reverted to pending.")
+        else:
+            review_class_session(
+                session_id=pk,
+                admin=request.user,
+                approve=action == "approve",
+                note=request.POST.get("note", ""),
+            )
+            messages.success(request, "課程審核已完成。 / Class review completed.")
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
-    else:
-        messages.success(request, "課程審核已完成。 / Class review completed.")
     if request.POST.get("next") == "detail":
         return redirect("tutoring:class_detail", pk=pk)
     return redirect(f"{reverse('accounts:dashboard')}#class-review")
