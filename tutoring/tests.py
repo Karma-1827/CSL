@@ -1482,7 +1482,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        normal_now = self.aware(class_date, time(10, 30))
+        normal_now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
         check_in(session_id=session.pk, participant=self.tutee, now=normal_now)
         submit_class_record(
@@ -1515,7 +1515,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        normal_now = self.aware(class_date, time(10, 30))
+        normal_now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
         submit_class_record(
             session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=normal_now
@@ -1534,7 +1534,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        normal_now = self.aware(class_date, time(10, 30))
+        normal_now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
         submit_class_record(
             session_id=session.pk,
@@ -1570,7 +1570,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        normal_now = self.aware(class_date, time(10, 30))
+        normal_now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
         submit_class_record(
             session_id=session.pk, author=self.tutor,
@@ -1661,7 +1661,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        normal_now = self.aware(class_date, time(10, 30))
+        normal_now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
         submit_class_record(
             session_id=session.pk,
@@ -1700,7 +1700,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        now = self.aware(class_date, time(10, 30))
+        now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutee, now=now)
         submit_class_record(
             session_id=session.pk,
@@ -1751,7 +1751,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        now = self.aware(class_date, time(10, 30))
+        now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutee, now=now)
         submit_class_record(session_id=session.pk, author=self.tutee, data=self.record_data("無附件"), now=now)
         record = ClassRecord.objects.get(session=session, author=self.tutee)
@@ -1819,7 +1819,7 @@ class ClassWorkflowTests(TestCase):
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
         )[0]
-        now = self.aware(class_date, time(10, 30))
+        now = self.aware(class_date, time(11, 5))
         check_in(session_id=session.pk, participant=self.tutee, now=now)
         submit_class_record(session_id=session.pk, author=self.tutee, data=self.record_data("無佐證連結"), now=now)
 
@@ -1865,17 +1865,20 @@ class ClassWorkflowTests(TestCase):
     def test_tutor_submits_evidence_links_in_entered_order_via_class_detail_view(self):
         # This posts through the real view (not the service layer directly, like the
         # other tests in this class), so submit_class_record() below uses real
-        # timezone.now() with no override. Floor the start time to the current 5-minute
-        # mark so "now >= starts_at" holds no matter when the test actually runs, while
-        # scheduling it relative to an hour-earlier creation time keeps it "in the future"
-        # at creation, same as every other test's fixed 09:00→10:00 pattern.
+        # timezone.now() with no override. 2026-09-16: records now only open once class
+        # has ENDED (not just started), so the session must already be over by the time
+        # this test runs — schedule it ~35 minutes in the past (floored to a 5-minute
+        # mark) with a 0.5-hour duration, landing "now" comfortably past ends_at while
+        # still inside check-in's own 30-minute on-time grace window. Creating it relative
+        # to an hour-earlier "now" keeps it "in the future" at creation time.
         real_now = timezone.now()
         local_now = timezone.localtime(real_now)
-        class_date = local_now.date()
-        start_time = time(local_now.hour, (local_now.minute // 5) * 5)
+        start_dt = local_now - timedelta(minutes=35)
+        class_date = start_dt.date()
+        start_time = time(start_dt.hour, (start_dt.minute // 5) * 5)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=start_time, duration="1.0", now=real_now - timedelta(hours=1),
+            start_time=start_time, duration="0.5", now=real_now - timedelta(hours=2),
         )[0]
         check_in(session_id=session.pk, participant=self.tutor)
         self.client.force_login(self.tutor)
@@ -1920,6 +1923,72 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "補填課堂紀錄 / Makeup record")
         self.assertNotContains(response, "確認簽到 / Check in")
         self.assertNotContains(response, "送出紀錄 / Submit record")
+
+    def test_class_record_rejects_submission_before_class_ends(self):
+        """2026-09-16(使用者要求):很多學生在課堂還沒結束前就先填寫課堂紀錄,開放時間點
+        從「上課後」改成「下課後」。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        mid_class = self.aware(class_date, time(10, 30))
+        check_in(session_id=session.pk, participant=self.tutor, now=mid_class)
+        with self.assertRaises(ValidationError):
+            submit_class_record(
+                session_id=session.pk, author=self.tutor, data=self.record_data("太早填寫"), now=mid_class
+            )
+
+    def test_class_record_counts_as_on_time_until_end_of_class_day_no_matter_the_gap(self):
+        """2026-09-16(使用者要求):「一樣到當天的23:59算是在期限內」——即使下課後過了很多
+        小時,只要還在上課當天內送出,都不算補登。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(8), duration="1.0", now=self.aware(class_date, time(7)),
+        )[0]
+        late_same_day = self.aware(class_date, time(23, 30))
+        record = submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("當天很晚才填寫"), now=late_same_day
+        )
+        self.assertFalse(record.is_makeup)
+
+    def test_class_record_becomes_makeup_right_after_midnight_even_within_a_few_hours(self):
+        """2026-09-16:「是否算補登」的界線從下課後 24 小時的浮動視窗,改成「上課當天
+        23:59:59 前」——晚上上課的課,過了午夜就算補登,即使距離下課只過了一兩個小時,
+        跟舊版 24 小時視窗（此時仍在視窗內、不算補登）的結果不同。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(22), duration="1.0", now=self.aware(class_date, time(21)),
+        )[0]
+        just_after_midnight = self.aware(class_date + timedelta(days=1), time(0, 30))
+        record = submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("跨午夜填寫"),
+            reason="忘記在期限內填寫", now=just_after_midnight,
+        )
+        self.assertTrue(record.is_makeup)
+
+    def test_class_review_actions_write_audit_log(self):
+        """2026-09-16(使用者要求):課程審核的核准/不核准/撤回原本完全沒有稽核紀錄,補上。"""
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
+        )[0]
+        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
+        admin = User.objects.create_superuser(username="AUDIT-REVIEW-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, approve=True, note="已確認")
+        log = AuditLog.objects.get(event_type="CLASS_REVIEWED")
+        self.assertEqual(log.actor, admin)
+        self.assertEqual(log.target_user, self.tutee)
+        self.assertEqual(log.metadata["session_id"], session.pk)
+        self.assertEqual(log.metadata["result"], ClassReviewStatus.APPROVED)
+
+        revert_class_review(session_id=session.pk, admin=admin)
+        revert_log = AuditLog.objects.get(event_type="CLASS_REVIEW_REVERTED")
+        self.assertEqual(revert_log.actor, admin)
+        self.assertEqual(revert_log.target_user, self.tutee)
+        self.assertEqual(revert_log.metadata["session_id"], session.pk)
 
     def test_makeup_record_requires_mutual_confirmation_and_admin_approval(self):
         class_date = timezone.localdate()

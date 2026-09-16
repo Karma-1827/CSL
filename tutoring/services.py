@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 import uuid
 
@@ -1024,10 +1024,18 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
     _counterpart(session, author)
     if session.status != ClassSessionStatus.SCHEDULED:
         raise ValidationError("已取消的課程無法提交紀錄。 / A cancelled class cannot receive records.")
-    if now < session.starts_at:
-        raise ValidationError("課程開始後才可提交課堂紀錄。 / Class records open when class begins.")
+    if now < session.ends_at:
+        raise ValidationError("課堂結束後才可提交課堂紀錄。 / Class records open after class ends.")
     existing = ClassRecord.objects.filter(session=session, author=author).first()
-    is_makeup = now > session.ends_at + timedelta(hours=24)
+    # 2026-09-16(使用者要求):很多學生在課堂還沒結束前就先填寫課堂紀錄,開放時間點從「上課
+    # 後」改成「下課後」。同時把「是否算補登」的界線,從下課後 24 小時的浮動視窗,改成「上課
+    # 當天 23:59:59 前」都算準時,超過當天才算補登——避免傍晚或深夜下課的課,因為 24 小時
+    # 視窗橫跨到隔天很晚才算逾期,一律以「上課當天」為準,跟簽到的獨立規則互不影響。
+    end_of_class_day = timezone.make_aware(
+        datetime.combine(timezone.localtime(session.ends_at).date(), time(23, 59, 59)),
+        timezone.get_current_timezone(),
+    )
+    is_makeup = now > end_of_class_day
     if now > session.pairing.semester.makeup_deadline_at:
         raise ValidationError("已超過補課堂紀錄截止時間。 / The makeup record deadline has passed.")
     if is_makeup and not existing:
@@ -1118,7 +1126,9 @@ def class_is_valid(session):
 def review_class_session(*, session_id, admin, approve, note=""):
     if admin.role != Role.ADMIN:
         raise ValidationError("只有管理員可以審核課程。 / Only administrators may review classes.")
-    review = ClassReview.objects.select_for_update().select_related("session").get(session_id=session_id)
+    review = ClassReview.objects.select_for_update().select_related(
+        "session__pairing__tutor", "session__pairing__tutee"
+    ).get(session_id=session_id)
     if review.status != ClassReviewStatus.PENDING:
         raise ValidationError("此課程尚未進入可審核狀態。 / This class is not ready for review.")
     review.status = ClassReviewStatus.APPROVED if approve else ClassReviewStatus.REJECTED
@@ -1126,6 +1136,21 @@ def review_class_session(*, session_id, admin, approve, note=""):
     review.review_note = note.strip()
     review.reviewed_at = timezone.now()
     review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    # 2026-09-16(使用者要求):課程審核的核准/不核准/撤回原本完全沒有稽核紀錄,補上與其餘
+    # 審核類操作(口語能力審核、解除配對)一致的 AuditLog;比照 create_admin_pairing() 的
+    # 既有慣例,target_user 用 tutee、metadata 另外帶 tutor/tutee 學號方便查詢。
+    AuditLog.record(
+        actor=admin,
+        target_user=review.session.pairing.tutee,
+        event_type="CLASS_REVIEWED",
+        description="課程審核完成 / Class review completed",
+        metadata={
+            "session_id": review.session_id,
+            "tutor": review.session.pairing.tutor.username,
+            "tutee": review.session.pairing.tutee.username,
+            "result": review.status,
+        },
+    )
     return review
 
 
@@ -1136,7 +1161,9 @@ def revert_class_review(*, session_id, admin):
     # 撤回後回到 PENDING(不是 WAITING),因為雙方互相確認的狀態並未改變,只是審核結果作廢。
     if admin.role != Role.ADMIN:
         raise ValidationError("只有管理員可以撤回課程審核。 / Only administrators may revert a class review.")
-    review = ClassReview.objects.select_for_update().select_related("session").get(session_id=session_id)
+    review = ClassReview.objects.select_for_update().select_related(
+        "session__pairing__tutor", "session__pairing__tutee"
+    ).get(session_id=session_id)
     if review.status not in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED}:
         raise ValidationError("此課程尚未有審核結果,無法撤回。 / This class has no review result to revert yet.")
     review.status = ClassReviewStatus.PENDING
@@ -1144,6 +1171,17 @@ def revert_class_review(*, session_id, admin):
     review.review_note = ""
     review.reviewed_at = None
     review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    AuditLog.record(
+        actor=admin,
+        target_user=review.session.pairing.tutee,
+        event_type="CLASS_REVIEW_REVERTED",
+        description="課程審核結果已撤回，回到待審核 / Class review reverted to pending",
+        metadata={
+            "session_id": review.session_id,
+            "tutor": review.session.pairing.tutor.username,
+            "tutee": review.session.pairing.tutee.username,
+        },
+    )
     return review
 
 

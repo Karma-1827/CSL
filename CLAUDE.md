@@ -246,7 +246,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 舊 model 上還有一個 `reflection`(學習成果與回饋)欄位,但 `ClassRecordForm` 沒有把它列進 `Meta.fields`,提交流程完全不會用到,等同已棄用的欄位;修改課堂紀錄相關程式時不要誤以為它是現行必填欄位。
 - 簽到於上課前 10 分鐘開放。
 - 上課結束 30 分鐘後才簽到,視為補簽,必填原因。
-- 課堂開始後才可提交紀錄;課程結束 24 小時後首次提交,視為補課堂紀錄,必填原因。
+- **2026-09-16 起,課堂紀錄改為課堂結束後才可提交**(使用者要求:「發現很多學生都還沒上完課就填寫課堂紀錄」)。同時把「是否算補登」的界線,從下課後 24 小時的浮動視窗,改成「上課當天 23:59:59 前」都算準時,超過當天才算補登(使用者原話:「一樣到當天的23:59算是在期限內」)——避免傍晚或深夜下課的課,因為 24 小時視窗橫跨到隔天很晚才算逾期;深夜上課的課過了午夜就立刻算補登,即使距離下課只過一兩小時,這是與舊制唯一的行為差異。`tutoring/services.py::submit_class_record()` 的開放判斷從 `now < session.starts_at` 改成 `now < session.ends_at`,`is_makeup` 判斷改用 `timezone.make_aware(datetime.combine(session.ends_at 的在地日期, time(23,59,59)), ...)` 當界線(沿用 `Semester.makeup_deadline_at` 既有的同一種「組出當天 23:59:59」寫法)。`tutoring/views.py::class_detail()` 的 `record_requires_makeup_reason`(控制按鈕文字與必填提示)同步改用相同公式。此規則變更只影響提交當下的判斷,不影響已送出的既有紀錄。
 - 每位使用者每學期最多 5 次補簽到、5 次補課堂紀錄;兩種額度分開計算。
 - 補簽/補登最後期限:學期結束後第 1 天 23:59:59。
 - 任何一方修改自己的紀錄時,系統會刪除對方針對該作者的舊確認,必須重新確認。
@@ -254,7 +254,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - `class_is_valid()` 的唯一有效條件:課程未取消、剛好 2 筆 attendance、2 筆 class record、2 筆完整 CONFIRMED confirmation、且 `ClassReview.status == APPROVED`——**不再有「非補登可略過審核」的例外**。
 - **此規則變更不溯及既往**(使用者確認只套用到之後完成互認的課程):`tutoring/migrations/0031` 是一次性資料遷移,把「規則生效當下、已符合舊版有效時數條件(互認完成但尚未有任何審核紀錄)」的課程直接建立一筆 `status=APPROVED` 的 `ClassReview`(`reviewed_by=None`,`review_note` 註明是規則變更時自動核准、非人工審核),確保已下載證明、已結案學期的有效時數不會因為這次規則變更而消失或需要重新審核。規則生效後才完成互認的課程,一律走正常的 `PENDING` 流程,沒有這層自動核准。
 - Admin dashboard 原本的「補登審核 / Makeup review」頁籤已更名為「課程審核 / Class review」,`category_label` 新增「一般課程 / Regular class」分類(雙方皆非補登時顯示),原有的「補簽到」「補課堂紀錄」「補簽到＋補課堂紀錄」分類不變。
-- **2026-09-16 課程審核新增「撤回 / Revert」功能(使用者要求)**:比照口語能力審核既有的撤回機制(`accounts/views.py::review_qualification` 的 `action=revert`),`tutoring/services.py::revert_class_review(session_id, admin)` 讓已 `APPROVED`/`REJECTED` 的 `ClassReview` 能撤回重新審核——狀態改回 `PENDING`(不是 `WAITING`,因為雙方互相確認的狀態沒有改變,只是審核結果作廢)、清空 `reviewed_by`/`review_note`/`reviewed_at`。`WAITING`(尚未完成互相確認)或本來就是 `PENDING` 的課程呼叫會擋下,因為沒有審核結果可撤回。UI 入口有兩處:Admin dashboard「課程審核」頁籤的已核准/未核准列表新增「撤回 / Revert」按鈕;`tutoring:class_detail`(Admin 版課程詳情頁,`admin_class_detail.html`)的審核結果區塊同樣新增此按鈕,兩處共用同一個 `tutoring:review_class` URL(`action=revert`)。沒有審核人員身分限制,任何 Admin 都可以撤回任一筆,與口語能力審核撤回、其餘審核類操作的既有慣例一致。
+- **2026-09-16 課程審核新增「撤回 / Revert」功能(使用者要求)**:比照口語能力審核既有的撤回機制(`accounts/views.py::review_qualification` 的 `action=revert`),`tutoring/services.py::revert_class_review(session_id, admin)` 讓已 `APPROVED`/`REJECTED` 的 `ClassReview` 能撤回重新審核——狀態改回 `PENDING`(不是 `WAITING`,因為雙方互相確認的狀態沒有改變,只是審核結果作廢)、清空 `reviewed_by`/`review_note`/`reviewed_at`。`WAITING`(尚未完成互相確認)或本來就是 `PENDING` 的課程呼叫會擋下,因為沒有審核結果可撤回。UI 入口有兩處:Admin dashboard「課程審核」頁籤的已核准/未核准列表新增「撤回 / Revert」按鈕;`tutoring:class_detail`(Admin 版課程詳情頁,`admin_class_detail.html`)的審核結果區塊同樣新增此按鈕,兩處共用同一個 `tutoring:review_class` URL(`action=revert`)。沒有審核人員身分限制,任何 Admin 都可以撤回任一筆,與口語能力審核撤回、其餘審核類操作的既有慣例一致。**2026-09-16 補上 AuditLog**(使用者確認要補):`review_class_session()`(核准/不核准)與 `revert_class_review()`(撤回)原本完全沒有稽核紀錄,現在都會寫入(`CLASS_REVIEWED`/`CLASS_REVIEW_REVERTED`,`actor` 為操作的 Admin、`target_user` 為該堂課的 tutee,比照 `create_admin_pairing()` 既有慣例,`metadata` 另外帶 `session_id`/`tutor`/`tutee` 學號方便查詢)。
 - 「已排時數 / Reserved」與「有效時數 / Verified」是不同概念,不可混用。
 
 ### 4.7 課堂通報與異常回報

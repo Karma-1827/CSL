@@ -62,6 +62,7 @@
             {{ record_form.as_p }}
             {% if record_requires_makeup_reason %}<label class="makeup-reason-field">逾時補登原因 / Makeup reason<em class="required-chip">補登必填 / Required</em><textarea name="makeup_reason" rows="3" required placeholder="逾時補登必填。 / Required for a late makeup record."></textarea></label>{% endif %}
             <button class="button button-primary" type="submit">{% if own_record %}更新紀錄 / Update record{% elif record_requires_makeup_reason %}補填課堂紀錄 / Makeup record{% else %}送出紀錄 / Submit record{% endif %}</button>
+            {% if not own_record %}<p class="help-text">課堂結束後才能提交課堂紀錄，當天 23:59 前送出都算準時。<br>Class records open once class ends; submissions before 23:59 the same day still count as on time.</p>{% endif %}
           </form>
         </section>
       </div>
