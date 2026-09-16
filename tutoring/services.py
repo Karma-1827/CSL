@@ -41,6 +41,10 @@ from .models import (
 
 
 INVITATION_VALID_DAYS = 5
+# 2026-09-16(使用者轉達助教需求):「學期設定前一週可以先瀏覽tutee名單以及配對，但還不能
+# 安排課程」——配對(瀏覽候選人、送出/接受邀請)提前於學期正式 starts_on 開放,排課本身不
+# 受影響,因為 schedule_classes() 檢查的是 pairing.semester 自己的起訖日,不經過這個常數。
+MATCHING_EARLY_OPEN_DAYS = 7
 MAX_ACTIVE_TUTEES_PER_TUTOR = 2
 MAX_PENDING_INVITATIONS_PER_USER = 3
 ALLOWED_DURATIONS = {Decimal("0.5"), Decimal("1.0"), Decimal("1.5"), Decimal("2.0")}
@@ -85,7 +89,7 @@ DAY_LABELS = {
 }
 
 
-def active_semester(program=None):
+def active_semester(program=None, *, early_days=0):
     """The currently running period (today within start/end) for a given partner program.
 
     `program=None` looks up the legacy shared period (Semester.program IS NULL) — the only
@@ -94,9 +98,14 @@ def active_semester(program=None):
     passed, a period scoped to that exact program takes priority; if none is currently running,
     this falls back to an active legacy shared period so programs without their own dedicated
     period yet keep working exactly as before.
+
+    `early_days`(預設 0,不影響既有呼叫端行為)讓「起始日」的判斷提前該天數,只給需要
+    「配對可以提早開放,但排課不行」這條規則(2026-09-16,使用者轉達助教需求)的呼叫端
+    使用,例如 `dashboard()` 的 matching 相關 context 與 `_validate_matching_window()`。
     """
     today = timezone.localdate()
-    current = Semester.objects.filter(is_active=True, starts_on__lte=today, ends_on__gte=today)
+    starts_before = today + timedelta(days=early_days) if early_days else today
+    current = Semester.objects.filter(is_active=True, starts_on__lte=starts_before, ends_on__gte=today)
     if program is not None:
         specific = current.filter(program=program).order_by("starts_on").first()
         if specific:
@@ -431,10 +440,12 @@ def process_pending_pairing_releases(*, now=None):
 
 
 def _validate_matching_window(semester):
+    # 2026-09-16(使用者轉達助教需求):配對(送出/接受邀請)提前 MATCHING_EARLY_OPEN_DAYS
+    # 天開放,排課不受影響(schedule_classes() 另外直接檢查 pairing.semester 的起訖日)。
     today = timezone.localdate()
     if not semester or not semester.is_active:
         raise ValidationError("目前沒有開放配對的學期。 / Matching is not open for a semester.")
-    if today < semester.starts_on:
+    if today < semester.starts_on - timedelta(days=MATCHING_EARLY_OPEN_DAYS):
         raise ValidationError("本學期尚未開放配對。 / Matching has not opened for this semester.")
     if today > semester.ends_on:
         raise ValidationError("本學期的配對期間已結束。 / The matching period has ended.")
@@ -469,7 +480,7 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
     synchronize_matching_state()
     tutor = User.objects.select_for_update().get(pk=tutor_id, role=Role.TUTOR, is_active=True)
     tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
-    current = active_semester(program=user_program(tutee))
+    current = active_semester(program=user_program(tutee), early_days=MATCHING_EARLY_OPEN_DAYS)
     semester = Semester.objects.select_for_update().filter(pk=current.pk).first() if current else None
     _validate_matching_window(semester)
     if initiator.pk not in {tutor.pk, tutee.pk}:

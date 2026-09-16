@@ -1674,6 +1674,38 @@ class TutorDashboardPairingVisibilityTests(TestCase):
         self.assertNotContains(response, "尚未建立配對")
         self.assertContains(response, tutor.bilingual_name)
 
+    def test_matching_open_within_early_window_before_semester_starts(self):
+        """2026-09-16(使用者轉達助教需求):「學期設定前一週可以先瀏覽tutee名單以及配對，
+        但還不能安排課程」——配對視窗(matching_open,控制候選人瀏覽與邀請)應在學期正式
+        開始前 7 天(`tutoring.services.MATCHING_EARLY_OPEN_DAYS`)內就打開;超過這個
+        提前量則仍維持關閉,不是無限期提前。排課本身的規則獨立在 schedule_classes(),
+        另有服務層測試(tutoring/tests.py)涵蓋,不在此重複。"""
+        semester = Semester.objects.create(
+            name_zh="即將開始的學期", name_en="Upcoming semester",
+            starts_on=timezone.localdate() + timedelta(days=5),
+            ends_on=timezone.localdate() + timedelta(days=100),
+            is_active=True, program=PartnerProgram.objects.get(code="NTNU"),
+        )
+        # user_program() only resolves an "ordinary" tutor to NTNU when they have a
+        # RosterEntry at all (see tutoring/services.py::user_program()) — without one it
+        # returns bare None, which would look up the unrelated legacy shared period
+        # instead of the NTNU-scoped semester created above.
+        tutor_roster = RosterEntry.objects.create(
+            student_id="EARLY-WINDOW-TUTOR", name_zh="提前配對老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutor = User.objects.create_user(
+            username="EARLY-WINDOW-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=tutor_roster
+        )
+        self.client.force_login(tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertTrue(response.context["matching_open"])
+
+        semester.starts_on = timezone.localdate() + timedelta(days=10)
+        semester.save()
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertFalse(response.context["matching_open"])
+
 
 class IdleAccountFilterTests(TestCase):
     """Checklist item 3: idle accounts are flagged for manual review, never auto-disabled."""

@@ -372,6 +372,73 @@ class ProgramScopedSemesterTests(TestCase):
         self.assertEqual(invitation.semester_id, ntnu_period.pk)
         self.assertNotEqual(invitation.semester_id, legacy.pk)
 
+    def test_send_invitation_succeeds_within_early_matching_window_before_semester_starts(self):
+        """2026-09-16(使用者轉達助教需求):「學期設定前一週可以先瀏覽tutee名單以及配對，
+        但還不能安排課程」。配對(送出邀請、接受邀請成立配對)提前 7 天開放,但排課本身
+        仍須等到學期真正開始(schedule_classes() 獨立檢查 pairing.semester 的起訖日,
+        不受這裡的提前開窗影響)。"""
+        future_period = Semester.objects.create(
+            name_zh="即將開始的學期", name_en="Upcoming semester", program=self.ntnu, is_active=True,
+            starts_on=self.today + timedelta(days=5), ends_on=self.today + timedelta(days=120),
+        )
+        tutor_roster = RosterEntry.objects.create(
+            student_id="EARLY-INV-TUTOR", name_zh="老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutor = User.objects.create_user(
+            username="EARLY-INV-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster
+        )
+        TutorProfile.objects.create(tutor=tutor)
+        QualificationDocument.objects.create(
+            tutor=tutor, file="x.pdf", original_filename="x.pdf", status=QualificationStatus.APPROVED
+        )
+        tutee_roster = RosterEntry.objects.create(
+            student_id="EARLY-INV-TUTEE", name_zh="學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu,
+        )
+        tutee = User.objects.create_user(
+            username="EARLY-INV-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster
+        )
+
+        invitation = send_invitation(initiator=tutor, tutor_id=tutor.pk, tutee_id=tutee.pk)
+        self.assertEqual(invitation.semester_id, future_period.pk)
+
+        pairing = respond_to_invitation(invitation_id=invitation.pk, responder=tutee, accept=True)
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+
+        with self.assertRaises(ValidationError):
+            schedule_classes(
+                tutor=tutor, pairing=pairing, class_date=self.today, start_time=time(10), duration="1.0"
+            )
+
+    def test_send_invitation_still_rejected_more_than_a_week_before_semester_starts(self):
+        Semester.objects.create(
+            name_zh="太早的學期", name_en="Too-early semester", program=self.ntnu, is_active=True,
+            starts_on=self.today + timedelta(days=10), ends_on=self.today + timedelta(days=120),
+        )
+        tutor_roster = RosterEntry.objects.create(
+            student_id="TOOEARLY-TUTOR", name_zh="老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutor = User.objects.create_user(
+            username="TOOEARLY-TUTOR", password="Password-2026", role=Role.TUTOR, roster_entry=tutor_roster
+        )
+        TutorProfile.objects.create(tutor=tutor)
+        QualificationDocument.objects.create(
+            tutor=tutor, file="x.pdf", original_filename="x.pdf", status=QualificationStatus.APPROVED
+        )
+        tutee_roster = RosterEntry.objects.create(
+            student_id="TOOEARLY-TUTEE", name_zh="學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=self.ntnu,
+        )
+        tutee = User.objects.create_user(
+            username="TOOEARLY-TUTEE", password="Password-2026", role=Role.TUTEE, roster_entry=tutee_roster
+        )
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=tutor, tutor_id=tutor.pk, tutee_id=tutee.pk)
+
 
 class MatchingFixtureTestCase(TestCase):
     """Shared tutor/tutee fixtures and factory helpers. No test_ methods of its own — it exists

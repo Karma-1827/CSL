@@ -176,6 +176,7 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 
 邀請規則:
 
+- **2026-09-16 起,配對(瀏覽候選人、送出/接受邀請)提前 7 天開放**(使用者轉達助教需求:「學期設定前一週可以先瀏覽tutee名單以及配對，但還不能安排課程」)。`tutoring/services.py::MATCHING_EARLY_OPEN_DAYS = 7`;`active_semester(program, early_days=0)` 新增選用參數,只有傳入非 0 值時才把「起始日」判斷提前該天數(預設值 0 完全不影響既有呼叫端,例如 `admin_tutor_schedule()`)。用到 `early_days=MATCHING_EARLY_OPEN_DAYS` 的呼叫點:`accounts/views.py::dashboard()` 的 `current_semester`/`matching_open`(含 Admin 自己看到的「目前學期」小方塊,理由是配對已提前開放時,Admin 畫面卻還顯示「尚未設定」會不一致)、`tutoring/services.py::send_invitation()` 取得的 `current` 學期、`_validate_matching_window()`(`send_invitation()`/`respond_to_invitation()` 接受邀請共用同一個檢查)。**排課完全不受影響**:`schedule_classes()` 檢查的是 `class_date` 是否在 `pairing.semester.starts_on`～`ends_on` 之間(配對自己鎖定的學期起訖日,不是「現在是否為進行中學期」這個判斷),跟這裡的提前開窗是兩套獨立邏輯,所以配對可以提前一週成立,但實際課程日期仍然只能落在學期正式起訖範圍內,一堂都排不進提前的這幾天。`create_admin_pairing()`(Admin 手動配對)完全不呼叫 `_validate_matching_window()`,本來就不受任何學期日期限制,不受此次調整影響。
 - 邀請有效 5 天;過期後 `EXPIRED`。
 - Tutor 必須有 APPROVED 口語能力證明且名額未滿,且必須在該 Tutee 所屬計畫的修課名單範圍內(見上)。
 - Tutor 可邀請可用 Tutee;Tutee 能否主動邀請 Tutor 由其 `RosterEntry.program.allow_tutee_initiate_invitation` 決定(目前只有 `MARYLAND` 為 True,`tutoring/services.py::_tutee_can_initiate_invitation()`)。

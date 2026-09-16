@@ -55,6 +55,7 @@ from tutoring.services import (
     DAY_LABELS,
     LEARNING_DURATION_LABELS,
     LEVEL_LABELS,
+    MATCHING_EARLY_OPEN_DAYS,
     MAX_ACTIVE_TUTEES_PER_TUTOR,
     SKILL_LABELS,
     annotate_conversation_summaries,
@@ -321,11 +322,15 @@ def _sanitize_free_text_filter(value, max_length=80):
 @login_required
 def dashboard(request):
     synchronize_matching_state()
-    current_semester = active_semester(program=user_program(request.user))
+    # 2026-09-16(使用者轉達助教需求):「學期設定前一週可以先瀏覽tutee名單以及配對，但
+    # 還不能安排課程」——配對(瀏覽候選人、邀請、成立配對)提前 MATCHING_EARLY_OPEN_DAYS
+    # 天開放,排課本身不受影響(schedule_classes() 另外直接檢查 pairing.semester 的
+    # 起訖日,不經過這裡的 current_semester)。
+    current_semester = active_semester(program=user_program(request.user), early_days=MATCHING_EARLY_OPEN_DAYS)
     today = timezone.localdate()
     matching_open = bool(
         current_semester
-        and today >= current_semester.starts_on
+        and today >= current_semester.starts_on - timedelta(days=MATCHING_EARLY_OPEN_DAYS)
         and today <= current_semester.ends_on
     )
     context = {"current_semester": current_semester, "matching_open": matching_open}
@@ -488,9 +493,15 @@ def dashboard(request):
         # None,導致最上方共用的「目前學期」小方塊(page-heading 的 .semester-chip,
         # Tutor/Tutee 本來就有的同一個既有 UI 元件)查不到值,顯示「尚未設定」。這裡直接
         # 覆寫成所有合作計畫裡最先開始的一筆啟用中學期,讓 Admin 也能用同一個既有元件看到
-        # 目前學期,不需要另外新增一個獨立的顯示區塊。
+        # 目前學期,不需要另外新增一個獨立的顯示區塊。2026-09-16:比照 Tutor/Tutee 的
+        # `current_semester` 一併套用 MATCHING_EARLY_OPEN_DAYS 提前開窗,避免配對已經
+        # 提前開放時,Admin 自己的畫面卻還顯示「尚未設定」這種不一致的情況。
         current_admin_semester = (
-            Semester.objects.filter(is_active=True, starts_on__lte=today, ends_on__gte=today)
+            Semester.objects.filter(
+                is_active=True,
+                starts_on__lte=today + timedelta(days=MATCHING_EARLY_OPEN_DAYS),
+                ends_on__gte=today,
+            )
             .order_by("starts_on")
             .first()
         )
