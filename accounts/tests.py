@@ -15,7 +15,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from tutoring.models import QualificationDocument, QualificationStatus, Semester, TuteeProfile, TutorProfile
+from tutoring.models import Pairing, QualificationDocument, QualificationStatus, Semester, TuteeProfile, TutorProfile
 
 from .forms import client_ip
 from .services import import_department_oral_exam_pass_list
@@ -1590,6 +1590,59 @@ class AdminDashboardNavigationTests(TestCase):
         by_claimed = self.client.get(reverse("accounts:dashboard"), {"roster_claimed": "no"})
         self.assertContains(by_claimed, "ROSTER-BROWSE-TUTEE")
         self.assertNotContains(by_claimed, "ROSTER-BROWSE-TUTOR")
+
+    def test_admin_matching_panel_search_and_pagination_surface_older_pairings(self):
+        """2026-09-16(使用者發現真實案例:「阮瓊桂倪的配對不見了？」):「近期配對」原本
+        寫死只取最新 8 筆、無搜尋無分頁,配對數量一多,較早建立但仍在輔導中的配對就會從
+        清單消失,讓 Admin 誤以為配對不見了(資料庫裡其實完好)。改成搜尋＋分頁後,舊配對
+        仍可透過搜尋或翻頁找到。"""
+        ntnu = PartnerProgram.objects.get(code="NTNU")
+        semester = Semester.objects.create(
+            name_zh="配對搜尋測試學期", name_en="Matching search test semester",
+            starts_on=timezone.localdate() - timedelta(days=10),
+            ends_on=timezone.localdate() + timedelta(days=90),
+            is_active=True, program=ntnu,
+        )
+        target_tutor = User.objects.create_user(
+            username="MATCH-SEARCH-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, name_zh="搜尋測試老師"
+        )
+        target_tutee = User.objects.create_user(
+            username="MATCH-SEARCH-TUTEE", password="Tutee-password-2026", role=Role.TUTEE, name_zh="搜尋測試學生"
+        )
+        # Created first so its auto_now_add started_at is the oldest — with 20 more
+        # pairings created after it, it lands on page 2 under the default -started_at
+        # ordering, exactly reproducing "created earlier, pushed off the visible list".
+        target_pairing = Pairing.objects.create(semester=semester, tutor=target_tutor, tutee=target_tutee)
+        for i in range(20):
+            filler_tutor = User.objects.create_user(
+                username=f"MATCH-FILLER-TUTOR-{i}", password="Tutor-password-2026", role=Role.TUTOR
+            )
+            filler_tutee = User.objects.create_user(
+                username=f"MATCH-FILLER-TUTEE-{i}", password="Tutee-password-2026", role=Role.TUTEE
+            )
+            Pairing.objects.create(semester=semester, tutor=filler_tutor, tutee=filler_tutee)
+
+        # Both Tutor/Tutee usernames also populate the unrelated "Admin 手動配對" dropdown
+        # on this same page, so membership is checked against pairing_page's queryset
+        # (what the matching list itself actually shows), not raw HTML substring matches.
+        response = self.client.get(reverse("accounts:dashboard"))
+        page_ids = {pairing.pk for pairing in response.context["pairing_page"]}
+        self.assertNotIn(target_pairing.pk, page_ids)
+        self.assertContains(response, "simple-pagination")
+
+        by_search = self.client.get(reverse("accounts:dashboard"), {"pairing_q": "搜尋測試學生"})
+        search_ids = {pairing.pk for pairing in by_search.context["pairing_page"]}
+        self.assertEqual(search_ids, {target_pairing.pk})
+
+        by_page = self.client.get(reverse("accounts:dashboard"), {"pairing_page": "2"})
+        page2_ids = {pairing.pk for pairing in by_page.context["pairing_page"]}
+        self.assertIn(target_pairing.pk, page2_ids)
+
+        by_status = self.client.get(
+            reverse("accounts:dashboard"), {"pairing_q": "搜尋測試學生", "pairing_status": "ENDED"}
+        )
+        status_ids = {pairing.pk for pairing in by_status.context["pairing_page"]}
+        self.assertNotIn(target_pairing.pk, status_ids)
 
 
 class IdleAccountFilterTests(TestCase):

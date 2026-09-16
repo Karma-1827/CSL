@@ -178,12 +178,25 @@
       <section class="dashboard-view" data-dashboard-panel="matching">
         <div class="view-heading"><span>MATCHING</span><h2>配對管理 <small>Matching management</small></h2><p>查看目前配對與輔導狀態。 / Monitor current tutoring matches.</p></div>
       <section class="panel">
-        <div class="panel-heading"><div><span class="eyebrow">MATCHING</span><h2>近期配對 <small>Recent matches</small></h2></div></div>
-        {% if recent_pairings %}
+        <div class="panel-heading"><div><span class="eyebrow">MATCHING</span><h2>配對列表 <small>Matches</small></h2></div><span class="result-count">{{ pairing_page.paginator.count }} 筆 / entries</span></div>
+        <form class="class-overview-filter" action="{% url 'accounts:dashboard' %}#matching" method="get">
+          <label>搜尋 / Search<input name="pairing_q" value="{{ pairing_q }}" placeholder="學號或姓名 / ID or name"></label>
+          <label>狀態 / Status<select name="pairing_status">
+              <option value=""{% if not pairing_status %} selected{% endif %}>全部 / All</option>
+              <option value="ACTIVE"{% if pairing_status == 'ACTIVE' %} selected{% endif %}>輔導中 / Active</option>
+              <option value="ENDED"{% if pairing_status == 'ENDED' %} selected{% endif %}>已結束 / Ended</option>
+          </select></label>
+          <button class="button button-secondary" type="submit">篩選 / Filter</button>
+        </form>
+        {% if pairing_page %}
           <div class="table-wrap"><table>
             <thead><tr><th>學期 / Semester</th><th>老師 / Teacher</th><th>學生 / Student</th><th>狀態 / Status</th><th>建立時間 / Created</th></tr></thead>
-            <tbody>{% for pairing in recent_pairings %}<tr><td>{{ pairing.semester }}</td><td>{{ pairing.tutor.bilingual_name }}<small>{{ pairing.tutor.username }}</small></td><td>{{ pairing.tutee.bilingual_name }}<small>{{ pairing.tutee.username }}</small></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+            <tbody>
+              {% for pairing in pairing_page %}<tr><td>{{ pairing.semester }}</td><td>{{ pairing.tutor.bilingual_name }}<small>{{ pairing.tutor.username }}</small></td><td>{{ pairing.tutee.bilingual_name }}<small>{{ pairing.tutee.username }}</small></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>
+              {% empty %}<tr><td colspan="5"><div class="empty-state">找不到符合條件的配對。 / No matches found.</div></td></tr>{% endfor %}
+            </tbody>
           </table></div>
+          {% if pairing_page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="配對分頁 / Matching pages">{% if pairing_page.has_previous %}<a href="?pairing_q={{ pairing_q|urlencode }}&pairing_status={{ pairing_status }}&pairing_page={{ pairing_page.previous_page_number }}#matching">← 上一頁 / Previous</a>{% endif %}<span>{{ pairing_page.number }} / {{ pairing_page.paginator.num_pages }}</span>{% if pairing_page.has_next %}<a href="?pairing_q={{ pairing_q|urlencode }}&pairing_status={{ pairing_status }}&pairing_page={{ pairing_page.next_page_number }}#matching">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
         {% else %}<div class="empty-state">尚無配對資料 / No matches yet</div>{% endif %}
         <details class="semester-add-disclosure">
           <summary>

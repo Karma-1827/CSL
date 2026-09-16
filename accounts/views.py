@@ -452,6 +452,25 @@ def dashboard(request):
             roster_rows = roster_rows.filter(claimed_at__isnull=True)
         roster_page = Paginator(roster_rows, 30).get_page(request.GET.get("roster_page"))
 
+        # 2026-09-16(使用者發現真實案例後要求):「近期配對」原本寫死只取最新 8 筆、無搜尋
+        # 無分頁,配對數量一多,較早建立但仍在輔導中的配對就會被擠出這份清單,讓 Admin 誤以
+        # 為配對不見了(實際上資料庫裡好好的)。比照上面 roster 分頁的既有做法補上搜尋＋分頁。
+        pairing_q = request.GET.get("pairing_q", "").strip()
+        pairing_status = request.GET.get("pairing_status", "")
+        pairing_rows = Pairing.objects.select_related("semester", "tutor", "tutee")
+        if pairing_q:
+            pairing_rows = pairing_rows.filter(
+                Q(tutor__username__icontains=pairing_q)
+                | Q(tutor__name_zh__icontains=pairing_q)
+                | Q(tutor__name_en__icontains=pairing_q)
+                | Q(tutee__username__icontains=pairing_q)
+                | Q(tutee__name_zh__icontains=pairing_q)
+                | Q(tutee__name_en__icontains=pairing_q)
+            )
+        if pairing_status in {PairingStatus.ACTIVE, PairingStatus.ENDED}:
+            pairing_rows = pairing_rows.filter(status=pairing_status)
+        pairing_page = Paginator(pairing_rows, 20).get_page(request.GET.get("pairing_page"))
+
         # 2026-09-11(使用者要求):在待審核列表上附加系辦語音通過名單的比對提示。純粹是
         # 顯示用的提示,不影響審核結果或任何欄位,Admin 仍要自行按核准/拒絕。
         pending_qualifications = list(
@@ -496,7 +515,9 @@ def dashboard(request):
                 "pending_invitations": MatchingInvitation.objects.filter(status=InvitationStatus.PENDING).select_related(
                     "semester", "tutor", "tutee", "initiated_by"
                 )[:20],
-                "recent_pairings": Pairing.objects.select_related("semester", "tutor", "tutee")[:8],
+                "pairing_q": pairing_q,
+                "pairing_status": pairing_status,
+                "pairing_page": pairing_page,
                 "admin_pairing_form": AdminPairingForm(),
                 "pending_pairing_releases": PairingReleaseRequest.objects.filter(
                     status=PairingReleaseStatus.PENDING
