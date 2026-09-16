@@ -895,7 +895,14 @@ def schedule_classes(*, tutor, pairing, class_date, start_time, duration, repeat
     if start_time.minute % 5 != 0 or start_time.second:
         raise ValidationError("開始時間請以 5 分鐘為單位。 / Start time must use five-minute increments.")
     if class_date < pairing.semester.starts_on or class_date > pairing.semester.ends_on:
-        raise ValidationError("上課日期須在本學期內。 / The class date must be within the semester.")
+        # 2026-09-16(使用者要求):附上確切的學期起訖日,不要只說「須在本學期內」卻不講
+        # 範圍是什麼。
+        raise ValidationError(
+            f"上課日期須在本學期內（{pairing.semester.starts_on.isoformat()}～"
+            f"{pairing.semester.ends_on.isoformat()}）。 / The class date must be within "
+            f"the semester ({pairing.semester.starts_on.isoformat()} to "
+            f"{pairing.semester.ends_on.isoformat()})."
+        )
     first_start = timezone.make_aware(datetime.combine(class_date, start_time), timezone.get_current_timezone())
     if first_start <= now:
         raise ValidationError("新課程必須安排在未來。 / A new class must be scheduled in the future.")

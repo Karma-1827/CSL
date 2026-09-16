@@ -669,6 +669,11 @@ def class_detail(request, pk):
             "alert_form": ClassAlertForm(),
             "checkin_requires_makeup_reason": now > session.ends_at + timedelta(minutes=30),
             "record_requires_makeup_reason": own_record is None and now > end_of_class_day,
+            # 2026-09-16(使用者要求):課堂紀錄表單本身在課堂結束前不顯示,只顯示「尚未開放」
+            # 提示——避免有人提早打好內容準備直接貼上("偷寫"),不只是靠送出當下的伺服器端
+            # 驗證擋下。這是本次唯一在畫面上加的時間限制,submit_class_record() 原本就有的
+            # 伺服器端驗證(now < session.ends_at)維持不變、繼續當最終把關。
+            "record_window_open": now >= session.ends_at,
             "alert_window_open": session.starts_at <= now <= session.ends_at,
             "is_valid_class": class_is_valid(session),
         },

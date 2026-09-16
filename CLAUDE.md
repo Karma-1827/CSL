@@ -212,7 +212,7 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 - 只有 active pairing 的 Tutor 可排課。
 - 課程時數只能為 0.5、1、1.5、2 小時;正式時數依排課時數,不依實際簽到時間差。
 - 開始時間可為全天任一時間,但分鐘只能是 00/05/10/.../55。
-- 新課必須在未來且在 pairing 的 semester 範圍內。
+- 新課必須在未來且在 pairing 的 semester 範圍內。**2026-09-16 起,超出範圍的錯誤訊息附上確切的學期起訖日**(使用者要求),不再只說「須在本學期內」卻不講範圍是什麼(`tutoring/services.py::schedule_classes()`)。
 - 可每週重複至指定日期;超過學期結束日會截到學期末。
 - 週定義為星期一至星期日。
 - 同一 pairing 每週已排時數上限 2 小時。
@@ -248,7 +248,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 舊 model 上還有一個 `reflection`(學習成果與回饋)欄位,但 `ClassRecordForm` 沒有把它列進 `Meta.fields`,提交流程完全不會用到,等同已棄用的欄位;修改課堂紀錄相關程式時不要誤以為它是現行必填欄位。
 - 簽到於上課前 10 分鐘開放。
 - 上課結束 30 分鐘後才簽到,視為補簽,必填原因。
-- **2026-09-16 起,課堂紀錄改為課堂結束後才可提交**(使用者要求:「發現很多學生都還沒上完課就填寫課堂紀錄」)。同時把「是否算補登」的界線,從下課後 24 小時的浮動視窗,改成「上課當天 23:59:59 前」都算準時,超過當天才算補登(使用者原話:「一樣到當天的23:59算是在期限內」)——避免傍晚或深夜下課的課,因為 24 小時視窗橫跨到隔天很晚才算逾期;深夜上課的課過了午夜就立刻算補登,即使距離下課只過一兩小時,這是與舊制唯一的行為差異。`tutoring/services.py::submit_class_record()` 的開放判斷從 `now < session.starts_at` 改成 `now < session.ends_at`,`is_makeup` 判斷改用 `timezone.make_aware(datetime.combine(session.ends_at 的在地日期, time(23,59,59)), ...)` 當界線(沿用 `Semester.makeup_deadline_at` 既有的同一種「組出當天 23:59:59」寫法)。`tutoring/views.py::class_detail()` 的 `record_requires_makeup_reason`(控制按鈕文字與必填提示)同步改用相同公式。此規則變更只影響提交當下的判斷,不影響已送出的既有紀錄。
+- **2026-09-16 起,課堂紀錄改為課堂結束後才可提交**(使用者要求:「發現很多學生都還沒上完課就填寫課堂紀錄」)。同時把「是否算補登」的界線,從下課後 24 小時的浮動視窗,改成「上課當天 23:59:59 前」都算準時,超過當天才算補登(使用者原話:「一樣到當天的23:59算是在期限內」)——避免傍晚或深夜下課的課,因為 24 小時視窗橫跨到隔天很晚才算逾期;深夜上課的課過了午夜就立刻算補登,即使距離下課只過一兩小時,這是與舊制唯一的行為差異。`tutoring/services.py::submit_class_record()` 的開放判斷從 `now < session.starts_at` 改成 `now < session.ends_at`,`is_makeup` 判斷改用 `timezone.make_aware(datetime.combine(session.ends_at 的在地日期, time(23,59,59)), ...)` 當界線(沿用 `Semester.makeup_deadline_at` 既有的同一種「組出當天 23:59:59」寫法)。`tutoring/views.py::class_detail()` 的 `record_requires_makeup_reason`(控制按鈕文字與必填提示)同步改用相同公式。此規則變更只影響提交當下的判斷,不影響已送出的既有紀錄。**2026-09-16 當天再補強一步:課堂紀錄表單在課堂結束前直接不顯示**(使用者要求:「課堂紀錄先不要顯示，課程結束再顯示，不然會有人偷寫」)——原本雖然伺服器端已擋下提早送出,但表單本身仍然全程可見,使用者認為這樣還是可能有人提早在表單裡打好內容準備、課一結束就直接送出("偷寫")。`tutoring/views.py::class_detail()` 新增 `record_window_open`(`now >= session.ends_at`),`templates/tutoring/class_detail.html`「我的課堂紀錄」區塊改成 `{% if own_record or record_window_open %}` 才顯示表單,否則顯示「課堂結束後才能提交課堂紀錄」提示,比照課堂通報(`alert_window_open`)既有的同一種「表單 vs 提示」切換寫法。已送出過的紀錄(`own_record` 存在)不受影響,任何時候都能繼續編輯。伺服器端驗證(`submit_class_record()` 的 `now < session.ends_at`)維持不變,仍是最終把關,這次只是補上對應的畫面呈現。
 - 每位使用者每學期最多 5 次補簽到、5 次補課堂紀錄;兩種額度分開計算。
 - 補簽/補登最後期限:學期結束後第 1 天 23:59:59。
 - 任何一方修改自己的紀錄時,系統會刪除對方針對該作者的舊確認,必須重新確認。

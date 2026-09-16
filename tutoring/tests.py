@@ -1359,6 +1359,19 @@ class ClassWorkflowTests(TestCase):
             "remarks": "",
         }
 
+    def test_schedule_class_outside_semester_error_names_the_exact_semester_dates(self):
+        """2026-09-16(使用者要求):錯誤訊息附上確切的學期起訖日,不要只說「須在本學期
+        內」卻不講範圍是什麼。"""
+        with self.assertRaises(ValidationError) as ctx:
+            schedule_classes(
+                tutor=self.tutor, pairing=self.pairing,
+                class_date=self.semester.ends_on + timedelta(days=1),
+                start_time=time(10), duration="1.0",
+            )
+        message = str(ctx.exception)
+        self.assertIn(self.semester.starts_on.isoformat(), message)
+        self.assertIn(self.semester.ends_on.isoformat(), message)
+
     def test_schedule_class_view_returns_to_schedule_tab_on_success_and_error(self):
         """schedule_class's form lives on the dashboard's #schedule tab; both the success
         and validation-error redirects used to drop the tutor back on #overview instead."""
@@ -1979,7 +1992,10 @@ class ClassWorkflowTests(TestCase):
         self.assertNotContains(response, "逾時補簽原因")
         self.assertNotContains(response, "逾時補登原因")
         self.assertContains(response, "確認簽到 / Check in")
-        self.assertContains(response, "送出紀錄 / Submit record")
+        # 2026-09-16(使用者要求):課堂紀錄表單在課堂結束前完全不顯示(不只是靠送出時的
+        # 伺服器端驗證擋下),避免有人提早打好內容準備直接貼上。
+        self.assertNotContains(response, "送出紀錄 / Submit record")
+        self.assertContains(response, "課堂結束後才能提交課堂紀錄")
         self.assertNotContains(response, "補簽到 / Makeup check-in")
         self.assertNotContains(response, "補填課堂紀錄 / Makeup record")
 
@@ -1990,6 +2006,40 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "補填課堂紀錄 / Makeup record")
         self.assertNotContains(response, "確認簽到 / Check in")
         self.assertNotContains(response, "送出紀錄 / Submit record")
+
+    def test_class_record_form_hidden_until_class_ends_then_appears(self):
+        """2026-09-16(使用者要求):「課堂紀錄先不要顯示，課程結束再顯示，不然會有人偷寫」
+        ——課堂紀錄表單本身在課堂結束前不顯示(不只是靠送出時的伺服器端驗證擋下),避免
+        提早打好內容準備直接貼上;課堂結束後才出現表單。用真實的相對時間(不 mock
+        timezone.now(),避免連帶影響 session/CSRF 等其他也依賴當下時間的中介軟體)建立
+        一堂「進行中」與一堂「已結束」的課程分別驗證。"""
+        real_now = timezone.now()
+        local_now = timezone.localtime(real_now)
+
+        # In progress: started ~10 minutes ago, a 30-minute class ends ~20 minutes from now.
+        in_progress_start = local_now - timedelta(minutes=10)
+        in_progress_time = time(in_progress_start.hour, (in_progress_start.minute // 5) * 5)
+        in_progress_session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=in_progress_start.date(), start_time=in_progress_time,
+            duration=Decimal("0.5"), created_by=self.tutor,
+        )
+
+        # Already ended: started ~40 minutes ago, a 30-minute class ended ~10 minutes ago.
+        ended_start = local_now - timedelta(minutes=40)
+        ended_time = time(ended_start.hour, (ended_start.minute // 5) * 5)
+        ended_session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=ended_start.date(), start_time=ended_time,
+            duration=Decimal("0.5"), created_by=self.tutor,
+        )
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:class_detail", args=[in_progress_session.pk]))
+        self.assertNotContains(response, "送出紀錄 / Submit record")
+        self.assertContains(response, "課堂結束後才能提交課堂紀錄")
+
+        response = self.client.get(reverse("tutoring:class_detail", args=[ended_session.pk]))
+        self.assertContains(response, "送出紀錄 / Submit record")
+        self.assertNotContains(response, "課堂結束後才能提交課堂紀錄")
 
     def test_class_record_rejects_submission_before_class_ends(self):
         """2026-09-16(使用者要求):很多學生在課堂還沒結束前就先填寫課堂紀錄,開放時間點
