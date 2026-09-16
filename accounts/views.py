@@ -565,9 +565,16 @@ def dashboard(request):
     elif request.user.role == Role.TUTOR:
         tutee_matching_program = user_program(request.user)
         qualification = QualificationDocument.objects.filter(tutor=request.user).first()
+        # 2026-09-16(使用者實際回報:登入 NTNU-OIA-TUTOR 卻看不到已成立的配對):原本要求
+        # `semester=current_semester`(當下日期須落在學期起訖區間內)才顯示,導致 Admin 把
+        # 學期 starts_on 改成未來日期(例如新學期正式開課日)時,已經成立的配對會從本人
+        # dashboard 消失,即使配對本身狀態仍是 ACTIVE。使用者確認:已配對的要能先看到,只有
+        # 排課本身要等學期開始(那條規則獨立寫在 schedule_classes() 檢查 pairing.semester
+        # 的起訖日,不受這裡影響)。因此這裡不再要求配對的學期等於「當下正在進行」的學期,
+        # 只要 Pairing.status 仍是 ACTIVE 就視為目前配對。
         pairings = Pairing.objects.filter(
-            semester=current_semester, tutor=request.user, status=PairingStatus.ACTIVE
-        ).select_related("tutee") if current_semester else Pairing.objects.none()
+            tutor=request.user, status=PairingStatus.ACTIVE
+        ).select_related("tutee")
         pending = MatchingInvitation.objects.filter(
             semester=current_semester, status=InvitationStatus.PENDING
         ).filter(Q(tutor=request.user)) if current_semester else MatchingInvitation.objects.none()
@@ -637,9 +644,10 @@ def dashboard(request):
             }
         )
     else:
+        # 2026-09-16(使用者要求,同一次修正的 Tutee 對應分支):見上方 TUTOR 分支的說明。
         pairings = Pairing.objects.filter(
-            semester=current_semester, tutee=request.user, status=PairingStatus.ACTIVE
-        ).select_related("tutor") if current_semester else Pairing.objects.none()
+            tutee=request.user, status=PairingStatus.ACTIVE
+        ).select_related("tutor")
         pending = MatchingInvitation.objects.filter(
             semester=current_semester, tutee=request.user, status=InvitationStatus.PENDING
         ) if current_semester else MatchingInvitation.objects.none()

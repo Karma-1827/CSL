@@ -1645,6 +1645,36 @@ class AdminDashboardNavigationTests(TestCase):
         self.assertNotIn(target_pairing.pk, status_ids)
 
 
+class TutorDashboardPairingVisibilityTests(TestCase):
+    def test_active_pairing_shown_even_before_semester_start_date(self):
+        """2026-09-16(使用者實際回報:登入 NTNU-OIA-TUTOR 卻看不到已成立的配對):Admin 把
+        學期 starts_on 改成未來日期後,已經成立的 ACTIVE 配對原本會從本人 dashboard 消失
+        ——原本的查詢要求 `semester=current_semester`,而 `current_semester`
+        (`tutoring.services.active_semester()`)在今天早於 starts_on 時回傳 None,
+        `pairings` 因此變成 `Pairing.objects.none()`。使用者確認:已配對的要先顯示,只有
+        排課本身要等學期開始(那條規則獨立寫在 schedule_classes() 檢查
+        pairing.semester 的起訖日,不受這裡影響,因此這裡不需要、也不應該連帶放寬)。"""
+        future_semester = Semester.objects.create(
+            name_zh="尚未開始的學期", name_en="Not yet started semester",
+            starts_on=timezone.localdate() + timedelta(days=5),
+            ends_on=timezone.localdate() + timedelta(days=100),
+            is_active=True, program=PartnerProgram.objects.get(code="NTNU"),
+        )
+        tutor = User.objects.create_user(username="EARLY-MATCH-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        tutee = User.objects.create_user(username="EARLY-MATCH-TUTEE", password="Tutee-password-2026", role=Role.TUTEE)
+        Pairing.objects.create(semester=future_semester, tutor=tutor, tutee=tutee)
+
+        self.client.force_login(tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "尚未建立配對")
+        self.assertContains(response, tutee.bilingual_name)
+
+        self.client.force_login(tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "尚未建立配對")
+        self.assertContains(response, tutor.bilingual_name)
+
+
 class IdleAccountFilterTests(TestCase):
     """Checklist item 3: idle accounts are flagged for manual review, never auto-disabled."""
 
