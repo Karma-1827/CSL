@@ -1372,6 +1372,16 @@ class ClassWorkflowTests(TestCase):
         self.assertIn(self.semester.starts_on.isoformat(), message)
         self.assertIn(self.semester.ends_on.isoformat(), message)
 
+    def test_schedule_panel_shows_semester_date_range_next_to_schedule_heading(self):
+        """2026-09-17(使用者要求):在「安排課程 / Schedule a class」旁邊加上標籤,顯示
+        「上課日期須在本學期內 YYYY-MM-DD～YYYY-MM-DD」,日期直接抓 Admin 學期設定的值,
+        不是寫死或另外算的日期。"""
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "上課日期須在本學期內")
+        self.assertContains(response, self.semester.starts_on.strftime("%Y-%m-%d"))
+        self.assertContains(response, self.semester.ends_on.strftime("%Y-%m-%d"))
+
     def test_schedule_class_view_returns_to_schedule_tab_on_success_and_error(self):
         """schedule_class's form lives on the dashboard's #schedule tab; both the success
         and validation-error redirects used to drop the tutor back on #overview instead."""

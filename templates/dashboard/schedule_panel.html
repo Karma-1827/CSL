@@ -14,7 +14,10 @@
     <section class="panel schedule-create-panel">
       <div class="panel-heading">
         <div><span class="eyebrow">SCHEDULE</span><h2>安排課程 <small>Schedule a class</small></h2></div>
-        <span class="privacy-chip">台灣時間 / Taiwan time · UTC/GMT+8</span>
+        <div class="schedule-panel-chips">
+          <span class="privacy-chip">台灣時間 / Taiwan time · UTC/GMT+8</span>
+          {% if current_semester %}<span class="privacy-chip">上課日期須在本學期內 {{ current_semester.starts_on|date:"Y-m-d" }}～{{ current_semester.ends_on|date:"Y-m-d" }} / Class date must be within this range</span>{% endif %}
+        </div>
       </div>
       {% if active_pairings %}
         <form class="schedule-form" action="{% url 'tutoring:schedule_class' %}" method="post">

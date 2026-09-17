@@ -212,7 +212,7 @@ Tutor 瀏覽外籍生候選人清單時,可用性別、華語程度、母語、�
 - 只有 active pairing 的 Tutor 可排課。
 - 課程時數只能為 0.5、1、1.5、2 小時;正式時數依排課時數,不依實際簽到時間差。
 - 開始時間可為全天任一時間,但分鐘只能是 00/05/10/.../55。
-- 新課必須在未來且在 pairing 的 semester 範圍內。**2026-09-16 起,超出範圍的錯誤訊息附上確切的學期起訖日**(使用者要求),不再只說「須在本學期內」卻不講範圍是什麼(`tutoring/services.py::schedule_classes()`)。
+- 新課必須在未來且在 pairing 的 semester 範圍內。**2026-09-16 起,超出範圍的錯誤訊息附上確切的學期起訖日**(使用者要求),不再只說「須在本學期內」卻不講範圍是什麼(`tutoring/services.py::schedule_classes()`)。**2026-09-17 起,Tutor dashboard「我的課表」的「安排課程 / Schedule a class」面板標題旁也直接顯示同樣的學期起訖日**(`templates/dashboard/schedule_panel.html` 新增一個 `.privacy-chip`,文字為「上課日期須在本學期內 YYYY-MM-DD～YYYY-MM-DD」),日期直接讀 `current_semester.starts_on`/`ends_on`(`dashboard()` 既有算好的同一個學期物件,含 `MATCHING_EARLY_OPEN_DAYS` 提前開窗邏輯,不是另外寫死或重算),不需要等實際送出排課表單觸發錯誤才知道範圍。`current_semester` 為 `None` 時(理論上不會發生在已有 active pairing 的 Tutor 身上,但保守起見)不顯示這個標籤。
 - 可每週重複至指定日期;超過學期結束日會截到學期末。
 - 週定義為星期一至星期日。
 - 同一 pairing 每週已排時數上限 2 小時。
