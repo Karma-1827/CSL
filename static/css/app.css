@@ -1630,6 +1630,13 @@ a {
   min-width: 0;
   position: sticky;
   top: 104px;
+  /* 2026-09-22(使用者要求):側邊欄項目一多,高度可能超過視窗,原本只能靠捲動右側
+     內容把它「頂」出畫面才看得到下面的項目。改成側邊欄自己的高度上限跟著視窗
+     剩餘高度走,中間的 .sidebar-nav 有獨立捲軸,不受右側內容長短影響;上方大頭貼
+     與下方提示框維持固定不跟著捲動。 */
+  max-height: calc(100vh - 104px - 24px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -1642,6 +1649,7 @@ a {
   align-items: center;
   gap: 11px;
   padding: 20px 18px;
+  flex-shrink: 0;
   color: #fff;
   background: linear-gradient(
     145deg,
@@ -1679,8 +1687,12 @@ a {
 }
 .sidebar-nav {
   display: grid;
+  align-content: start;
   gap: 5px;
   padding: 13px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
 }
 .sidebar-link {
   min-width: 0;
@@ -1762,6 +1774,7 @@ a {
   gap: 4px;
   margin: 0 13px 13px;
   padding: 13px;
+  flex-shrink: 0;
   border: 1px solid var(--border-strong);
   border-radius: 11px;
   color: var(--navy);
