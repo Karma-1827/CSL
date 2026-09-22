@@ -31,6 +31,9 @@
           <button class="button button-primary schedule-submit" type="submit"><strong>加入課表</strong><small>Add to schedule</small></button>
         </form>
         <p class="help-text">每組每週最多 2 小時；單堂可安排 0.5、1、1.5 或 2 小時。<br>A pair may reserve up to two hours per Monday–Sunday week.</p>
+        {% if tutee_matching_program.code == 'MARYLAND' %}
+          <p class="help-text">馬里蘭計畫建議：每位學生每週安排 30 分鐘中文輔導一次；雙方也可以自由額外加碼練習 30 分鐘英文，非強制規定，僅供參考。<br>Maryland program suggestion: schedule 30 minutes of Mandarin tutoring once a week per student; you and your partner may optionally add an extra 30 minutes of English practice — this is a suggestion, not a system requirement.</p>
+        {% endif %}
       {% else %}
         <div class="empty-state">建立配對後即可安排課程。 / Classes can be scheduled after matching.</div>
       {% endif %}

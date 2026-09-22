@@ -529,6 +529,21 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, self.maryland_program.name_zh)
         self.assertContains(response, self.maryland_program.name_en)
 
+    def test_schedule_panel_shows_maryland_time_split_reminder_only_for_maryland_tutors(self):
+        """2026-09-22(使用者要求):馬里蘭計畫的建議課程安排(每位學生每週 30 分鐘中文，
+        雙方可自由額外加碼 30 分鐘英文)只做提醒，不寫死成排課規則——所以只確認提醒文字
+        在「安排課程」面板正確顯示，且只給馬里蘭 Tutor 看到，NTNU Tutor 不受影響。"""
+        Pairing.objects.create(semester=self.semester, tutor=self.maryland_tutor, tutee=self.maryland)
+        self.client.force_login(self.maryland_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "馬里蘭計畫建議")
+        self.assertContains(response, "30 分鐘中文輔導")
+
+        Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, "馬里蘭計畫建議")
+
     def test_tutor_qualification_panel_is_full_width_and_reuses_upload_guidance(self):
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:dashboard"))
