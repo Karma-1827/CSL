@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import AuditLog, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
-from .forms import ClassRecordForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
+from .forms import ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
 from .reporting import build_excel_xlsx, build_export_csv, build_hours_pdf, tutor_available_programs, user_has_hour_records
 
 from .models import (
@@ -3647,6 +3647,25 @@ class ClassDocumentAdminUploadTests(MatchingFixtureTestCase):
         )
         self.assertEqual(response.status_code, 404)
         self.assertFalse(ClassDocument.objects.exists())
+
+    def test_semester_dropdown_distinguishes_identically_named_semesters_by_program(self):
+        """2026-09-22(使用者回報):NTNU 和 Maryland 這學期剛好都叫「115學年度第1學期」,
+        原本下拉選單直接用 Semester.__str__()(只有名稱,不含計畫),兩個選項長得一模一樣,
+        完全看不出來哪個屬於哪個計畫。"""
+        ntnu_semester = Semester.objects.create(
+            name_zh="115學年度第1學期", name_en="115-1 Semester", program=self.ntnu_program,
+            starts_on=date(2026, 9, 21), ends_on=date(2026, 12, 31), is_active=True,
+        )
+        maryland_semester = Semester.objects.create(
+            name_zh="115學年度第1學期", name_en="115-1 Semester", program=self.maryland_program,
+            starts_on=date(2026, 9, 21), ends_on=date(2026, 12, 31), is_active=True,
+        )
+        form = ClassDocumentUploadForm()
+        ntnu_label = form.fields["semester"].label_from_instance(ntnu_semester)
+        maryland_label = form.fields["semester"].label_from_instance(maryland_semester)
+        self.assertNotEqual(ntnu_label, maryland_label)
+        self.assertIn(self.ntnu_program.name_zh, ntnu_label)
+        self.assertIn(self.maryland_program.name_zh, maryland_label)
 
     def test_semester_from_a_different_program_is_rejected(self):
         other_semester = Semester.objects.create(

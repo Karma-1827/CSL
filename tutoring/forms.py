@@ -64,6 +64,19 @@ class PairingChoiceField(forms.ModelChoiceField):
         return f"{obj.tutee.bilingual_name} · {obj.semester}"
 
 
+class SemesterChoiceField(forms.ModelChoiceField):
+    """A semester <select> labeled with its partner program name, not bare Semester.__str__()
+    (name_zh/name_en only) — two different programs' semesters can share the exact same name
+    (e.g. both this term's NTNU and Maryland periods are named "115學年度第1學期"), which made
+    ClassDocumentUploadForm's dropdown show identical-looking options with no way to tell them
+    apart (2026-09-22, 使用者回報)."""
+
+    def label_from_instance(self, obj):
+        if obj.program:
+            return f"{obj} · {obj.program.name_zh}"
+        return f"{obj}（舊版共用期間 / Legacy shared period）"
+
+
 class ScheduleClassForm(forms.Form):
     pairing = PairingChoiceField(label="學生 / Student", queryset=Pairing.objects.none())
     class_date = forms.DateField(label="上課日期 / Class date", widget=forms.DateInput(attrs={"type": "date"}))
@@ -298,6 +311,7 @@ class ClassDocumentUploadForm(forms.ModelForm):
         model = ClassDocument
         fields = ("program", "semester", "title_zh", "title_en", "file", "is_active")
         widgets = {"is_active": forms.CheckboxInput()}
+        field_classes = {"semester": SemesterChoiceField}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
