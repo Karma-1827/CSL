@@ -4884,7 +4884,14 @@ td small {
   width: min(100%, 440px);
 }
 .matching-exclusion-form {
+  align-items: start;
+  column-gap: clamp(18px, 2.4vw, 28px);
+  row-gap: 20px;
   padding: 4px 0;
+}
+.matching-exclusion-form > div:first-of-type {
+  grid-column: 1 / -1;
+  width: min(100%, 420px);
 }
 .matching-exclusion-form > div:last-of-type,
 .matching-exclusion-form .button {
