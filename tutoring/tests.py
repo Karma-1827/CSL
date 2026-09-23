@@ -2526,6 +2526,13 @@ class ClassWorkflowTests(TestCase):
             submit_incident_report(reporter=self.tutor, category="NOT_A_CATEGORY", content="測試")
         with self.assertRaises(ValidationError):
             submit_incident_report(reporter=self.tutor, category=IncidentReportCategory.OTHER, content="   ")
+        with self.assertRaises(ValidationError):
+            submit_incident_report(
+                reporter=self.tutor,
+                category=IncidentReportCategory.OTHER,
+                content="偽造附件",
+                attachment=SimpleUploadedFile("fake.pdf", b"not a real PDF", content_type="application/pdf"),
+            )
 
     def test_incident_report_accepts_the_system_issue_category(self):
         """2026-09-11(使用者要求):新增「系統問題」分類。"""
@@ -2551,6 +2558,108 @@ class ClassWorkflowTests(TestCase):
 
         dashboard = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(dashboard, "學生當天未出席")
+
+    def test_tutor_and_tutee_can_upload_valid_incident_report_attachment(self):
+        for index, user in enumerate((self.tutor, self.tutee), start=1):
+            with self.subTest(role=user.role):
+                self.client.force_login(user)
+                upload = SimpleUploadedFile(
+                    f"incident-{index}.pdf",
+                    minimal_pdf_bytes(),
+                    content_type="application/pdf",
+                )
+                response = self.client.post(
+                    reverse("tutoring:incident_report"),
+                    {
+                        "category": IncidentReportCategory.SYSTEM_ISSUE,
+                        "content": f"附件回報 {index}",
+                        "attachment": upload,
+                    },
+                )
+                self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+                report = IncidentReport.objects.get(reporter=user, content=f"附件回報 {index}")
+                self.assertEqual(report.attachment_filename, f"incident-{index}.pdf")
+                self.assertTrue(report.attachment.name.startswith("incident_report_attachments/"))
+                self.assertNotIn(f"incident-{index}", Path(report.attachment.name).name)
+
+                dashboard = self.client.get(reverse("accounts:dashboard"))
+                self.assertContains(
+                    dashboard,
+                    reverse("tutoring:download_incident_report_attachment", args=[report.pk]),
+                )
+                report.attachment.delete(save=False)
+
+    def test_incident_report_attachment_uses_private_permission_checked_download(self):
+        upload = SimpleUploadedFile("evidence.png", minimal_png_bytes(), content_type="image/png")
+        report = submit_incident_report(
+            reporter=self.tutor,
+            category=IncidentReportCategory.OTHER,
+            content="需要提供畫面佐證。",
+            attachment=upload,
+        )
+        try:
+            download_url = reverse("tutoring:download_incident_report_attachment", args=[report.pk])
+
+            self.client.force_login(self.tutee)
+            self.assertEqual(self.client.get(download_url).status_code, 404)
+
+            self.client.force_login(self.tutor)
+            response = self.client.get(download_url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Cache-Control"], "private, no-store")
+            self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+            self.assertIn("attachment", response["Content-Disposition"])
+
+            admin = User.objects.create_superuser(
+                username="INCIDENT-DOWNLOAD-ADMIN", password="Admin-password-2026"
+            )
+            self.client.force_login(admin)
+            dashboard = self.client.get(reverse("accounts:dashboard"))
+            self.assertContains(dashboard, download_url)
+            response = self.client.get(download_url)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(
+                AuditLog.objects.filter(
+                    event_type="INCIDENT_REPORT_ATTACHMENT_DOWNLOADED",
+                    metadata__report_id=report.pk,
+                ).exists()
+            )
+            resolve_incident_report(report_id=report.pk, admin=admin, note="已檢視附件")
+            dashboard = self.client.get(reverse("accounts:dashboard"))
+            self.assertContains(dashboard, download_url)
+        finally:
+            report.attachment.delete(save=False)
+
+    def test_invalid_or_oversized_incident_report_attachment_is_rejected(self):
+        self.client.force_login(self.tutor)
+        invalid_uploads = (
+            SimpleUploadedFile("fake.pdf", b"not a real PDF", content_type="application/pdf"),
+            SimpleUploadedFile(
+                "oversized.pdf",
+                b"%PDF-1.4\n" + b"x" * 1_000_000,
+                content_type="application/pdf",
+            ),
+        )
+        for index, upload in enumerate(invalid_uploads, start=1):
+            with self.subTest(index=index):
+                response = self.client.post(
+                    reverse("tutoring:incident_report"),
+                    {
+                        "category": IncidentReportCategory.SYSTEM_ISSUE,
+                        "content": f"無效附件 {index}",
+                        "attachment": upload,
+                    },
+                )
+                self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+                self.assertFalse(IncidentReport.objects.filter(content=f"無效附件 {index}").exists())
+
+    def test_incident_report_form_declares_multipart_and_same_file_rules_as_qualification(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'enctype="multipart/form-data"')
+        self.assertContains(response, 'accept=".pdf,.jpg,.jpeg,.png"')
+        self.assertContains(response, 'data-max-file-bytes="1000000"')
+        self.assertContains(response, "PDF、JPG、PNG，最大 1 MB。")
 
     def test_admin_can_resolve_incident_report_and_dashboard_history_updates(self):
         report = submit_incident_report(

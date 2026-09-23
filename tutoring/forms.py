@@ -250,8 +250,21 @@ class StandaloneIncidentReportForm(forms.ModelForm):
 
     class Meta:
         model = IncidentReport
-        fields = ("category", "content")
-        widgets = {"content": forms.Textarea(attrs={"rows": 3})}
+        fields = ("category", "content", "attachment")
+        widgets = {
+            "content": forms.Textarea(attrs={"rows": 3}),
+            "attachment": forms.ClearableFileInput(
+                attrs={
+                    "accept": ".pdf,.jpg,.jpeg,.png",
+                    "data-max-file-bytes": "1000000",
+                    "data-max-file-size-label": "1 MB",
+                }
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["attachment"].help_text = "PDF、JPG、PNG，最大 1 MB。\nPDF, JPG, or PNG, up to 1 MB."
 
 
 class MakeupReasonForm(forms.Form):

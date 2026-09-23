@@ -49,6 +49,11 @@ urlpatterns = [
     path("alerts/<int:alert_id>/resolve/", views.resolve_alert, name="resolve_alert"),
     path("incident-reports/submit/", views.incident_report, name="incident_report"),
     path(
+        "incident-reports/<int:report_id>/attachment/download/",
+        views.download_incident_report_attachment,
+        name="download_incident_report_attachment",
+    ),
+    path(
         "incident-reports/<int:report_id>/resolve/",
         views.resolve_incident_report_view,
         name="resolve_incident_report",

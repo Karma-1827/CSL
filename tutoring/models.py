@@ -159,6 +159,10 @@ def class_record_attachment_upload_to(instance, filename):
     return _uuid_upload_path("class_record_attachments", filename)
 
 
+def incident_report_attachment_upload_to(instance, filename):
+    return _uuid_upload_path("incident_report_attachments", filename)
+
+
 def class_document_upload_to(instance, filename):
     return _uuid_upload_path("class_documents", filename)
 
@@ -812,6 +816,13 @@ class IncidentReport(models.Model):
     reporter = models.ForeignKey(User, on_delete=models.PROTECT, related_name="reported_incident_reports")
     category = models.CharField("分類 / Category", max_length=20, choices=IncidentReportCategory.choices)
     content = models.TextField("回報內容 / Report content")
+    attachment = models.FileField(
+        "附件（選填） / Attachment (optional)",
+        upload_to=incident_report_attachment_upload_to,
+        blank=True,
+        validators=[validate_qualification_file],
+    )
+    original_attachment_filename = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=12, choices=IncidentReportStatus.choices, default=IncidentReportStatus.PENDING)
     resolved_by = models.ForeignKey(
         User, on_delete=models.PROTECT, null=True, blank=True, related_name="resolved_incident_reports"
@@ -824,6 +835,17 @@ class IncidentReport(models.Model):
         ordering = ["-created_at"]
         verbose_name = "異常回報 / Incident report"
         verbose_name_plural = "異常回報 / Incident reports"
+
+    def save(self, *args, **kwargs):
+        if self.attachment and not self.attachment._committed and not self.original_attachment_filename:
+            self.original_attachment_filename = Path(self.attachment.name).name
+        super().save(*args, **kwargs)
+
+    @property
+    def attachment_filename(self):
+        if not self.attachment:
+            return ""
+        return self.original_attachment_filename or Path(self.attachment.name).name
 
 
 class HourAdjustment(models.Model):

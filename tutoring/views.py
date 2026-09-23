@@ -19,7 +19,7 @@ from .forms import (
     StandaloneIncidentReportForm,
 )
 from .models import (
-    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassSession,
+    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassSession, IncidentReport,
     Pairing, PairingMessage, PairingStatus, Semester,
 )
 from .reporting import (
@@ -887,7 +887,7 @@ def incident_report(request):
     class's own ClassAlert (課堂通報) instead."""
     if request.user.role not in {Role.TUTOR, Role.TUTEE}:
         raise Http404
-    form = StandaloneIncidentReportForm(request.POST)
+    form = StandaloneIncidentReportForm(request.POST, request.FILES)
     if not form.is_valid():
         for errors in form.errors.values():
             for error in errors:
@@ -898,6 +898,7 @@ def incident_report(request):
             reporter=request.user,
             category=form.cleaned_data["category"],
             content=form.cleaned_data["content"],
+            attachment=form.cleaned_data.get("attachment"),
         )
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
@@ -910,6 +911,30 @@ def incident_report(request):
         )
         messages.success(request, "異常回報已送出。 / Incident report submitted.")
     return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
+
+
+@login_required
+def download_incident_report_attachment(request, report_id):
+    report = get_object_or_404(IncidentReport, pk=report_id)
+    if request.user.role != Role.ADMIN and report.reporter_id != request.user.pk:
+        raise Http404
+    if not report.attachment:
+        raise Http404
+    AuditLog.record(
+        actor=request.user,
+        target_user=report.reporter,
+        event_type="INCIDENT_REPORT_ATTACHMENT_DOWNLOADED",
+        description="下載異常回報附件 / Incident report attachment downloaded",
+        metadata={"report_id": report.pk},
+    )
+    response = FileResponse(
+        report.attachment.open("rb"),
+        as_attachment=True,
+        filename=report.attachment_filename,
+    )
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required

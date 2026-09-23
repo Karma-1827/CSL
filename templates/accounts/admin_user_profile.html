@@ -116,7 +116,7 @@
       <div class="panel-heading"><div><span class="eyebrow">INCIDENT REPORTS</span><h2>異常回報紀錄 <small>Incident reports</small></h2></div></div>
       <div class="admin-class-list">
         {% for report in incident_reports %}
-          <div><time>{{ report.created_at|date:"Y-m-d" }}<small>{{ report.created_at|date:"H:i" }}</small></time><span><strong>{{ report.get_category_display }}</strong><small>{{ report.content|truncatechars:60 }} · {{ report.get_status_display }}</small></span></div>
+          <div><time>{{ report.created_at|date:"Y-m-d" }}<small>{{ report.created_at|date:"H:i" }}</small></time><span><strong>{{ report.get_category_display }}</strong><small>{{ report.content|truncatechars:60 }} · {{ report.get_status_display }}</small>{% if report.attachment %}<a href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a>{% endif %}</span></div>
         {% empty %}<div class="empty-state compact">目前沒有異常回報紀錄。 / No incident reports.</div>{% endfor %}
       </div>
     </section>

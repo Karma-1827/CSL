@@ -38,6 +38,7 @@ from .models import (
     IncidentReport,
     IncidentReportCategory,
     IncidentReportStatus,
+    validate_qualification_file,
 )
 
 
@@ -1381,7 +1382,7 @@ def resolve_class_alert(*, alert_id, admin, note=""):
 
 
 @transaction.atomic
-def submit_incident_report(*, reporter, category, content):
+def submit_incident_report(*, reporter, category, content, attachment=None):
     # 2026-09-11(使用者要求):不接受任何課程/對象——跟當堂課有關的問題已有 ClassAlert
     # (課堂通報)可用,異常回報保留給其餘所有情境,完全自由填寫分類與內容。
     if category not in IncidentReportCategory.values:
@@ -1389,7 +1390,14 @@ def submit_incident_report(*, reporter, category, content):
     content = content.strip()
     if not content:
         raise ValidationError("請填寫回報內容。 / Report content is required.")
-    return IncidentReport.objects.create(reporter=reporter, category=category, content=content)
+    if attachment:
+        validate_qualification_file(attachment)
+    return IncidentReport.objects.create(
+        reporter=reporter,
+        category=category,
+        content=content,
+        attachment=attachment,
+    )
 
 
 @transaction.atomic
