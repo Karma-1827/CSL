@@ -3412,6 +3412,12 @@ td small {
   padding-top: 16px;
   border-top: 1px solid #eedce2;
 }
+.incident-report-group > .table-wrap,
+.incident-report-group > .empty-state {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eedce2;
+}
 .schedule-group {
   padding: 15px 17px;
   border: 1px solid var(--border);

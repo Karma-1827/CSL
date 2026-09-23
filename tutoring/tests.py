@@ -1095,6 +1095,13 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertContains(response, "解除配對審核")
         self.assertContains(response, "已多次未到")
 
+        release_request = PairingReleaseRequest.objects.get(pairing=pairing)
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=True)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "提出申請者 / Requester")
+        self.assertContains(response, 'class="release-requester"')
+        self.assertContains(response, self.tutor.bilingual_name)
+
     def test_counterpart_sees_pending_release_notice_but_requester_does_not(self):
         """2026-09-10 (user-requested, after discussion with the department office): the
         counterpart (not the requester, who already knows) must see a notice on their own
@@ -2442,6 +2449,14 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "異常回報")
         self.assertContains(response, "教室臨時被佔用")
+        self.assertContains(
+            response,
+            'class="panel review-status-group incident-report-group incident-report-pending" open',
+        )
+        self.assertContains(
+            response,
+            'class="panel review-status-group incident-report-group incident-report-history"',
+        )
 
         response = self.client.post(
             reverse("tutoring:resolve_incident_report", args=[report.pk]),

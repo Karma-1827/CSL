@@ -246,7 +246,7 @@
         </section>
         <section class="panel">
           <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>處理紀錄 <small>Review history</small></h2></div></div>
-          {% if pairing_release_history %}<div class="table-wrap"><table><thead><tr><th>配對 / Pairing</th><th>原因 / Reason</th><th>結果 / Result</th><th>處理時間 / Reviewed</th></tr></thead><tbody>{% for release in pairing_release_history %}<tr><td><strong>{{ release.pairing.tutor.bilingual_name }} × {{ release.pairing.tutee.bilingual_name }}</strong><small>{{ release.pairing.semester }}</small></td><td>{{ release.get_reason_display }}{% if release.reason_note %}<small>{{ release.reason_note }}</small>{% endif %}</td><td><span class="result-text status-{% if release.status == 'REJECTED' %}rejected{% else %}approved{% endif %}">{{ release.get_status_display }}</span>{% if release.review_note %}<small>{{ release.review_note }}</small>{% endif %}</td><td>{{ release.reviewed_at|date:"Y-m-d H:i" }}{% if release.reviewed_by %}<small>{{ release.reviewed_by.bilingual_name }}</small>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">目前沒有已處理紀錄。 / No reviewed requests yet.</div>{% endif %}
+          {% if pairing_release_history %}<div class="table-wrap"><table><thead><tr><th>配對 / Pairing</th><th>提出申請者 / Requester</th><th>原因 / Reason</th><th>結果 / Result</th><th>處理時間 / Reviewed</th></tr></thead><tbody>{% for release in pairing_release_history %}<tr><td><strong>{{ release.pairing.tutor.bilingual_name }} × {{ release.pairing.tutee.bilingual_name }}</strong><small>{{ release.pairing.semester }}</small></td><td class="release-requester">{{ release.requested_by.bilingual_name }}<small>{{ release.requested_by.get_role_display }}</small></td><td>{{ release.get_reason_display }}{% if release.reason_note %}<small>{{ release.reason_note }}</small>{% endif %}</td><td><span class="result-text status-{% if release.status == 'REJECTED' %}rejected{% else %}approved{% endif %}">{{ release.get_status_display }}</span>{% if release.review_note %}<small>{{ release.review_note }}</small>{% endif %}</td><td>{{ release.reviewed_at|date:"Y-m-d H:i" }}{% if release.reviewed_by %}<small>{{ release.reviewed_by.bilingual_name }}</small>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">目前沒有已處理紀錄。 / No reviewed requests yet.</div>{% endif %}
         </section>
       </section>
       <section class="dashboard-view" data-dashboard-panel="class-alerts">
@@ -278,8 +278,8 @@
       </section>
       <section class="dashboard-view" data-dashboard-panel="incident-reports">
         <div class="view-heading"><span>INCIDENT REPORTS</span><h2>異常回報 <small>Incident reports</small></h2></div>
-        <section class="panel">
-          <div class="panel-heading"><div><span class="eyebrow">PENDING</span><h2>待處理回報 <small>Pending reports</small></h2></div></div>
+        <details class="panel review-status-group incident-report-group incident-report-pending" open>
+          <summary><span><strong>待處理回報</strong><small>Pending reports</small></span><em>{{ pending_incident_reports|length }}</em></summary>
           {% if pending_incident_reports %}
             <div class="makeup-review-list">
               {% for report in pending_incident_reports %}
@@ -290,16 +290,16 @@
               {% endfor %}
             </div>
           {% else %}<div class="empty-state">目前沒有待處理的異常回報。 / No pending incident reports.</div>{% endif %}
-        </section>
-        <section class="panel">
-          <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>紀錄 <small>Logged reports</small></h2></div></div>
+        </details>
+        <details class="panel review-status-group incident-report-group incident-report-history">
+          <summary><span><strong>紀錄</strong><small>Logged reports</small></span><em>{{ incident_report_history|length }}</em></summary>
           {% if incident_report_history %}
             <div class="table-wrap"><table>
               <thead><tr><th>送出時間 / Submitted</th><th>通報者 / Reporter</th><th>分類 / Category</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th></tr></thead>
               <tbody>{% for report in incident_report_history %}<tr><td>{{ report.created_at|date:"Y-m-d H:i" }}</td><td>{{ report.reporter.bilingual_name }}</td><td>{{ report.get_category_display }}</td><td>{{ report.resolution_note }}</td><td>{{ report.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ report.resolved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
             </table></div>
           {% else %}<div class="empty-state">目前沒有已紀錄的回報。 / No logged reports yet.</div>{% endif %}
-        </section>
+        </details>
       </section>
       <section class="dashboard-view" data-dashboard-panel="class-review">
         <div class="view-heading"><span>CLASS REVIEW</span><h2>課程審核 <small>Class review</small></h2></div>
