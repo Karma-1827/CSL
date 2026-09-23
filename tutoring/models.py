@@ -422,6 +422,53 @@ class Pairing(models.Model):
         return self.release_requests.filter(status=PairingReleaseStatus.PENDING).first()
 
 
+class MatchingExclusion(models.Model):
+    """Admin-managed, semester-scoped exclusion between one Tutor and one Tutee.
+
+    Exclusions are deliberately retained after revocation so the department can audit
+    who created/removed a rule and why.  They are not user-facing: Tutor/Tutee candidate
+    lists simply omit the other participant.
+    """
+
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name="matching_exclusions")
+    tutor = models.ForeignKey(User, on_delete=models.PROTECT, related_name="tutor_matching_exclusions")
+    tutee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="tutee_matching_exclusions")
+    reason = models.TextField("內部原因 / Internal reason", max_length=500)
+    is_active = models.BooleanField("生效中 / Active", default=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="created_matching_exclusions",
+        verbose_name="建立者 / Created by",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="revoked_matching_exclusions",
+        verbose_name="解除者 / Revoked by",
+    )
+    revoked_at = models.DateTimeField("解除時間 / Revoked at", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "配對排除 / Matching exclusion"
+        verbose_name_plural = "配對排除 / Matching exclusions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["semester", "tutor", "tutee"],
+                condition=Q(is_active=True),
+                name="unique_active_matching_exclusion",
+            )
+        ]
+
+    def clean(self):
+        if self.tutor_id and self.tutor.role != Role.TUTOR:
+            raise ValidationError({"tutor": "排除對象的 Tutor 身分不正確。 / Invalid tutor role."})
+        if self.tutee_id and self.tutee.role != Role.TUTEE:
+            raise ValidationError({"tutee": "排除對象的 Tutee 身分不正確。 / Invalid tutee role."})
+        if self.created_by_id and self.created_by.role != Role.ADMIN:
+            raise ValidationError({"created_by": "建立者必須是管理員。 / Creator must be an administrator."})
+        if self.revoked_by_id and self.revoked_by.role != Role.ADMIN:
+            raise ValidationError({"revoked_by": "解除者必須是管理員。 / Revoker must be an administrator."})
+
+
 class PairingMessage(models.Model):
     pairing = models.ForeignKey(Pairing, on_delete=models.PROTECT, related_name="messages")
     sender = models.ForeignKey(User, on_delete=models.PROTECT, related_name="sent_pairing_messages")

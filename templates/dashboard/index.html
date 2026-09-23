@@ -19,6 +19,7 @@
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>系統總覽<small>Overview</small></b></a>
             <a class="sidebar-link" href="#qualifications" data-dashboard-target="qualifications"><span aria-hidden="true">✓</span><b>口語能力審核<small>Oral proficiency</small></b>{% if pending_qualifications %}<em>{{ pending_qualifications|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#matching" data-dashboard-target="matching"><span aria-hidden="true">↔</span><b>配對管理<small>Matching</small></b></a>
+            <a class="sidebar-link" href="#matching-exclusions" data-dashboard-target="matching-exclusions"><span aria-hidden="true">⊘</span><b>配對排除<small>Matching exclusions</small></b></a>
             <a class="sidebar-link" href="#pairing-releases" data-dashboard-target="pairing-releases"><span aria-hidden="true">⌁</span><b>解除審核<small>Pairing releases</small></b>{% if pending_pairing_releases %}<em>{{ pending_pairing_releases|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-alerts" data-dashboard-target="class-alerts"><span aria-hidden="true">!</span><b>課堂通報<small>Class alerts</small></b>{% if active_class_alerts %}<em>{{ active_class_alerts|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b>{% if pending_incident_reports %}<em>{{ pending_incident_reports|length }}</em>{% endif %}</a>
@@ -219,6 +220,34 @@
           </table></div>
         {% else %}<div class="empty-state">目前沒有待回覆邀請。 / No invitations are awaiting a response.</div>{% endif %}
       </section>
+      </section>
+      <section class="dashboard-view" data-dashboard-panel="matching-exclusions">
+        <div class="view-heading"><span>MATCHING EXCLUSIONS</span><h2>配對排除 <small>Matching exclusions</small></h2><p>設定特定老師與學生在指定學期不得互相搜尋或邀請；內部原因不會顯示給使用者。 / Prevent a specific tutor and tutee from finding or inviting each other during a semester. Internal reasons remain private.</p></div>
+        <section class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">NEW EXCLUSION</span><h2>新增排除 <small>Create exclusion</small></h2></div></div>
+          <form class="semester-form matching-exclusion-form" action="{% url 'tutoring:create_matching_exclusion' %}" method="post">
+            {% csrf_token %}{{ matching_exclusion_form.as_div }}
+            <button class="button button-danger" type="submit">啟用配對排除 / Activate exclusion</button>
+          </form>
+        </section>
+        <section class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">ACTIVE</span><h2>生效中的排除 <small>Active exclusions</small></h2></div><span class="result-count">{{ active_matching_exclusions|length }} 筆 / entries</span></div>
+          {% if active_matching_exclusions %}
+            <div class="table-wrap"><table>
+              <thead><tr><th>學期 / Semester</th><th>老師 / Tutor</th><th>學生 / Tutee</th><th>內部原因 / Internal reason</th><th>建立紀錄 / Created</th><th>操作 / Action</th></tr></thead>
+              <tbody>{% for exclusion in active_matching_exclusions %}<tr><td>{{ exclusion.semester }}</td><td><strong>{{ exclusion.tutor.bilingual_name }}</strong><small>{{ exclusion.tutor.username }}</small></td><td><strong>{{ exclusion.tutee.bilingual_name }}</strong><small>{{ exclusion.tutee.username }}</small></td><td>{{ exclusion.reason }}</td><td>{{ exclusion.created_at|date:"Y-m-d H:i" }}{% if exclusion.created_by %}<small>{{ exclusion.created_by.bilingual_name }}</small>{% endif %}</td><td><form action="{% url 'tutoring:revoke_matching_exclusion' exclusion.pk %}" method="post">{% csrf_token %}<button class="button button-secondary button-small" type="submit">解除排除 / Revoke</button></form></td></tr>{% endfor %}</tbody>
+            </table></div>
+          {% else %}<div class="empty-state">目前沒有生效中的配對排除。 / No active matching exclusions.</div>{% endif %}
+        </section>
+        <section class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>解除紀錄 <small>Revocation history</small></h2></div></div>
+          {% if matching_exclusion_history %}
+            <div class="table-wrap"><table>
+              <thead><tr><th>學期 / Semester</th><th>老師 / Tutor</th><th>學生 / Tutee</th><th>內部原因 / Internal reason</th><th>建立 / Created</th><th>解除 / Revoked</th></tr></thead>
+              <tbody>{% for exclusion in matching_exclusion_history %}<tr><td>{{ exclusion.semester }}</td><td><strong>{{ exclusion.tutor.bilingual_name }}</strong><small>{{ exclusion.tutor.username }}</small></td><td><strong>{{ exclusion.tutee.bilingual_name }}</strong><small>{{ exclusion.tutee.username }}</small></td><td>{{ exclusion.reason }}</td><td>{{ exclusion.created_at|date:"Y-m-d H:i" }}{% if exclusion.created_by %}<small>{{ exclusion.created_by.bilingual_name }}</small>{% endif %}</td><td>{{ exclusion.revoked_at|date:"Y-m-d H:i" }}{% if exclusion.revoked_by %}<small>{{ exclusion.revoked_by.bilingual_name }}</small>{% endif %}</td></tr>{% endfor %}</tbody>
+            </table></div>
+          {% else %}<div class="empty-state">目前沒有解除紀錄。 / No revoked exclusions yet.</div>{% endif %}
+        </section>
       </section>
       <section class="dashboard-view" data-dashboard-panel="pairing-releases">
         <div class="view-heading"><span>PAIRING RELEASES</span><h2>解除配對審核 <small>Pairing release review</small></h2><p>處理解除申請並保留完整結果。 / Review release requests and retain their outcomes.</p></div>

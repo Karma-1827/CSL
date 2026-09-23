@@ -4883,6 +4883,26 @@ td small {
   justify-self: center;
   width: min(100%, 440px);
 }
+.matching-exclusion-form {
+  padding: 4px 0;
+}
+.matching-exclusion-form > div:last-of-type,
+.matching-exclusion-form .button {
+  grid-column: 1 / -1;
+}
+.matching-exclusion-form .helptext {
+  color: var(--ink-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+.matching-exclusion-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+.matching-exclusion-form .button {
+  justify-self: center;
+  width: min(100%, 440px);
+}
 .semester-settings-card form,
 .semester-deadlines {
   margin: 0 18px 18px;

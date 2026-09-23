@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.models import AuditLog, PartnerProgram, Role
 
 from .forms import (
-    AdminPairingForm, ClassAlertForm, ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm,
+    AdminMatchingExclusionForm, AdminPairingForm, ClassAlertForm, ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm,
     PairingMessageForm, RescheduleClassForm, ScheduleClassForm, SemesterCreateForm, SemesterSettingsForm,
     StandaloneIncidentReportForm,
 )
@@ -40,8 +40,10 @@ from .services import (
     class_is_valid,
     confirm_counterpart,
     create_admin_pairing,
+    create_matching_exclusion,
     export_users_for_program,
     respond_to_invitation,
+    revoke_matching_exclusion,
     reschedule_class,
     report_class_alert,
     resolve_class_alert,
@@ -440,6 +442,46 @@ def create_pairing(request):
     else:
         messages.success(request, "已建立配對。 / Pairing created.")
     return redirect(f"{reverse('accounts:dashboard')}#matching")
+
+
+@login_required
+@require_POST
+def create_exclusion(request):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    form = AdminMatchingExclusionForm(request.POST)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(f"{reverse('accounts:dashboard')}#matching-exclusions")
+    try:
+        create_matching_exclusion(
+            admin=request.user,
+            tutor_id=form.cleaned_data["tutor"].pk,
+            tutee_id=form.cleaned_data["tutee"].pk,
+            semester_id=form.cleaned_data["semester"].pk,
+            reason=form.cleaned_data["reason"],
+        )
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        messages.success(request, "配對排除已生效。 / Matching exclusion is now active.")
+    return redirect(f"{reverse('accounts:dashboard')}#matching-exclusions")
+
+
+@login_required
+@require_POST
+def revoke_exclusion(request, pk):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        revoke_matching_exclusion(admin=request.user, exclusion_id=pk)
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        messages.success(request, "配對排除已解除。 / Matching exclusion revoked.")
+    return redirect(f"{reverse('accounts:dashboard')}#matching-exclusions")
 
 
 @login_required

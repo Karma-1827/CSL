@@ -21,6 +21,8 @@ urlpatterns = [
     path("invitations/<int:pk>/respond/", views.respond_invitation, name="respond_invitation"),
     path("invitations/<int:pk>/cancel/", views.cancel_pending_invitation, name="cancel_invitation"),
     path("pairings/admin-create/", views.create_pairing, name="create_pairing"),
+    path("matching-exclusions/create/", views.create_exclusion, name="create_matching_exclusion"),
+    path("matching-exclusions/<int:pk>/revoke/", views.revoke_exclusion, name="revoke_matching_exclusion"),
     path("pairings/<int:pk>/release/", views.request_pairing_release, name="request_pairing_release"),
     path(
         "pairing-release-requests/<int:pk>/review/",

@@ -72,7 +72,9 @@ from .services import (
     class_is_valid,
     confirm_counterpart,
     create_admin_pairing,
+    create_matching_exclusion,
     respond_to_invitation,
+    revoke_matching_exclusion,
     resolve_class_alert,
     resolve_incident_report,
     review_class_session,
@@ -1341,6 +1343,105 @@ class AdminPairingTests(MatchingFixtureTestCase):
         })
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Pairing.objects.filter(tutor=self.tutor, tutee=self.tutee).exists())
+
+
+class MatchingExclusionTests(MatchingFixtureTestCase):
+    def setUp(self):
+        super().setUp()
+        self.admin = User.objects.create_superuser(
+            username="EXCLUSION-ADMIN", password="Admin-password-2026"
+        )
+
+    def create_exclusion(self):
+        return create_matching_exclusion(
+            admin=self.admin,
+            tutor_id=self.tutor.pk,
+            tutee_id=self.tutee.pk,
+            semester_id=self.semester.pk,
+            reason="內部測試原因",
+        )
+
+    def test_exclusion_hides_both_participants_but_not_from_other_tutor(self):
+        other_tutor = self.make_tutor("TUTOR-OTHER", "其他老師", "Other Tutor")
+        self.create_exclusion()
+        tutor_candidate_ids = {
+            row["user_id"] for row in anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)
+        }
+        tutee_candidate_ids = {
+            row["user_id"] for row in anonymous_tutor_candidates(semester=self.semester, tutee=self.tutee)
+        }
+        other_candidate_ids = {
+            row["user_id"] for row in anonymous_tutee_candidates(semester=self.semester, tutor=other_tutor)
+        }
+        self.assertNotIn(self.tutee.pk, tutor_candidate_ids)
+        self.assertNotIn(self.tutor.pk, tutee_candidate_ids)
+        self.assertIn(self.tutee.pk, other_candidate_ids)
+
+    def test_exclusion_blocks_direct_invitation_and_admin_pairing(self):
+        self.create_exclusion()
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk)
+        with self.assertRaises(ValidationError):
+            create_admin_pairing(
+                admin=self.admin,
+                tutor_id=self.tutor.pk,
+                tutee_id=self.tutee.pk,
+                semester_id=self.semester.pk,
+            )
+
+    def test_creating_exclusion_cancels_pending_invitation_without_exposing_reason(self):
+        invitation = send_invitation(
+            initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=self.tutee.pk
+        )
+        self.create_exclusion()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, InvitationStatus.CANCELLED)
+        self.assertNotIn(
+            "內部測試原因",
+            AuditLog.objects.get(event_type="INVITATION_CANCELLED_BY_MATCHING_EXCLUSION").description,
+        )
+
+    def test_revocation_restores_visibility_and_keeps_history(self):
+        exclusion = self.create_exclusion()
+        revoke_matching_exclusion(admin=self.admin, exclusion_id=exclusion.pk)
+        exclusion.refresh_from_db()
+        self.assertFalse(exclusion.is_active)
+        self.assertEqual(exclusion.revoked_by, self.admin)
+        candidate_ids = {
+            row["user_id"] for row in anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)
+        }
+        self.assertIn(self.tutee.pk, candidate_ids)
+
+    def test_internal_reason_is_not_rendered_to_tutor_or_tutee(self):
+        self.create_exclusion()
+        for user in (self.tutor, self.tutee):
+            self.client.force_login(user)
+            response = self.client.get(reverse("accounts:dashboard"))
+            self.assertNotContains(response, "內部測試原因")
+
+    def test_admin_navigation_places_exclusions_between_matching_and_releases(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        matching_index = content.index('data-dashboard-target="matching"')
+        exclusion_index = content.index('data-dashboard-target="matching-exclusions"')
+        release_index = content.index('data-dashboard-target="pairing-releases"')
+        self.assertLess(matching_index, exclusion_index)
+        self.assertLess(exclusion_index, release_index)
+        self.assertContains(response, "內部原因不會顯示給使用者")
+
+    def test_non_admin_cannot_create_or_revoke_exclusion(self):
+        with self.assertRaises(ValidationError):
+            create_matching_exclusion(
+                admin=self.tutor,
+                tutor_id=self.tutor.pk,
+                tutee_id=self.tutee.pk,
+                semester_id=self.semester.pk,
+                reason="should fail",
+            )
+        exclusion = self.create_exclusion()
+        with self.assertRaises(ValidationError):
+            revoke_matching_exclusion(admin=self.tutor, exclusion_id=exclusion.pk)
 
 
 class ClassWorkflowTests(TestCase):

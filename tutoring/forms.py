@@ -454,3 +454,31 @@ class AdminPairingForm(forms.Form):
         label="學期 / 期間 (Semester / period)",
         queryset=Semester.objects.filter(is_active=True).order_by("-starts_on"),
     )
+
+
+class MatchingExclusionUserChoiceField(forms.ModelChoiceField):
+    """Show both the person's name and student ID in the Admin-only exclusion form."""
+
+    def label_from_instance(self, obj):
+        return f"{obj.bilingual_name}（{obj.username}）"
+
+
+class AdminMatchingExclusionForm(forms.Form):
+    semester = SemesterChoiceField(
+        label="學期 / Semester",
+        queryset=Semester.objects.filter(is_active=True).select_related("program").order_by("-starts_on"),
+    )
+    tutor = MatchingExclusionUserChoiceField(
+        label="老師 / Tutor",
+        queryset=User.objects.filter(role=Role.TUTOR, is_active=True).order_by("username"),
+    )
+    tutee = MatchingExclusionUserChoiceField(
+        label="學生 / Tutee",
+        queryset=User.objects.filter(role=Role.TUTEE, is_active=True).order_by("username"),
+    )
+    reason = forms.CharField(
+        label="內部原因 / Internal reason",
+        max_length=500,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="僅管理員可見，不會顯示給老師或學生。 / Visible to administrators only.",
+    )

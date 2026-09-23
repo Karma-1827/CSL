@@ -21,6 +21,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from tutoring.models import (
     InvitationStatus,
+    MatchingExclusion,
     MatchingInvitation,
     Pairing,
     PairingReleaseReason,
@@ -42,6 +43,7 @@ from tutoring.models import (
     IncidentReportStatus,
 )
 from tutoring.forms import (
+    AdminMatchingExclusionForm,
     AdminPairingForm,
     ClassDocumentUploadForm,
     HoursDownloadForm,
@@ -530,6 +532,13 @@ def dashboard(request):
                 "pairing_status": pairing_status,
                 "pairing_page": pairing_page,
                 "admin_pairing_form": AdminPairingForm(),
+                "matching_exclusion_form": AdminMatchingExclusionForm(),
+                "active_matching_exclusions": MatchingExclusion.objects.filter(is_active=True).select_related(
+                    "semester", "tutor", "tutee", "created_by"
+                )[:100],
+                "matching_exclusion_history": MatchingExclusion.objects.filter(is_active=False).select_related(
+                    "semester", "tutor", "tutee", "created_by", "revoked_by"
+                )[:50],
                 "pending_pairing_releases": PairingReleaseRequest.objects.filter(
                     status=PairingReleaseStatus.PENDING
                 ).select_related("pairing__semester", "pairing__tutor", "pairing__tutee", "requested_by")[:30],

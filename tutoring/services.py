@@ -11,6 +11,7 @@ from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, User
 
 from .models import (
     InvitationStatus,
+    MatchingExclusion,
     MatchingInvitation,
     Pairing,
     PairingReleaseReason,
@@ -475,6 +476,22 @@ def _pending_invitation_count(user, semester):
     ).count()
 
 
+def matching_exclusion_exists(*, semester, tutor, tutee):
+    return MatchingExclusion.objects.filter(
+        semester=semester, tutor=tutor, tutee=tutee, is_active=True
+    ).exists()
+
+
+def _validate_not_matching_excluded(*, semester, tutor, tutee):
+    if matching_exclusion_exists(semester=semester, tutor=tutor, tutee=tutee):
+        # Deliberately generic: exclusion existence and its internal reason must not be
+        # disclosed to either participant, including through a manually crafted POST.
+        raise ValidationError(
+            "此邀請目前無法送出，請重新整理後再試。 / "
+            "This invitation cannot be sent right now. Please refresh and try again."
+        )
+
+
 @transaction.atomic
 def send_invitation(*, initiator, tutor_id, tutee_id):
     synchronize_matching_state()
@@ -487,6 +504,7 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
         raise ValidationError("您不是這筆邀請的參與者。 / You are not a participant in this invitation.")
     if initiator.pk == tutee.pk and not _tutee_can_initiate_invitation(tutee):
         raise ValidationError("此 Tutee 類別不能主動邀請 Tutor。 / This tutee type cannot initiate invitations.")
+    _validate_not_matching_excluded(semester=semester, tutor=tutor, tutee=tutee)
     if not tutor_can_serve_program(tutor, user_program(tutee)):
         raise ValidationError(
             "此 Tutor 不在該計畫的修課名單中，無法配對。 / This tutor is not on that program's course roster and cannot be matched."
@@ -562,6 +580,9 @@ def respond_to_invitation(*, invitation_id, responder, accept):
         return None
     _validate_matching_window(invitation.semester)
     list(User.objects.select_for_update().filter(pk__in=[invitation.tutor_id, invitation.tutee_id]))
+    _validate_not_matching_excluded(
+        semester=invitation.semester, tutor=invitation.tutor, tutee=invitation.tutee
+    )
     if not tutor_has_approved_qualification(invitation.tutor):
         raise ValidationError("Tutor 尚未通過口語能力審查。 / The tutor's oral proficiency has not been approved.")
     if not tutor_has_capacity(invitation.tutor, invitation.semester):
@@ -664,6 +685,103 @@ def tutor_has_admin_pairing_capacity(tutor, semester, program):
 
 
 @transaction.atomic
+def create_matching_exclusion(*, admin, tutor_id, tutee_id, semester_id, reason):
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以使用此功能。 / Only administrators may use this feature.")
+    tutor = User.objects.select_for_update().get(pk=tutor_id, role=Role.TUTOR, is_active=True)
+    tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
+    semester = Semester.objects.select_for_update().get(pk=semester_id)
+    if Pairing.objects.filter(
+        semester=semester, tutor=tutor, tutee=tutee, status=PairingStatus.ACTIVE
+    ).exists():
+        raise ValidationError(
+            "雙方目前已有有效配對，請先完成解除配對。 / "
+            "This pair is currently active; complete the pairing-release process first."
+        )
+    if matching_exclusion_exists(semester=semester, tutor=tutor, tutee=tutee):
+        raise ValidationError("本學期已有相同的排除設定。 / This exclusion already exists for the semester.")
+    exclusion = MatchingExclusion(
+        semester=semester,
+        tutor=tutor,
+        tutee=tutee,
+        reason=(reason or "").strip(),
+        created_by=admin,
+    )
+    exclusion.full_clean()
+    exclusion.save()
+
+    now = timezone.now()
+    pending = list(
+        MatchingInvitation.objects.select_for_update().filter(
+            semester=semester,
+            tutor=tutor,
+            tutee=tutee,
+            status=InvitationStatus.PENDING,
+        )
+    )
+    if pending:
+        MatchingInvitation.objects.filter(pk__in=[row.pk for row in pending]).update(
+            status=InvitationStatus.CANCELLED, responded_at=now
+        )
+        for invitation in pending:
+            AuditLog.record(
+                actor=admin,
+                target_user=tutee,
+                event_type="INVITATION_CANCELLED_BY_MATCHING_EXCLUSION",
+                description="配對邀請因管理員設定配對排除而取消 / Invitation cancelled by an administrator matching exclusion",
+                metadata={
+                    "invitation_id": invitation.pk,
+                    "matching_exclusion_id": exclusion.pk,
+                    "tutor": tutor.username,
+                    "tutee": tutee.username,
+                    "semester_id": semester.pk,
+                },
+            )
+    AuditLog.record(
+        actor=admin,
+        target_user=tutee,
+        event_type="MATCHING_EXCLUSION_CREATED",
+        description="管理員建立配對排除 / Matching exclusion created by admin",
+        metadata={
+            "matching_exclusion_id": exclusion.pk,
+            "tutor": tutor.username,
+            "tutee": tutee.username,
+            "semester_id": semester.pk,
+        },
+    )
+    return exclusion
+
+
+@transaction.atomic
+def revoke_matching_exclusion(*, admin, exclusion_id):
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以使用此功能。 / Only administrators may use this feature.")
+    exclusion = MatchingExclusion.objects.select_for_update().select_related(
+        "semester", "tutor", "tutee"
+    ).get(pk=exclusion_id)
+    if not exclusion.is_active:
+        raise ValidationError("此排除設定已解除。 / This exclusion has already been revoked.")
+    exclusion.is_active = False
+    exclusion.revoked_by = admin
+    exclusion.revoked_at = timezone.now()
+    exclusion.full_clean()
+    exclusion.save(update_fields=["is_active", "revoked_by", "revoked_at"])
+    AuditLog.record(
+        actor=admin,
+        target_user=exclusion.tutee,
+        event_type="MATCHING_EXCLUSION_REVOKED",
+        description="管理員解除配對排除 / Matching exclusion revoked by admin",
+        metadata={
+            "matching_exclusion_id": exclusion.pk,
+            "tutor": exclusion.tutor.username,
+            "tutee": exclusion.tutee.username,
+            "semester_id": exclusion.semester_id,
+        },
+    )
+    return exclusion
+
+
+@transaction.atomic
 def create_admin_pairing(*, admin, tutor_id, tutee_id, semester_id):
     """Admin builds a pairing directly, skipping the invitation handshake entirely (item 12).
 
@@ -680,6 +798,11 @@ def create_admin_pairing(*, admin, tutor_id, tutee_id, semester_id):
     tutor = User.objects.select_for_update().get(pk=tutor_id, role=Role.TUTOR, is_active=True)
     tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
     semester = Semester.objects.select_for_update().get(pk=semester_id)
+    if matching_exclusion_exists(semester=semester, tutor=tutor, tutee=tutee):
+        raise ValidationError(
+            "此組合目前設有配對排除，請先解除排除設定。 / "
+            "This pair is currently excluded; revoke the exclusion first."
+        )
     tutee_program = user_program(tutee)
     if not tutor_can_serve_program(tutor, tutee_program):
         raise ValidationError(
@@ -721,9 +844,12 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     locked_by_other_tutor = MatchingInvitation.objects.filter(
         semester=semester, status=InvitationStatus.PENDING
     ).exclude(tutor=tutor).values_list("tutee_id", flat=True)
+    excluded_tutees = MatchingExclusion.objects.filter(
+        semester=semester, tutor=tutor, is_active=True
+    ).values_list("tutee_id", flat=True)
     queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).exclude(
         tutee_id__in=locked_by_other_tutor
-    ).select_related("tutee__roster_entry").order_by("tutee_id")
+    ).exclude(tutee_id__in=excluded_tutees).select_related("tutee__roster_entry").order_by("tutee_id")
     tutor_roster_program = tutor.roster_entry.program if tutor.roster_entry_id else None
     if tutor_roster_program is None:
         queryset = queryset.filter(tutee__roster_entry__program__code="NTNU")
@@ -790,9 +916,12 @@ def anonymous_tutor_candidates(*, semester, tutee, filters=None):
     approved = QualificationDocument.objects.filter(status=QualificationStatus.APPROVED).values_list(
         "tutor_id", flat=True
     )
+    excluded_tutors = MatchingExclusion.objects.filter(
+        semester=semester, tutee=tutee, is_active=True
+    ).values_list("tutor_id", flat=True)
     queryset = TutorProfile.objects.filter(tutor_id__in=approved).exclude(
         Q(tutor_id__in=previous_tutors) | Q(tutor_id__in=full_tutors)
-    ).select_related("tutor__roster_entry").order_by("tutor_id")
+    ).exclude(tutor_id__in=excluded_tutors).select_related("tutor__roster_entry").order_by("tutor_id")
     tutee_program = tutee.roster_entry.program if tutee.roster_entry_id else None
     if tutee_program and tutee_program.code == "MARYLAND":
         queryset = queryset.filter(
