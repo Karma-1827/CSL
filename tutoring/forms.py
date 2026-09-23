@@ -471,10 +471,24 @@ class AdminMatchingExclusionForm(forms.Form):
     tutor = MatchingExclusionUserChoiceField(
         label="老師 / Tutor",
         queryset=User.objects.filter(role=Role.TUTOR, is_active=True).order_by("username"),
+        widget=forms.Select(
+            attrs={
+                "data-searchable-user-select": "",
+                "data-search-label": "搜尋老師 / Search tutors",
+                "data-search-placeholder": "輸入老師姓名或學號 / Enter a tutor name or student ID",
+            }
+        ),
     )
     tutee = MatchingExclusionUserChoiceField(
         label="學生 / Tutee",
         queryset=User.objects.filter(role=Role.TUTEE, is_active=True).order_by("username"),
+        widget=forms.Select(
+            attrs={
+                "data-searchable-user-select": "",
+                "data-search-label": "搜尋學生 / Search students",
+                "data-search-placeholder": "輸入學生姓名或學號 / Enter a student name or student ID",
+            }
+        ),
     )
     reason = forms.CharField(
         label="內部原因 / Internal reason",

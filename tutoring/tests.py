@@ -1430,6 +1430,17 @@ class MatchingExclusionTests(MatchingFixtureTestCase):
         self.assertLess(exclusion_index, release_index)
         self.assertContains(response, "內部原因不會顯示給使用者")
 
+    def test_admin_exclusion_user_fields_support_name_or_student_id_search(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'data-searchable-user-select=""', count=2)
+        self.assertContains(response, "輸入老師姓名或學號")
+        self.assertContains(response, "輸入學生姓名或學號")
+        self.assertContains(response, self.tutor.bilingual_name)
+        self.assertContains(response, self.tutor.username)
+        self.assertContains(response, self.tutee.bilingual_name)
+        self.assertContains(response, self.tutee.username)
+
     def test_non_admin_cannot_create_or_revoke_exclusion(self):
         with self.assertRaises(ValidationError):
             create_matching_exclusion(

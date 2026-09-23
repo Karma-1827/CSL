@@ -4899,6 +4899,18 @@ td small {
   min-height: 96px;
   resize: vertical;
 }
+.searchable-user-select {
+  display: grid;
+  gap: 8px;
+}
+.searchable-user-select input[type="search"] {
+  min-width: 0;
+}
+.searchable-user-select-status {
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
 .matching-exclusion-form .button {
   justify-self: center;
   width: min(100%, 440px);

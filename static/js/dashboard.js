@@ -214,6 +214,56 @@
     updateCertificateVersion();
   });
 
+  document.querySelectorAll("[data-searchable-user-select]").forEach((select) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "searchable-user-select";
+
+    const search = document.createElement("input");
+    search.type = "search";
+    search.autocomplete = "off";
+    search.placeholder = select.dataset.searchPlaceholder || "輸入姓名或學號 / Enter a name or student ID";
+    search.setAttribute("aria-label", select.dataset.searchLabel || "搜尋使用者 / Search users");
+
+    const status = document.createElement("small");
+    status.className = "searchable-user-select-status";
+    status.setAttribute("aria-live", "polite");
+
+    const sourceOptions = Array.from(select.options, (option) => ({
+      value: option.value,
+      text: option.textContent.trim(),
+      option: option.cloneNode(true),
+    }));
+    const emptyOption = sourceOptions.find((item) => !item.value);
+    const userOptions = sourceOptions.filter((item) => item.value);
+
+    const filterOptions = () => {
+      const query = search.value.trim().toLocaleLowerCase();
+      const selectedValue = select.value;
+      const matches = userOptions.filter((item) => !query || item.text.toLocaleLowerCase().includes(query));
+      const replacements = [];
+      if (emptyOption) replacements.push(emptyOption.option.cloneNode(true));
+      replacements.push(...matches.map((item) => item.option.cloneNode(true)));
+      select.replaceChildren(...replacements);
+
+      if (matches.some((item) => item.value === selectedValue)) {
+        select.value = selectedValue;
+      } else if (query && matches.length === 1) {
+        select.value = matches[0].value;
+      } else {
+        select.value = "";
+      }
+
+      status.textContent = query
+        ? `${matches.length} 筆符合 / ${matches.length} result${matches.length === 1 ? "" : "s"}`
+        : `共 ${userOptions.length} 筆 / ${userOptions.length} total`;
+    };
+
+    select.parentNode.insertBefore(wrapper, select);
+    wrapper.append(search, select, status);
+    search.addEventListener("input", filterOptions);
+    filterOptions();
+  });
+
   // Django rotates the CSRF cookie after login. If another dashboard tab was already
   // open, its hidden token becomes stale even though the signed-in session is valid.
   // Refresh POST forms from the current same-origin cookie immediately before submit;
