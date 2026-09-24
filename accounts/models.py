@@ -417,3 +417,20 @@ class Announcement(models.Model):
 
     def __str__(self):
         return self.content[:40]
+
+
+class AnnouncementReadState(models.Model):
+    """記錄每位使用者上一次查看「公告欄」的時間(2026-09-25 新增,使用者要求)。
+
+    比照 `TutorProfile`/`TuteeProfile` 的既有慣例,用一筆對 `User` 的 `OneToOneField`
+    儲存單純的每人狀態,不掛在 `Announcement` 本身——已讀與否是「使用者」的屬性,
+    不是「公告」的屬性(同一則公告對不同使用者可能一個已讀一個未讀)。
+    `last_viewed_at` 為 `None` 代表這位使用者從未點開過「公告欄」分頁,此時應視為
+    全部現有公告都是新的。
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="announcement_read_state")
+    last_viewed_at = models.DateTimeField("上次查看時間 / Last viewed at", null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} @ {self.last_viewed_at}"

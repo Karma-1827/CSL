@@ -23,6 +23,7 @@ from .services import import_department_oral_exam_pass_list
 from .models import (
     AccountStatus,
     Announcement,
+    AnnouncementReadState,
     AuditLog,
     DepartmentOralExamPass,
     DepartmentOralExamPassListType,
@@ -2777,3 +2778,66 @@ class AnnouncementTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         content = response.content.decode()
         self.assertIn('class="dashboard-view is-active" data-dashboard-panel="overview"', content)
+
+    def test_never_viewed_user_sees_all_active_announcements_as_new(self):
+        """2026-09-25(使用者要求):第一次點開公告欄前,現有公告一律視為新的。"""
+        Announcement.objects.create(content="第一則", display_order=1, is_active=True, created_by=self.admin)
+        Announcement.objects.create(content="第二則", display_order=2, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        announcements = list(response.context["active_announcements"])
+        self.assertTrue(all(item.is_new for item in announcements))
+        self.assertEqual(response.context["unread_announcement_count"], 2)
+
+    def test_announcement_created_before_last_viewed_at_is_not_new(self):
+        older = Announcement.objects.create(content="舊公告", display_order=1, is_active=True, created_by=self.admin)
+        AnnouncementReadState.objects.create(user=self.tutor, last_viewed_at=timezone.now())
+        newer = Announcement.objects.create(content="新公告", display_order=2, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        by_content = {item.content: item.is_new for item in response.context["active_announcements"]}
+        self.assertFalse(by_content[older.content])
+        self.assertTrue(by_content[newer.content])
+        self.assertEqual(response.context["unread_announcement_count"], 1)
+
+    def test_sidebar_shows_unread_badge_only_when_there_is_something_new(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        marker = content.index('data-dashboard-target="announcements" data-mark-read-url')
+        self.assertNotIn("<em>", content[marker:marker + 400])
+
+        Announcement.objects.create(content="公告", display_order=1, is_active=True, created_by=self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        marker = content.index('data-dashboard-target="announcements" data-mark-read-url')
+        self.assertIn("<em>1</em>", content[marker:marker + 400])
+
+    def test_mark_announcements_read_updates_state_and_clears_unread_count(self):
+        Announcement.objects.create(content="公告", display_order=1, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("accounts:mark_announcements_read"))
+        self.assertEqual(response.status_code, 200)
+        read_state = AnnouncementReadState.objects.get(user=self.tutor)
+        self.assertIsNotNone(read_state.last_viewed_at)
+        dashboard_response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(dashboard_response.context["unread_announcement_count"], 0)
+
+    def test_mark_announcements_read_requires_login(self):
+        response = self.client.post(reverse("accounts:mark_announcements_read"))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(AnnouncementReadState.objects.exists())
+
+    def test_mark_announcements_read_rejects_get(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:mark_announcements_read"))
+        self.assertEqual(response.status_code, 405)
+
+    def test_announcement_card_shows_date_and_new_badge(self):
+        Announcement.objects.create(content="卡片內容測試", display_order=1, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn('class="announcement-card is-new"', content)
+        self.assertIn("announcement-new-badge", content)
+        self.assertIn(timezone.localdate().strftime("%Y-%m-%d"), content)

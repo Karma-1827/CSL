@@ -4,9 +4,15 @@
     <div class="panel-heading"><div><span class="eyebrow">NOTICE</span><h2>重要公告 <small>Important notices</small></h2></div></div>
     {% if active_announcements %}
       <div class="announcement-board">
-        <ol class="announcement-list">
-          {% for announcement in active_announcements %}<li>{{ announcement.content|linebreaksbr }}</li>{% endfor %}
-        </ol>
+        {% for announcement in active_announcements %}
+          <div class="announcement-card{% if announcement.is_new %} is-new{% endif %}">
+            <div class="announcement-card-head">
+              <time>{{ announcement.created_at|date:"Y-m-d" }}</time>
+              {% if announcement.is_new %}<span class="announcement-new-badge">NEW</span>{% endif %}
+            </div>
+            <p>{{ announcement.content|linebreaksbr }}</p>
+          </div>
+        {% endfor %}
       </div>
     {% else %}<div class="empty-state">目前沒有公告。 / No announcements yet.</div>{% endif %}
   </section>

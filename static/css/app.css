@@ -3817,23 +3817,46 @@ td small {
   font-size: 0.66rem;
 }
 .announcement-board {
-  padding: 16px 18px;
-  border: 1px solid #e2c86f;
+  display: grid;
+  gap: 12px;
+}
+.announcement-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #ead7df;
   border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(39, 55, 77, 0.05);
+}
+.announcement-card.is-new {
+  border-color: #e2c86f;
   background: #fff7d9;
 }
-.announcement-list {
-  display: grid;
-  gap: 14px;
+.announcement-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.announcement-card-head time {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+}
+.announcement-new-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+.announcement-card p {
   margin: 0;
-  padding-left: 22px;
   color: var(--navy);
   font-size: 0.86rem;
   line-height: 1.65;
-}
-.announcement-list li::marker {
-  font-weight: 800;
-  color: #9a7620;
 }
 .empty-state.compact {
   padding: 15px;

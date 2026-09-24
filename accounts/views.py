@@ -13,7 +13,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -100,6 +100,7 @@ from .forms import (
 )
 from .models import (
     Announcement,
+    AnnouncementReadState,
     AuditLog,
     DepartmentOralExamPass,
     PartnerProgram,
@@ -337,10 +338,18 @@ def dashboard(request):
         and today >= current_semester.starts_on - timedelta(days=MATCHING_EARLY_OPEN_DAYS)
         and today <= current_semester.ends_on
     )
+    read_state = AnnouncementReadState.objects.filter(user=request.user).first()
+    last_viewed_announcements_at = read_state.last_viewed_at if read_state else None
+    active_announcements = list(Announcement.objects.filter(is_active=True))
+    for announcement in active_announcements:
+        announcement.is_new = (
+            last_viewed_announcements_at is None or announcement.created_at > last_viewed_announcements_at
+        )
     context = {
         "current_semester": current_semester,
         "matching_open": matching_open,
-        "active_announcements": Announcement.objects.filter(is_active=True),
+        "active_announcements": active_announcements,
+        "unread_announcement_count": sum(1 for item in active_announcements if item.is_new),
     }
     if request.user.role == Role.ADMIN:
         semester_rows = list(Semester.objects.order_by("-starts_on"))
@@ -1498,6 +1507,19 @@ def delete_announcement(request, pk):
     )
     messages.success(request, "公告已刪除。 / Announcement deleted.")
     return redirect(reverse("accounts:dashboard") + "#announcements")
+
+
+@login_required
+@require_POST
+def mark_announcements_read(request):
+    """由 `static/js/dashboard.js` 在使用者切到「公告欄」分頁時以 fetch 呼叫(2026-09-25
+    新增,使用者要求「使用者要點進來看過這個提示才會不見」)。純粹更新這位使用者的
+    `AnnouncementReadState.last_viewed_at`,不寫 AuditLog——這是使用者端的已讀狀態,
+    不是需要稽核的行政操作,比照私訊「開啟對話即標記已讀」的既有慣例(不記錄稽核)。"""
+    AnnouncementReadState.objects.update_or_create(
+        user=request.user, defaults={"last_viewed_at": timezone.now()}
+    )
+    return JsonResponse({"ok": True})
 
 
 @role_required(Role.ADMIN)

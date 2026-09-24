@@ -33,7 +33,7 @@
             <a class="sidebar-link" href="#class-documents" data-dashboard-target="class-documents"><span aria-hidden="true">▤</span><b>上課文件<small>Class documents</small></b></a>
             <a class="sidebar-link" href="#activity" data-dashboard-target="activity"><span aria-hidden="true">◷</span><b>系統紀錄<small>Activity</small></b></a>
           {% elif request.user.role == 'TUTOR' %}
-            <a class="sidebar-link" href="#announcements" data-dashboard-target="announcements"><span aria-hidden="true">★</span><b>公告欄<small>Announcements</small></b></a>
+            <a class="sidebar-link" href="#announcements" data-dashboard-target="announcements" data-mark-read-url="{% url 'accounts:mark_announcements_read' %}"><span aria-hidden="true">★</span><b>公告欄<small>Announcements</small></b>{% if unread_announcement_count %}<em>{{ unread_announcement_count }}</em>{% endif %}</a>
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             <a class="sidebar-link" href="#qualification" data-dashboard-target="qualification"><span aria-hidden="true">✓</span><b>口語能力證明<small>Oral proficiency</small></b></a>
             <a class="sidebar-link" href="#find-tutee" data-dashboard-target="find-tutee"><span aria-hidden="true">⌕</span><b>尋找學生<small>Find students</small></b></a>
@@ -43,7 +43,7 @@
             <a class="sidebar-link" href="#messages" data-dashboard-target="messages"><span aria-hidden="true">✉</span><b>私訊<small>Messages</small></b>{% if unread_message_total %}<em>{{ unread_message_total }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b></a>
           {% else %}
-            <a class="sidebar-link" href="#announcements" data-dashboard-target="announcements"><span aria-hidden="true">★</span><b>公告欄<small>Announcements</small></b></a>
+            <a class="sidebar-link" href="#announcements" data-dashboard-target="announcements" data-mark-read-url="{% url 'accounts:mark_announcements_read' %}"><span aria-hidden="true">★</span><b>公告欄<small>Announcements</small></b>{% if unread_announcement_count %}<em>{{ unread_announcement_count }}</em>{% endif %}</a>
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>我的首頁<small>Overview</small></b></a>
             {% if is_maryland %}<a class="sidebar-link" href="#find-tutor" data-dashboard-target="find-tutor"><span aria-hidden="true">⌕</span><b>尋找老師<small>Find teachers</small></b></a>{% endif %}
             <a class="sidebar-link" href="#invitations" data-dashboard-target="invitations"><span aria-hidden="true">✉</span><b>邀請管理<small>Invitations</small></b>{% if received_invitations %}<em>{{ received_invitations|length }}</em>{% endif %}</a>
@@ -545,7 +545,7 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
-<script src="{% static 'js/dashboard.js' %}?v=20260923-searchable-exclusion-users" defer></script>
+<script src="{% static 'js/dashboard.js' %}?v=20260925-announcement-read-tracking" defer></script>
 <script src="{% static 'js/profile-options.js' %}" defer></script>
 <script src="{% static 'js/confirm-submit.js' %}?v=20260809-1" defer></script>
 <script src="{% static 'js/file-size-check.js' %}?v=20260906-1" defer></script>

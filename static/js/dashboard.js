@@ -8,8 +8,29 @@
 
   const available = new Set(panels.map((panel) => panel.dataset.dashboardPanel));
 
+  // 2026-09-25(使用者要求「使用者要點進來看過這個提示才會不見」):切到「公告欄」分頁時
+  // 通知後端記錄已讀時間,並立刻移除側邊欄上的未讀數字徽章,不用等下次整頁重新載入。
+  let announcementsMarkedRead = false;
+  function markAnnouncementsRead() {
+    if (announcementsMarkedRead) return;
+    const link = links.find((item) => item.dataset.dashboardTarget === "announcements" && item.dataset.markReadUrl);
+    if (!link) return;
+    announcementsMarkedRead = true;
+    const prefix = "csrftoken=";
+    const cookie = document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith(prefix));
+    const csrfToken = cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
+    fetch(link.dataset.markReadUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRFToken": csrfToken },
+    }).then(() => {
+      link.querySelector("em")?.remove();
+    }).catch(() => {});
+  }
+
   function activate(target, options = {}) {
     const selected = available.has(target) ? target : "overview";
+    if (selected === "announcements") markAnnouncementsRead();
     panels.forEach((panel) => {
       const isSelected = panel.dataset.dashboardPanel === selected;
       panel.hidden = !isSelected;
