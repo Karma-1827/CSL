@@ -2700,6 +2700,11 @@ class ClassWorkflowTests(TestCase):
         self.assertIn('<details class="incident-report-detail"><summary>細節 / Details</summary>', content)
         detail_index = content.index('class="incident-report-detail"')
         self.assertIn("教室臨時被佔用", content[detail_index:detail_index + 200])
+        # 2026-09-25(使用者接著要求):「細節」改成獨立一整列(不侷限在通報者欄位寬度內)，
+        # 通報者欄位加寬，紀錄時間欄位改成日期/時間分兩行縮小。
+        self.assertIn('<tr class="incident-report-detail-row"><td colspan="7">', content)
+        self.assertIn('<th class="col-reporter">通報者 / Reporter</th>', content)
+        self.assertIn(f"<time>{timezone.localtime(report.resolved_at).date()}</time><br>", content)
 
     def test_non_admin_cannot_resolve_incident_report(self):
         report = submit_incident_report(

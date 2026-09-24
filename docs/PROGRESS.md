@@ -133,6 +133,8 @@
 
 > **2026-09-25 Admin「異常回報」通報者補上學號、紀錄表新增可展開細節(使用者要求)**:使用者提出「通報者 / Reporter 名字後方顯示學號，比較方便查找」,以及「紀錄的部分，能不能在通報者 / Reporter下方新增個『細節』，點開會呈現他的通報內容」。`templates/dashboard/index.html` 的 PENDING 與 HISTORY 兩區塊,「通報者 / Reporter」皆補上學號(比照配對排除等既有列表「姓名+`<small>`學號」的呈現方式);HISTORY 表格另新增 `<details class="incident-report-detail">`(純 CSS `<details>`/`<summary>`,無 JS,比照全站既有的收合式互動慣例)顯示通報內容全文——表格本身刻意只列分類/備註/紀錄人等摘要欄位,不逐字顯示內容避免欄位過寬。PENDING 區塊的卡片本來就已經直接顯示內容,不需要這層收合,維持原樣。純 template/CSS 改動,無 model/migration 變更。更新 1 項既有回歸測試(`tutoring/tests.py::ClassWorkflowTests::test_admin_can_resolve_incident_report_and_dashboard_history_updates`)涵蓋學號顯示與細節收合,437 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。
 
+> **2026-09-25 異常回報紀錄表版面微調(使用者要求)**:使用者看到上一輪的版面後接著要求「紀錄時間 / Logged at的欄位縮小一點，可以分成兩行 日期/時間，通報者 / Reporter拉寬一點，然後細節不要只限於通報者 / Reporter的欄位，可以變成一整列」。「細節」改成獨立一整列(`<tr class="incident-report-detail-row"><td colspan="7">`,緊接在資料列下方),不再侷限在通報者欄位的寬度內;「通報者 / Reporter」欄位新增 `.col-reporter`(`width: 22%`)加寬;「紀錄時間 / Logged at」改成日期一行、時間一行(`<time>`+`<br>`+`<small>`),搭配既有的 `.col-nowrap` 讓該欄自動縮到最窄。同步更新既有回歸測試斷言新的 `colspan`/欄位 class/兩行時間格式,437 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template/CSS 改動無 model/migration 變更。詳見 `CLAUDE.md` 第 4.7 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

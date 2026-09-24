@@ -3418,6 +3418,12 @@ td small {
   padding-top: 16px;
   border-top: 1px solid #eedce2;
 }
+.incident-report-history .col-reporter {
+  width: 22%;
+}
+.incident-report-detail-row td {
+  padding-top: 0;
+}
 .incident-report-detail {
   margin-top: 4px;
 }
@@ -3429,7 +3435,7 @@ td small {
 }
 .incident-report-detail p {
   margin: 6px 0 0;
-  max-width: 320px;
+  max-width: 720px;
   color: var(--ink-muted);
   font-size: 0.78rem;
   white-space: pre-wrap;
