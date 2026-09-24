@@ -344,7 +344,8 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 
 `accounts.models.Announcement`(2026-09-24 新增,使用者要求「tutor/tutee 左側功能欄多加一個公告欄」):Tutor 與 Tutee 首頁上方新增一個獨立頁籤,顯示系辦公告事項(目前是系辦提供的 5 則配對/課程紀錄規範說明)。比照 4.10 節 `ClassDocument` 的 Admin 自行編輯慣例,而非把公告文字寫死在 template 裡:
 
-- 單一模型,不分角色(Tutor/Tutee 目前看到同一份公告),欄位為公告內容(純文字,最多 1000 字)、顯示順序(數字越小越前面)、顯示中(布林,關閉即暫時隱藏但不刪除內容),以及建立者、建立/更新時間。
+- 單一模型,不分角色(Tutor/Tutee 目前看到同一份公告),欄位為中文公告內容(`content`,純文字,最多 1000 字)、英文公告內容(`content_en`,同上限,**2026-09-25 起必填**,見下)、顯示順序(數字越小越前面)、顯示中(布林,關閉即暫時隱藏但不刪除內容),以及建立者、建立/更新時間。
+- **2026-09-25 新增英文公告內容(使用者要求「內容加上英文」)**:公告是給全體 Tutor/Tutee 看的正式系辦公告,和第 4.6/4.9 節列出的「使用者自由填寫備註」(如 `PairingReleaseRequest.reason_note`)刻意維持單一語言不同——`AnnouncementForm` 讓 `content_en` 也是必填欄位,兩者都填才能送出。`content_en` 在 model 層仍是 `blank=True`(migration 新增欄位時的既有相容慣例,避免補資料時卡在 NOT NULL),真正的「必填」把關在表單層(`self.fields["content_en"].required = True`)。顯示時比照全站既有的「長雙語句用換行」慣例(`static/css/app.css::.bilingual-note`,已用於多處表單說明文字),中英文放在同一個 `<p>` 裡用 `<br>` 分隔,不是各自獨立的段落,也不是斜線硬擠成一行。既有的 5 則公告已於部署後透過 Admin UI(或對應的一次性腳本)補上英文翻譯。
 - Admin dashboard 新增「公告欄管理」頁籤(`templates/dashboard/admin_v2_panels.html`),沿用學期設定/上課文件既有的「新增表單 + 逐筆卡片,卡片內含編輯用 `<details>` 收合表單」版面(`.semester-setting-list`/`.semester-card`/`.semester-edit-disclosure` 共用同一組 CSS)。因公告沒有「合作計畫」/「適用學期」欄位,列表列只需 3 欄而非既有的 5 欄,新增 `.announcement-setting-row` 修飾類別覆寫 `.semester-setting-row` 的 `grid-template-columns`,其餘邊框/底色/陰影等樣式沿用不變。
 - `accounts/views.py::save_announcement(request, pk=None)`(建立/編輯共用同一個 view)與 `delete_announcement(request, pk)`,皆用 `@role_required(Role.ADMIN)` 保護(非 Admin 會被導回 dashboard 並顯示錯誤訊息,不是 404),寫入 `ANNOUNCEMENT_CREATED`/`ANNOUNCEMENT_UPDATED`/`ANNOUNCEMENT_DELETED` `AuditLog`。Django Admin(`accounts/admin.py::AnnouncementAdmin`)同時保留,兩條路徑並存,不做去重(比照 4.9/4.10 節既有慣例)。
 - Tutor/Tutee 端是唯讀顯示:`dashboard()` 對三種角色的 context 一律附上 `active_announcements`(`Announcement.objects.filter(is_active=True)`,依 model 預設的 `display_order` 排序),`templates/dashboard/participant_v2_panels.html`(Tutor/Tutee 共用同一份 partial)新增「公告欄」頁籤。
@@ -356,7 +357,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
   - **此變更不溯及既往**:所有目前登入過的真實使用者在部署當下都還沒有 `AnnouncementReadState` 紀錄,因此第一次載入 dashboard 時會看到全部現有公告都標記為「新」,直到各自點開「公告欄」分頁一次為止——這是刻意的簡單化處理(視為「尚未用這套新機制確認讀過」),不是 bug。
 - 側邊欄連結刻意放在 Tutor/Tutee 的「我的首頁」正上方(使用者明確要求),但**登入後預設仍停留在「我的首頁」**:`static/js/dashboard.js` 的頁面載入邏輯是讀網址 hash(`location.hash.slice(1) || "overview"`)決定要顯示哪個分頁,與側邊欄連結在 HTML 裡的先後順序完全無關(哪個連結帶 `is-active` 也只是初始 markup 的樣式,載入後一律由這段 JS 依 hash 重新校正)。因此可以同時滿足「公告欄排在最上面」與「預設看到的還是我的首頁」這兩個表面上看似衝突的需求,不需要任何額外的特判邏輯。Admin 側邊欄新增對應的「公告欄管理」連結,位置在「系統總覽」之後。
 - 目前的 5 則公告內容是透過這個新介面由 Admin 手動輸入,不是寫死在程式碼或 migration 資料遷移裡;之後系辦要新增/修改/下架公告都直接在「公告欄管理」頁籤操作即可。
-- 測試見 `accounts/tests.py::AnnouncementTests`(Admin 建立/編輯/刪除、非 Admin 被拒、Tutor/Tutee dashboard 皆能看到依 `display_order` 排序的啟用中公告、已隱藏的公告不顯示、新增公告欄連結後預設進入分頁仍是 overview、從未查看過的使用者看到全部公告皆為新、已查看過的時間點之前的公告不算新、側邊欄未讀徽章正確顯示與隱藏、`mark_announcements_read` 端點更新已讀時間且需要登入與 POST、卡片正確顯示日期與 NEW 徽章)。
+- 測試見 `accounts/tests.py::AnnouncementTests`(Admin 建立/編輯/刪除、非 Admin 被拒、Tutor/Tutee dashboard 皆能看到依 `display_order` 排序的啟用中公告、已隱藏的公告不顯示、新增公告欄連結後預設進入分頁仍是 overview、從未查看過的使用者看到全部公告皆為新、已查看過的時間點之前的公告不算新、側邊欄未讀徽章正確顯示與隱藏、`mark_announcements_read` 端點更新已讀時間且需要登入與 POST、卡片正確顯示日期與 NEW 徽章、缺英文內容會被表單擋下、卡片同時顯示中英文內容)。
 
 ## 5. 技術架構
 

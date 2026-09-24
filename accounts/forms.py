@@ -945,12 +945,14 @@ class OralExamPassListImportForm(forms.Form):
 class AnnouncementForm(forms.ModelForm):
     class Meta:
         model = Announcement
-        fields = ["content", "display_order", "is_active"]
+        fields = ["content", "content_en", "display_order", "is_active"]
         widgets = {
             "content": forms.Textarea(attrs={"rows": 3}),
+            "content_en": forms.Textarea(attrs={"rows": 3}),
         }
         labels = {
-            "content": "公告內容 / Announcement content",
+            "content": "中文公告內容 / Chinese content",
+            "content_en": "英文公告內容 / English content",
             "display_order": "顯示順序（數字越小越前面） / Display order (lower shows first)",
             "is_active": "顯示中 / Active",
         }
@@ -958,3 +960,7 @@ class AnnouncementForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         add_form_classes(self)
+        # 2026-09-25(使用者要求「內容加上英文」):公告是給全體 Tutor/Tutee 看的正式
+        # 系辦公告,比照全站雙語 UI 的既有慣例,中英文皆為必填(不同於 4.9/4.6 節列出的
+        # 其餘「使用者自由填寫的備註類」欄位刻意維持單一語言)。
+        self.fields["content_en"].required = True

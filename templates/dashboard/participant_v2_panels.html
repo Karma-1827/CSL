@@ -10,7 +10,7 @@
               <time>{{ announcement.created_at|date:"Y-m-d" }}</time>
               {% if announcement.is_new %}<span class="announcement-new-badge">NEW</span>{% endif %}
             </div>
-            <p>{{ announcement.content|linebreaksbr }}</p>
+            <p class="bilingual-note">{{ announcement.content|linebreaksbr }}{% if announcement.content_en %}<br>{{ announcement.content_en|linebreaksbr }}{% endif %}</p>
           </div>
         {% endfor %}
       </div>

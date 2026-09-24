@@ -400,7 +400,8 @@ class Announcement(models.Model):
     `is_active=False` 只是暫時隱藏、不刪除歷史內容。
     """
 
-    content = models.TextField("公告內容 / Announcement content", max_length=1000)
+    content = models.TextField("中文公告內容 / Chinese content", max_length=1000)
+    content_en = models.TextField("英文公告內容 / English content", max_length=1000, blank=True, default="")
     display_order = models.PositiveIntegerField("顯示順序 / Display order", default=0)
     is_active = models.BooleanField("顯示中 / Active", default=True)
     created_by = models.ForeignKey(

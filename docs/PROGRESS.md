@@ -129,6 +129,8 @@
 
 > **2026-09-25 公告欄改為卡片式呈現並新增未讀提示(使用者要求)**:使用者實際看到部署後的編號清單版本後回饋「如果是以這應個形式呈現，那以後要增加，是不是使用者不會點進來看？」,並具體提出「每一條用成一個卡片，然後顯示日期，如果是新增的就會有一個new的標示，左側欄位的『公告欄』也有提示，使用者要點進來看過這個提示才會不見」——這是對前一天(八十九)剛部署的呈現方式的直接改版,不是全新功能。新增 `accounts.models.AnnouncementReadState`(`user` 對 `User` 的 `OneToOneField`,`last_viewed_at` 可為空,`accounts/migrations/0022_announcementreadstate`),`dashboard()` 依此逐則比對每個 `Announcement.created_at` 是否晚於使用者的 `last_viewed_at`,算出 `is_new` 與加總的 `unread_announcement_count`。前端:`templates/dashboard/participant_v2_panels.html` 改為逐則卡片(`.announcement-card`,新的 `is-new` 顯示日期+`NEW` 徽章),`templates/dashboard/index.html` 側邊欄「公告欄」連結比照既有邀請/審核連結顯示未讀數字徽章。新增 `accounts:mark_announcements_read`(`POST`,只更新該使用者的已讀時間,不寫 AuditLog),`static/js/dashboard.js::activate()` 切到公告欄分頁時用既有的 `csrftoken` cookie 讀取慣例呼叫這個端點,成功後直接把側邊欄徽章從 DOM 移除,不用等下次整頁重新載入。詳見 `CLAUDE.md` 第 4.11 節。新增 7 項回歸測試(`accounts/tests.py::AnnouncementTests`),435 項測試全數通過,`ruff`、`makemigrations --check --dry-run`、`node --check static/js/dashboard.js` 皆乾淨。此變更不溯及既往:所有既有使用者在部署當下都還沒有 `AnnouncementReadState` 紀錄,第一次登入會看到全部現有公告標記為新,直到各自點開「公告欄」分頁一次為止,是刻意的簡化處理。
 
+> **2026-09-25 公告內容新增英文(使用者要求「內容加上英文」)**:確認卡片式改版沒問題後,使用者接著要求公告內容也要加上英文版本。`Announcement` 新增 `content_en` 欄位(`accounts/migrations/0023_announcement_content_en_alter_announcement_content`,model 層 `blank=True` 只是既有補資料相容慣例,實際「必填」把關在 `AnnouncementForm` 表單層),與第 4.6/4.9 節列出的「使用者自由填寫備註」欄位刻意維持單一語言不同——公告是給全體 Tutor/Tutee 看的正式系辦公告,理應雙語。畫面顯示比照全站既有的「長雙語句用換行」慣例(`.bilingual-note`,已用於多處表單說明文字),中英文放在同一個 `<p>` 裡用 `<br>` 分隔。既有的 5 則公告已補上英文翻譯(本機與正式站皆已更新)。新增 2 項回歸測試(缺英文內容被表單擋下、卡片同時顯示中英文),437 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.11 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

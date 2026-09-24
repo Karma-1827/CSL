@@ -2710,10 +2710,11 @@ class AnnouncementTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.post(
             reverse("accounts:save_announcement"),
-            {"content": "測試公告內容", "display_order": 1, "is_active": "on"},
+            {"content": "測試公告內容", "content_en": "Test announcement content", "display_order": 1, "is_active": "on"},
         )
         self.assertRedirects(response, reverse("accounts:dashboard") + "#announcements")
         announcement = Announcement.objects.get(content="測試公告內容")
+        self.assertEqual(announcement.content_en, "Test announcement content")
         self.assertEqual(announcement.created_by, self.admin)
         self.assertTrue(announcement.is_active)
         log = AuditLog.objects.get(event_type="ANNOUNCEMENT_CREATED")
@@ -2727,6 +2728,7 @@ class AnnouncementTests(TestCase):
             reverse("accounts:update_announcement", args=[announcement.pk]),
             {
                 f"announcement-{announcement.pk}-content": "更新後內容",
+                f"announcement-{announcement.pk}-content_en": "Updated content",
                 f"announcement-{announcement.pk}-display_order": 2,
                 f"announcement-{announcement.pk}-is_active": "on",
             },
@@ -2841,3 +2843,24 @@ class AnnouncementTests(TestCase):
         self.assertIn('class="announcement-card is-new"', content)
         self.assertIn("announcement-new-badge", content)
         self.assertIn(timezone.localdate().strftime("%Y-%m-%d"), content)
+
+    def test_announcement_form_requires_english_content(self):
+        """2026-09-25(使用者要求「內容加上英文」):公告是給全體 Tutor/Tutee 看的正式
+        系辦公告,比照全站雙語 UI 慣例,英文內容為必填。"""
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:save_announcement"),
+            {"content": "只有中文", "display_order": 1, "is_active": "on"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#announcements")
+        self.assertFalse(Announcement.objects.filter(content="只有中文").exists())
+
+    def test_announcement_card_shows_both_languages(self):
+        Announcement.objects.create(
+            content="中文內容", content_en="English content", display_order=1, is_active=True, created_by=self.admin,
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("中文內容", content)
+        self.assertIn("English content", content)
