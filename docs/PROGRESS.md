@@ -131,6 +131,8 @@
 
 > **2026-09-25 公告內容新增英文(使用者要求「內容加上英文」)**:確認卡片式改版沒問題後,使用者接著要求公告內容也要加上英文版本。`Announcement` 新增 `content_en` 欄位(`accounts/migrations/0023_announcement_content_en_alter_announcement_content`,model 層 `blank=True` 只是既有補資料相容慣例,實際「必填」把關在 `AnnouncementForm` 表單層),與第 4.6/4.9 節列出的「使用者自由填寫備註」欄位刻意維持單一語言不同——公告是給全體 Tutor/Tutee 看的正式系辦公告,理應雙語。畫面顯示比照全站既有的「長雙語句用換行」慣例(`.bilingual-note`,已用於多處表單說明文字),中英文放在同一個 `<p>` 裡用 `<br>` 分隔。既有的 5 則公告已補上英文翻譯(本機與正式站皆已更新)。新增 2 項回歸測試(缺英文內容被表單擋下、卡片同時顯示中英文),437 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.11 節。
 
+> **2026-09-25 Admin「異常回報」通報者補上學號、紀錄表新增可展開細節(使用者要求)**:使用者提出「通報者 / Reporter 名字後方顯示學號，比較方便查找」,以及「紀錄的部分，能不能在通報者 / Reporter下方新增個『細節』，點開會呈現他的通報內容」。`templates/dashboard/index.html` 的 PENDING 與 HISTORY 兩區塊,「通報者 / Reporter」皆補上學號(比照配對排除等既有列表「姓名+`<small>`學號」的呈現方式);HISTORY 表格另新增 `<details class="incident-report-detail">`(純 CSS `<details>`/`<summary>`,無 JS,比照全站既有的收合式互動慣例)顯示通報內容全文——表格本身刻意只列分類/備註/紀錄人等摘要欄位,不逐字顯示內容避免欄位過寬。PENDING 區塊的卡片本來就已經直接顯示內容,不需要這層收合,維持原樣。純 template/CSS 改動,無 model/migration 變更。更新 1 項既有回歸測試(`tutoring/tests.py::ClassWorkflowTests::test_admin_can_resolve_incident_report_and_dashboard_history_updates`)涵蓋學號顯示與細節收合,437 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

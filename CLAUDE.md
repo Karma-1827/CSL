@@ -282,7 +282,7 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - **2026-09-11 起 `IncidentReport` 完全不綁定課程**(使用者要求:「課程整個拿掉,因為每堂課有自己的通報,跟當堂課有關就用課程通報,其餘的用異常通報就好」):`session` 欄位已從 model 完全移除(`tutoring/migrations/0036_remove_incidentreport_session_and_more`,同一個 migration 也加了「系統問題」分類),不是先改成選填後保留欄位——與當堂課有關的問題請改用該堂課自己的 `ClassAlert`(課堂通報),異常回報保留給其餘所有情境,兩者定位從此完全不重疊,不再有中間地帶。`submit_incident_report(reporter, category, content)` 不再接受任何 `session_id` 參數;`StandaloneIncidentReportForm` 只剩 `category`/`content` 兩個欄位,不再有課程下拉選單;`accounts/views.py::admin_user_profile()` 的「異常回報紀錄」區塊也因此改成只依「這位使用者自己送出過的回報」(`reporter=subject`)呈現,不再能靠課程/配對反查「此人所屬課程的回報」。
 - 通報者送出後不能自行撤回,只有 Admin 能標記為已紀錄(內部狀態值仍是 `RESOLVED`)並留備註,同樣是「已知悉留存」而非「已解決」的語意。
 - 無附件上傳。
-- Admin dashboard「異常回報」頁籤有 PENDING 待處理 + HISTORY 已紀錄兩區塊,紀錄含紀錄人、紀錄時間、備註;因為不再綁定課程,清單改顯示送出時間(`created_at`)。
+- Admin dashboard「異常回報」頁籤有 PENDING 待處理 + HISTORY 已紀錄兩區塊,紀錄含紀錄人、紀錄時間、備註;因為不再綁定課程,清單改顯示送出時間(`created_at`)。**2026-09-25 兩區塊的「通報者 / Reporter」皆補上學號**(使用者要求「比較方便查找」),比照配對排除等既有列表的「姓名+`<small>`學號」呈現方式。**HISTORY 表格另新增可展開的「細節 / Details」**(`<details class="incident-report-detail">`,純 CSS,無 JS):表格本身只列分類/備註/紀錄人等欄位摘要,不逐字顯示通報內容以免欄位過寬,點開才顯示 `report.content` 全文;PENDING 區塊維持原樣,內容原本就已經直接顯示在卡片上,不需要這層收合。
 - **2026-09-10 起 Tutor/Tutee 端改為獨立頁籤送出,不再綁在單一課程頁面**(2026-09-11 起連課程下拉選單也一併拿掉,見上):新增 `tutoring/forms.py::StandaloneIncidentReportForm`,對應的 `tutoring/views.py::incident_report()` 無 `pk` 參數(URL 為 `matching/incident-reports/submit/`),送出後一律導回 Dashboard 的「異常回報」頁籤。舊的 `IncidentReportForm`(靠 URL 綁課程)已完全移除,沒有保留相容路徑。Tutor/Tutee dashboard 共用區塊 `templates/dashboard/participant_v2_panels.html` 含送出表單與「我送出的回報」歷史清單;`class_detail.html` 不再顯示異常回報區塊(課堂通報 `ClassAlert` 維持原樣不受影響,仍綁在課程詳情頁,因為它本來就是有時間窗限制、上課中才用得到的功能)。
 
 ### 4.8 私訊

@@ -3418,6 +3418,22 @@ td small {
   padding-top: 16px;
   border-top: 1px solid #eedce2;
 }
+.incident-report-detail {
+  margin-top: 4px;
+}
+.incident-report-detail summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.incident-report-detail p {
+  margin: 6px 0 0;
+  max-width: 320px;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
 .schedule-group {
   padding: 15px 17px;
   border: 1px solid var(--border);

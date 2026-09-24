@@ -2678,6 +2678,8 @@ class ClassWorkflowTests(TestCase):
             response,
             'class="panel review-status-group incident-report-group incident-report-history"',
         )
+        # 2026-09-25(使用者要求):待處理列表的「通報者 / Reporter」旁邊要顯示學號，方便查找。
+        self.assertContains(response, f"通報者 / Reporter：{self.tutee.bilingual_name}（{self.tutee.username}）")
 
         response = self.client.post(
             reverse("tutoring:resolve_incident_report", args=[report.pk]),
@@ -2691,6 +2693,13 @@ class ClassWorkflowTests(TestCase):
 
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "已協調改到 202 教室")
+        # 2026-09-25(使用者要求):「紀錄」表格的通報者欄位下方要有可展開的「細節」，
+        # 點開才會看到通報內容(表格本身不逐字列出內容，避免欄位過寬)。
+        content = response.content.decode()
+        self.assertIn(f"<small>{self.tutee.username}</small>", content)
+        self.assertIn('<details class="incident-report-detail"><summary>細節 / Details</summary>', content)
+        detail_index = content.index('class="incident-report-detail"')
+        self.assertIn("教室臨時被佔用", content[detail_index:detail_index + 200])
 
     def test_non_admin_cannot_resolve_incident_report(self):
         report = submit_incident_report(
