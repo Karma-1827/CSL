@@ -24,6 +24,7 @@ from .models import (
     AccountStatus,
     AuditLog,
     DepartmentOralExamPass,
+    DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
     PartnerProgram,
@@ -2202,12 +2203,58 @@ class OralExamPassListImportTests(TestCase):
     def test_upload_view_creates_records_and_audit_log(self):
         self.client.force_login(self.admin)
         response = self.client.post(
-            reverse("accounts:import_oral_exam_pass_list"), {"file": self._realistic_upload()}
+            reverse("accounts:import_oral_exam_pass_list"),
+            {"file": self._realistic_upload(), "list_type": DepartmentOralExamPassListType.ORAL_EXAM_PASS},
         )
         self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
-        self.assertTrue(DepartmentOralExamPass.objects.filter(student_id="ORALEXAMTUTOR").exists())
+        record = DepartmentOralExamPass.objects.get(student_id="ORALEXAMTUTOR")
+        self.assertEqual(record.list_type, DepartmentOralExamPassListType.ORAL_EXAM_PASS)
         log = AuditLog.objects.get(event_type="ORAL_EXAM_PASS_LIST_IMPORTED")
         self.assertEqual(log.metadata["matched_count"], 1)
+        self.assertEqual(log.metadata["list_type"], DepartmentOralExamPassListType.ORAL_EXAM_PASS)
+
+    def test_import_defaults_to_oral_exam_pass_list_type(self):
+        """2026-09-24(使用者要求):`list_type` 是新增參數,呼叫端(既有 Admin dashboard 表單
+        以外的呼叫者,例如未來的腳本)若沒有明確指定,預設維持既有的語音通過語意,不會意外
+        變成馬里蘭修課名單。"""
+        result = import_department_oral_exam_pass_list(self._realistic_upload(), admin=self.admin)
+        self.assertEqual(result.matched_count, 1)
+        record = DepartmentOralExamPass.objects.get(student_id="ORALEXAMTUTOR")
+        self.assertEqual(record.list_type, DepartmentOralExamPassListType.ORAL_EXAM_PASS)
+
+    def test_upload_view_maryland_course_roster_shows_correct_hint_text(self):
+        """2026-09-24(使用者要求):「馬里蘭是修課名單通過...這些人可以幫我把「系辦名冊：
+        語音通過」改成「系辦名冊：修課名單」嗎」——上傳時選擇馬里蘭修課名單類型後,待審核
+        列表要顯示「修課名單」而不是「語音通過」。"""
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:import_oral_exam_pass_list"),
+            {"file": self._realistic_upload(), "list_type": DepartmentOralExamPassListType.MARYLAND_COURSE_ROSTER},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#qualifications")
+        record = DepartmentOralExamPass.objects.get(student_id="ORALEXAMTUTOR")
+        self.assertEqual(record.list_type, DepartmentOralExamPassListType.MARYLAND_COURSE_ROSTER)
+
+        upload = SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        self.client.force_login(self.tutor)
+        self.client.post(reverse("accounts:upload_qualification"), {"file": upload})
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "系辦名冊：修課名單")
+        self.assertNotContains(response, "系辦名冊：語音通過")
+
+    def test_reimport_can_change_an_existing_records_list_type(self):
+        DepartmentOralExamPass.objects.create(
+            student_id="ORALEXAMTUTOR", imported_by=self.admin,
+            list_type=DepartmentOralExamPassListType.ORAL_EXAM_PASS,
+        )
+        import_department_oral_exam_pass_list(
+            self._realistic_upload(), admin=self.admin,
+            list_type=DepartmentOralExamPassListType.MARYLAND_COURSE_ROSTER,
+        )
+        record = DepartmentOralExamPass.objects.get(student_id="ORALEXAMTUTOR")
+        self.assertEqual(record.list_type, DepartmentOralExamPassListType.MARYLAND_COURSE_ROSTER)
 
     def test_non_admin_cannot_import(self):
         self.client.force_login(self.tutor)

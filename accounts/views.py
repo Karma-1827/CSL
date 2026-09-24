@@ -478,18 +478,20 @@ def dashboard(request):
             pairing_rows = pairing_rows.filter(status=pairing_status)
         pairing_page = Paginator(pairing_rows, 20).get_page(request.GET.get("pairing_page"))
 
-        # 2026-09-11(使用者要求):在待審核列表上附加系辦語音通過名單的比對提示。純粹是
+        # 2026-09-11(使用者要求):在待審核列表上附加系辦資格比對名單的提示。純粹是
         # 顯示用的提示,不影響審核結果或任何欄位,Admin 仍要自行按核准/拒絕。
+        # 2026-09-24(使用者要求):`list_type` 決定提示文字——NTNU 是「語音通過」,
+        # 馬里蘭是「修課名單」,兩者語意不同,不能共用同一句提示。
         pending_qualifications = list(
             QualificationDocument.objects.filter(status=QualificationStatus.PENDING).select_related("tutor")[:8]
         )
-        passed_student_ids = set(
+        eligibility_list_type_by_student_id = dict(
             DepartmentOralExamPass.objects.filter(
                 student_id__in=[document.tutor.username for document in pending_qualifications]
-            ).values_list("student_id", flat=True)
+            ).values_list("student_id", "list_type")
         )
         for document in pending_qualifications:
-            document.oral_exam_pass_hint = document.tutor.username in passed_student_ids
+            document.oral_exam_pass_hint_type = eligibility_list_type_by_student_id.get(document.tutor.username)
 
         # 2026-09-11(使用者要求):Admin 沒有唯一所屬計畫,`user_program(admin)` 一律回傳
         # None,導致最上方共用的「目前學期」小方塊(page-heading 的 .semester-chip,
@@ -1416,8 +1418,9 @@ def import_oral_exam_pass_list(request):
         return redirect(redirect_target)
 
     uploaded_file = form.cleaned_data["file"]
+    list_type = form.cleaned_data["list_type"]
     try:
-        result = import_department_oral_exam_pass_list(uploaded_file, admin=request.user)
+        result = import_department_oral_exam_pass_list(uploaded_file, admin=request.user, list_type=list_type)
     except OralExamPassListImportError as exc:
         messages.error(request, str(exc))
         return redirect(redirect_target)
@@ -1425,9 +1428,10 @@ def import_oral_exam_pass_list(request):
     log_event(
         request,
         "ORAL_EXAM_PASS_LIST_IMPORTED",
-        f"匯入系辦語音通過名單，比對到 {result.matched_count} 位 / "
-        f"Imported department oral exam pass list, matched {result.matched_count}",
+        f"匯入系辦資格比對名單（{list_type}），比對到 {result.matched_count} 位 / "
+        f"Imported department eligibility list ({list_type}), matched {result.matched_count}",
         metadata={
+            "list_type": list_type,
             "matched_count": result.matched_count,
             "created_count": result.created_count,
             "sheets_used": result.sheets_used,
@@ -1436,8 +1440,8 @@ def import_oral_exam_pass_list(request):
     )
     messages.success(
         request,
-        f"已比對 {result.matched_count} 位語音通過的學號（新增 {result.created_count} 筆）。 / "
-        f"Matched {result.matched_count} passed student ID(s) ({result.created_count} newly added).",
+        f"已比對 {result.matched_count} 位符合資格的學號（新增 {result.created_count} 筆）。 / "
+        f"Matched {result.matched_count} eligible student ID(s) ({result.created_count} newly added).",
     )
     return redirect(redirect_target)
 

@@ -336,22 +336,44 @@ class AuditLog(models.Model):
             return None
 
 
-class DepartmentOralExamPass(models.Model):
-    """系辦匯入的「碩士生修業概況一覽表」語音欄位通過名單(2026-09-11,使用者要求)。
+class DepartmentOralExamPassListType(models.TextChoices):
+    ORAL_EXAM_PASS = "ORAL_EXAM_PASS", "語音通過 / Oral exam passed"
+    # 2026-09-24(使用者要求):馬里蘭計畫的口語能力審核依據不是語音考試,而是系辦提供的
+    # 修課名單(「115-1課程學生名單」等)——在這份名單上就等同符合資格,語意跟 NTNU 的
+    # 「語音通過」完全不同,不能沿用同一句提示文字。
+    MARYLAND_COURSE_ROSTER = "MARYLAND_COURSE_ROSTER", "馬里蘭修課名單 / Maryland course roster"
 
-    這跟 `RosterEntry`(系統註冊用名冊)是完全不同的資料來源與用途:系辦內部的畢業條件
-    追蹤表混雜學術倫理、外語、論文倫理等各種欄位,且「語音」欄位的值並不一致(通過/完成/
-    有皆曾出現,語意不明確),因此匯入時只挑出值**恰好**是「通過」的列,其餘一律不視為
-    通過。這裡只記錄「通過」的學號,用來在 Admin 審核 Tutor 自行上傳的
+
+class DepartmentOralExamPass(models.Model):
+    """系辦匯入的資格比對名單(2026-09-11 新增,2026-09-24 擴充涵蓋馬里蘭修課名單)。
+
+    這跟 `RosterEntry`(系統註冊用名冊)是完全不同的資料來源與用途。目前有兩種來源檔案,
+    由 `list_type` 區分:
+
+    - `ORAL_EXAM_PASS`(NTNU):系辦內部的「碩士生修業概況一覽表」畢業條件追蹤表混雜學術
+      倫理、外語、論文倫理等各種欄位,且「語音」欄位的值並不一致(通過/完成/有皆曾出現,
+      語意不明確),因此匯入時只挑出值**恰好**是「通過」的列,其餘一律不視為通過。
+    - `MARYLAND_COURSE_ROSTER`(馬里蘭):馬里蘭計畫的口語能力資格不是語音考試,而是系辦
+      提供的修課名單(例如「115-1課程學生名單」),在名單上即視為符合資格。目前系辦提供的
+      這份檔案沿用跟語音名單相同的「學號＋語音＝通過」欄位格式(可能是既有匯入介面沒有
+      其他選項下的權宜格式),因此解析邏輯不需要另外改寫,只需要在匯入時記錄正確的
+      `list_type` 即可正確顯示對應的提示文字。
+
+    兩種來源都只記錄「符合資格」的學號,用來在 Admin 審核 Tutor 自行上傳的
     `tutoring.models.QualificationDocument` 時提供交叉比對提示,**不會、也不應該自動
     改變任何審核狀態**——最終核准/拒絕永遠是 Admin 手動決定,這裡只是輔助資訊。
 
     比對邏輯採累加式(比照 `import_roster_ids()` 的既有慣例:只新增/更新,不刪除),重新
     匯入不會清掉先前已存在的紀錄;如需訂正錯誤資料,由 Admin 在 Django Admin 手動刪除
-    該筆。
+    該筆。`student_id` 全域唯一,同一學號不會同時屬於兩種名單。
     """
 
     student_id = models.CharField("學號 / Student ID", max_length=24, unique=True)
+    list_type = models.CharField(
+        "名單類型 / List type", max_length=32,
+        choices=DepartmentOralExamPassListType.choices,
+        default=DepartmentOralExamPassListType.ORAL_EXAM_PASS,
+    )
     imported_at = models.DateTimeField("匯入時間 / Imported at", auto_now=True)
     imported_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="imported_oral_exam_passes", verbose_name="匯入者 / Imported by"
@@ -359,8 +381,8 @@ class DepartmentOralExamPass(models.Model):
 
     class Meta:
         ordering = ["student_id"]
-        verbose_name = "系辦語音通過名單 / Department oral exam pass record"
-        verbose_name_plural = "系辦語音通過名單 / Department oral exam pass records"
+        verbose_name = "系辦資格比對名單 / Department eligibility list record"
+        verbose_name_plural = "系辦資格比對名單 / Department eligibility list records"
 
     def clean(self):
         if self.student_id:

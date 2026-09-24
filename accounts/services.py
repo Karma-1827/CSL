@@ -9,7 +9,15 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import DepartmentOralExamPass, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry
+from .models import (
+    DepartmentOralExamPass,
+    DepartmentOralExamPassListType,
+    EducationLevel,
+    IdentityCategory,
+    PartnerProgram,
+    Role,
+    RosterEntry,
+)
 
 ROSTER_IMPORT_COLUMNS = [
     "student_id",
@@ -361,18 +369,26 @@ class OralExamPassListImportResult:
     sheets_used: list = field(default_factory=list)
 
 
-def import_department_oral_exam_pass_list(uploaded_file, *, admin):
-    """匯入系辦的「碩士生修業概況一覽表」，只挑出「語音」欄位值恰好是「通過」的學號。
+def import_department_oral_exam_pass_list(
+    uploaded_file, *, admin, list_type=DepartmentOralExamPassListType.ORAL_EXAM_PASS
+):
+    """匯入系辦提供的資格比對名單，只挑出「語音」欄位值恰好是「通過」的學號。
 
-    來源檔案是系辦內部畢業條件追蹤表，不是專門匯出的口語通過名單:標題列不固定在第一列
-    (常見於第一列是報表標題、第二列才是真正的欄位標題)，且可能有多個工作表，只有部分
-    工作表含「語音」欄位。因此逐一工作表掃描前幾列找出同時含「學號」與「語音」的標題列，
-    找不到的工作表(例如本專案實際踩過的「海華碩」分頁，只有外語沒有語音欄位)直接跳過，
-    不視為錯誤。
+    來源檔案原本是系辦內部畢業條件追蹤表(NTNU 用，`list_type=ORAL_EXAM_PASS`)，不是專門
+    匯出的口語通過名單:標題列不固定在第一列(常見於第一列是報表標題、第二列才是真正的
+    欄位標題)，且可能有多個工作表，只有部分工作表含「語音」欄位。因此逐一工作表掃描前
+    幾列找出同時含「學號」與「語音」的標題列，找不到的工作表(例如本專案實際踩過的
+    「海華碩」分頁，只有外語沒有語音欄位)直接跳過，不視為錯誤。
 
     「語音」欄位的值在系辦這份表格裡並不一致(通過/完成/有皆曾出現)，這裡刻意只認**完全
     等於**「通過」的儲存格，其餘一律不算通過——這是 2026-09-11 使用者實際核對過原始檔案
     後明確要求的比對規則，不得放寬比對其他相近字串。
+
+    2026-09-24(使用者要求)新增 `list_type=MARYLAND_COURSE_ROSTER`:馬里蘭計畫的口語能力
+    資格依據是系辦提供的修課名單，不是語音考試，語意跟 NTNU 完全不同，需要用不同的提示
+    文字呈現(見 `DepartmentOralExamPass` docstring)。系辦目前提供的馬里蘭檔案沿用同一種
+    「學號＋語音＝通過」欄位格式，因此這裡的解析邏輯不需要跟著分支，只需要把呼叫端選擇
+    的 `list_type` 存進比對到的每一筆紀錄。
     """
     try:
         workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
@@ -413,7 +429,7 @@ def import_department_oral_exam_pass_list(uploaded_file, *, admin):
     with transaction.atomic():
         for student_id in matched_student_ids:
             _, created = DepartmentOralExamPass.objects.update_or_create(
-                student_id=student_id, defaults={"imported_by": admin}
+                student_id=student_id, defaults={"imported_by": admin, "list_type": list_type}
             )
             if created:
                 created_count += 1

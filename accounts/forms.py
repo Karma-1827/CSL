@@ -20,6 +20,7 @@ from tutoring.models import (
 )
 
 from .models import (
+    DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
     RegistrationDraft,
@@ -915,14 +916,22 @@ class RosterImportForm(forms.Form):
 
 
 class OralExamPassListImportForm(forms.Form):
+    # 2026-09-24(使用者要求):馬里蘭計畫的口語能力資格依據是修課名單,不是語音考試,
+    # 提示文字需要跟 NTNU 分開;預設維持既有的「語音通過」語意,不影響既有操作習慣。
+    list_type = forms.ChoiceField(
+        label="名單類型 / List type",
+        choices=DepartmentOralExamPassListType.choices,
+        initial=DepartmentOralExamPassListType.ORAL_EXAM_PASS,
+    )
     file = forms.FileField(label="檔案 / File", widget=forms.ClearableFileInput(attrs={"accept": ".xlsx"}))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         add_form_classes(self)
         self.fields["file"].help_text = (
-            "系辦的「碩士生修業概況一覽表」Excel（.xlsx）。\n"
-            "The department's Excel export (.xlsx) of the graduate progress tracking sheet."
+            "NTNU 用「碩士生修業概況一覽表」，或馬里蘭用系辦提供的修課名單（.xlsx）。\n"
+            "The department's graduate progress tracking sheet (NTNU), or the Maryland course "
+            "roster (.xlsx)."
         )
 
     def clean_file(self):

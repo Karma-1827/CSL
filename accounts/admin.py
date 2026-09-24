@@ -157,10 +157,12 @@ class AuditLogAdmin(admin.ModelAdmin):
 
 @admin.register(DepartmentOralExamPass)
 class DepartmentOralExamPassAdmin(admin.ModelAdmin):
-    """2026-09-11: 系辦語音通過名單比對紀錄,僅供內部訂正錯誤資料用(見 model docstring)。
-    這裡刪除一筆只會拿掉口語能力審核頁面的提示標記,不影響任何 QualificationDocument。"""
+    """2026-09-11: 系辦資格比對名單紀錄,僅供內部訂正錯誤資料用(見 model docstring)。
+    這裡刪除一筆只會拿掉口語能力審核頁面的提示標記,不影響任何 QualificationDocument。
+    2026-09-24: 新增 `list_type` 篩選/顯示,方便區分 NTNU 語音通過與馬里蘭修課名單兩批資料。"""
 
-    list_display = ("student_id", "imported_by", "imported_at")
+    list_display = ("student_id", "list_type", "imported_by", "imported_at")
+    list_filter = ("list_type",)
     search_fields = ("student_id",)
     readonly_fields = ("imported_at",)
 

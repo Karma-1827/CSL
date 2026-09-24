@@ -88,11 +88,12 @@
             <div><span class="eyebrow">REVIEW</span><h2>口語能力證明待審核 <small>Pending reviews</small></h2></div>
           </div>
           <details class="candidate-filter-disclosure">
-            <summary class="candidate-filter-toggle">比對系辦語音通過名單 <small>Match department oral exam list</small></summary>
+            <summary class="candidate-filter-toggle">比對系辦資格名單 <small>Match department eligibility list</small></summary>
             <form action="{% url 'accounts:import_oral_exam_pass_list' %}" method="post" enctype="multipart/form-data" class="stack-form">
               {% csrf_token %}
+              {% include "components/form_field.html" with field=oral_exam_pass_import_form.list_type %}
               {% include "components/form_field.html" with field=oral_exam_pass_import_form.file %}
-              <p class="section-intro">上傳系辦的「碩士生修業概況一覽表」，系統只讀取「語音」欄位恰好是「通過」的學號，在下方待審核列表加上提示；審核結果仍須由管理員逐筆手動核准或拒絕。<br>Upload the department's graduate progress tracking sheet — only rows whose "語音" column reads exactly "通過" are matched, shown as a hint below; the actual approval decision always stays manual.</p>
+              <p class="section-intro">NTNU 請上傳系辦的「碩士生修業概況一覽表」；馬里蘭請上傳系辦提供的修課名單。系統只讀取「語音」欄位恰好是「通過」的學號，依所選名單類型在下方待審核列表加上「語音通過」或「修課名單」提示；審核結果仍須由管理員逐筆手動核准或拒絕。<br>For NTNU, upload the department's graduate progress tracking sheet; for Maryland, upload the department's course roster. Only rows whose "語音" column reads exactly "通過" are matched, shown below as "oral exam passed" or "course enrollment" depending on the selected list type; the actual approval decision always stays manual.</p>
               <button class="button button-secondary button-small" type="submit">上傳比對 / Upload &amp; match</button>
             </form>
           </details>
@@ -103,7 +104,7 @@
                 <tbody>
                   {% for document in pending_qualifications %}
                     <tr>
-                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
+                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint_type == 'MARYLAND_COURSE_ROSTER' %}<br><span class="result-text status-approved">系辦名冊：修課名單 <small>Dept. roster: course enrollment</small></span>{% elif document.oral_exam_pass_hint_type %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
