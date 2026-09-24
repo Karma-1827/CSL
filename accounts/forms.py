@@ -20,6 +20,7 @@ from tutoring.models import (
 )
 
 from .models import (
+    Announcement,
     DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
@@ -939,3 +940,21 @@ class OralExamPassListImportForm(forms.Form):
         if not upload.name.lower().endswith(".xlsx"):
             raise ValidationError("僅支援 .xlsx 檔案。 / Only .xlsx files are supported.")
         return upload
+
+
+class AnnouncementForm(forms.ModelForm):
+    class Meta:
+        model = Announcement
+        fields = ["content", "display_order", "is_active"]
+        widgets = {
+            "content": forms.Textarea(attrs={"rows": 3}),
+        }
+        labels = {
+            "content": "公告內容 / Announcement content",
+            "display_order": "顯示順序（數字越小越前面） / Display order (lower shows first)",
+            "is_active": "顯示中 / Active",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)

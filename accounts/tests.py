@@ -22,6 +22,7 @@ from .services import import_department_oral_exam_pass_list
 
 from .models import (
     AccountStatus,
+    Announcement,
     AuditLog,
     DepartmentOralExamPass,
     DepartmentOralExamPassListType,
@@ -2693,3 +2694,86 @@ class DemoSeedGuardTests(TestCase):
         with override_settings(DEBUG=True), patch.dict(os.environ, {"ALLOW_DEMO_SEED": "1"}):
             call_command("seed_demo", password="Password-2026")
         self.assertTrue(User.objects.filter(username="DEMO-ADMIN").exists())
+
+
+class AnnouncementTests(TestCase):
+    """2026-09-24(使用者要求):Tutor/Tutee 首頁上方新增「公告欄」,內容由 Admin 自行編輯
+    (見 CLAUDE.md，比照 4.10 節 ClassDocument 的既有慣例)。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="ANNOUNCE-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(username="ANNOUNCETUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+        self.tutee = User.objects.create_user(username="ANNOUNCETUTEE", password="Tutee-password-2026", role=Role.TUTEE)
+
+    def test_admin_can_create_an_announcement(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:save_announcement"),
+            {"content": "測試公告內容", "display_order": 1, "is_active": "on"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#announcements")
+        announcement = Announcement.objects.get(content="測試公告內容")
+        self.assertEqual(announcement.created_by, self.admin)
+        self.assertTrue(announcement.is_active)
+        log = AuditLog.objects.get(event_type="ANNOUNCEMENT_CREATED")
+        self.assertEqual(log.actor, self.admin)
+
+    def test_admin_can_edit_an_announcement_without_changing_created_by(self):
+        announcement = Announcement.objects.create(content="原始內容", display_order=1, created_by=self.admin)
+        other_admin = User.objects.create_superuser(username="ANNOUNCE-ADMIN2", password="Admin-password-2026")
+        self.client.force_login(other_admin)
+        response = self.client.post(
+            reverse("accounts:update_announcement", args=[announcement.pk]),
+            {
+                f"announcement-{announcement.pk}-content": "更新後內容",
+                f"announcement-{announcement.pk}-display_order": 2,
+                f"announcement-{announcement.pk}-is_active": "on",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#announcements")
+        announcement.refresh_from_db()
+        self.assertEqual(announcement.content, "更新後內容")
+        self.assertEqual(announcement.created_by, self.admin)
+        self.assertTrue(AuditLog.objects.filter(event_type="ANNOUNCEMENT_UPDATED").exists())
+
+    def test_admin_can_delete_an_announcement(self):
+        announcement = Announcement.objects.create(content="待刪除", display_order=1, created_by=self.admin)
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("accounts:delete_announcement", args=[announcement.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#announcements")
+        self.assertFalse(Announcement.objects.filter(pk=announcement.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(event_type="ANNOUNCEMENT_DELETED").exists())
+
+    def test_non_admin_cannot_manage_announcements(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("accounts:save_announcement"),
+            {"content": "不該成功", "display_order": 1, "is_active": "on"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertFalse(Announcement.objects.filter(content="不該成功").exists())
+
+    def test_tutor_dashboard_shows_only_active_announcements_in_order(self):
+        Announcement.objects.create(content="第二則", display_order=2, is_active=True, created_by=self.admin)
+        Announcement.objects.create(content="已隱藏", display_order=0, is_active=False, created_by=self.admin)
+        Announcement.objects.create(content="第一則", display_order=1, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        announcements = list(response.context["active_announcements"])
+        self.assertEqual([item.content for item in announcements], ["第一則", "第二則"])
+
+    def test_tutee_dashboard_also_shows_active_announcements(self):
+        Announcement.objects.create(content="給學生看的公告", display_order=1, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        announcements = list(response.context["active_announcements"])
+        self.assertEqual([item.content for item in announcements], ["給學生看的公告"])
+
+    def test_default_dashboard_landing_panel_is_still_overview(self):
+        """公告欄側邊欄連結放在「我的首頁」上方,但預設進入的分頁不應因此改變
+        (見 static/js/dashboard.js 的 hash-based activate() 邏輯,兩者互相獨立)。"""
+        Announcement.objects.create(content="任何公告", display_order=1, is_active=True, created_by=self.admin)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn('class="dashboard-view is-active" data-dashboard-panel="overview"', content)

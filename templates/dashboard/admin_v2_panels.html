@@ -265,3 +265,43 @@
     <div class="empty-state">目前沒有上傳任何上課文件。 / No class documents uploaded yet.</div>
   {% endif %}
 </section>
+
+<section class="dashboard-view" data-dashboard-panel="announcements">
+  <div class="view-heading"><span>ANNOUNCEMENTS</span><h2>公告欄管理 <small>Announcements</small></h2><p>管理老師與學生登入後在「公告欄」看到的公告事項；顯示順序數字越小越前面，取消勾選「顯示中」可暫時隱藏但不刪除內容。<br>Manage the notices teachers and students see on the Announcements tab; lower display order shows first, and unchecking "Active" hides an item without deleting it.</p></div>
+
+  <details class="semester-add-disclosure"{% if not announcement_rows %} open{% endif %}>
+    <summary>
+      <span class="semester-add-icon" aria-hidden="true">＋</span>
+      <span><strong>新增公告</strong><small>Add announcement</small></span>
+    </summary>
+    <form class="schedule-form semester-form semester-new-form" action="{% url 'accounts:save_announcement' %}" method="post">
+      {% csrf_token %}{{ new_announcement_form.as_div }}
+      <button class="button button-primary" type="submit">新增公告 <small>Add announcement</small></button>
+    </form>
+  </details>
+
+  {% if announcement_rows %}
+    <div class="semester-setting-list">
+      {% for announcement in announcement_rows %}
+        <div class="semester-card">
+          <div class="semester-setting-row announcement-setting-row">
+            <span class="semester-setting-name"><strong>{{ announcement.content|truncatechars:60 }}</strong><small>顯示順序 {{ announcement.display_order }}</small></span>
+            <span class="semester-setting-status{% if not announcement.is_active %} status-future{% endif %}">{% if announcement.is_active %}顯示中<small>Active</small>{% else %}已隱藏<small>Hidden</small>{% endif %}</span>
+            <div class="semester-setting-actions">
+              <form action="{% url 'accounts:delete_announcement' announcement.pk %}" method="post" data-confirm="確定刪除這則公告？此動作無法復原。">{% csrf_token %}<button class="button button-danger button-small" type="submit">刪除 <small>Delete</small></button></form>
+            </div>
+          </div>
+          <details class="semester-edit-disclosure">
+            <summary class="semester-edit-icon-btn" aria-label="編輯公告 / Edit announcement"><span aria-hidden="true">✎</span></summary>
+            <form class="schedule-form semester-form semester-edit-form" action="{% url 'accounts:update_announcement' announcement.pk %}" method="post">
+              {% csrf_token %}{{ announcement.edit_form.as_div }}
+              <button class="button button-primary button-small" type="submit">儲存修改 / Save changes</button>
+            </form>
+          </details>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">目前沒有任何公告。 / No announcements yet.</div>
+  {% endif %}
+</section>

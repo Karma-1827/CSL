@@ -390,3 +390,30 @@ class DepartmentOralExamPass(models.Model):
 
     def __str__(self):
         return self.student_id
+
+
+class Announcement(models.Model):
+    """Tutor/Tutee 首頁上方的公告欄項目(2026-09-24 新增,使用者要求)。
+
+    比照 `tutoring.models.ClassDocument` 的 Admin 自行編輯慣例:單一模型、
+    無角色區分(目前 Tutor 與 Tutee 看到同一份公告),`display_order` 決定顯示順序,
+    `is_active=False` 只是暫時隱藏、不刪除歷史內容。
+    """
+
+    content = models.TextField("公告內容 / Announcement content", max_length=1000)
+    display_order = models.PositiveIntegerField("顯示順序 / Display order", default=0)
+    is_active = models.BooleanField("顯示中 / Active", default=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_announcements",
+        verbose_name="建立者 / Created by",
+    )
+    created_at = models.DateTimeField("建立時間 / Created at", auto_now_add=True)
+    updated_at = models.DateTimeField("更新時間 / Updated at", auto_now=True)
+
+    class Meta:
+        ordering = ["display_order", "-created_at"]
+        verbose_name = "公告欄項目 / Announcement"
+        verbose_name_plural = "公告欄項目 / Announcements"
+
+    def __str__(self):
+        return self.content[:40]

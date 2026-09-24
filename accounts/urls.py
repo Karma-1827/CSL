@@ -28,6 +28,9 @@ urlpatterns = [
     path("roster/import/quick/<str:category_code>/", views.roster_import_quick, name="roster_import_quick"),
     path("roster/import/template/<str:file_format>/", views.download_roster_template, name="roster_import_template"),
     path("qualification/oral-exam-pass-list/import/", views.import_oral_exam_pass_list, name="import_oral_exam_pass_list"),
+    path("announcements/save/", views.save_announcement, name="save_announcement"),
+    path("announcements/<int:pk>/save/", views.save_announcement, name="update_announcement"),
+    path("announcements/<int:pk>/delete/", views.delete_announcement, name="delete_announcement"),
     path("recover/", views.recover_account, name="recover"),
     path("recover/new-password/", views.set_recovered_password, name="set_recovered_password"),
 ]

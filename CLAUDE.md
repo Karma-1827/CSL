@@ -340,6 +340,18 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
   - Django Admin 後台(`tutoring/admin.py::ClassDocumentAdmin`)**予以保留、未移除**,兩條路徑並存;透過 Django Admin 操作仍會被既有的 `mirror_admin_log_entry_to_audit_log()` 訊號自動鏡射進 `AuditLog`,自訂前台則靠上述手動 `AuditLog.record()`,兩者不衝突也不去重(比照 4.9 節 `HourAdjustment` 的既有慣例)。
   - 測試見 `tutoring/tests.py::ClassDocumentAdminUploadTests`(上傳、非 Admin 被拒、跨計畫學期擋下、免重新上傳檔案即可編輯、刪除、dashboard 正確帶出新表單與既有清單)與 `ClassDocumentTests::test_admin_can_download_any_document_regardless_of_active_state`。
 
+### 4.11 公告欄
+
+`accounts.models.Announcement`(2026-09-24 新增,使用者要求「tutor/tutee 左側功能欄多加一個公告欄」):Tutor 與 Tutee 首頁上方新增一個獨立頁籤,顯示系辦公告事項(目前是系辦提供的 5 則配對/課程紀錄規範說明)。比照 4.10 節 `ClassDocument` 的 Admin 自行編輯慣例,而非把公告文字寫死在 template 裡:
+
+- 單一模型,不分角色(Tutor/Tutee 目前看到同一份公告),欄位為公告內容(純文字,最多 1000 字)、顯示順序(數字越小越前面)、顯示中(布林,關閉即暫時隱藏但不刪除內容),以及建立者、建立/更新時間。
+- Admin dashboard 新增「公告欄管理」頁籤(`templates/dashboard/admin_v2_panels.html`),沿用學期設定/上課文件既有的「新增表單 + 逐筆卡片,卡片內含編輯用 `<details>` 收合表單」版面(`.semester-setting-list`/`.semester-card`/`.semester-edit-disclosure` 共用同一組 CSS)。因公告沒有「合作計畫」/「適用學期」欄位,列表列只需 3 欄而非既有的 5 欄,新增 `.announcement-setting-row` 修飾類別覆寫 `.semester-setting-row` 的 `grid-template-columns`,其餘邊框/底色/陰影等樣式沿用不變。
+- `accounts/views.py::save_announcement(request, pk=None)`(建立/編輯共用同一個 view)與 `delete_announcement(request, pk)`,皆用 `@role_required(Role.ADMIN)` 保護(非 Admin 會被導回 dashboard 並顯示錯誤訊息,不是 404),寫入 `ANNOUNCEMENT_CREATED`/`ANNOUNCEMENT_UPDATED`/`ANNOUNCEMENT_DELETED` `AuditLog`。Django Admin(`accounts/admin.py::AnnouncementAdmin`)同時保留,兩條路徑並存,不做去重(比照 4.9/4.10 節既有慣例)。
+- Tutor/Tutee 端是唯讀顯示:`dashboard()` 對三種角色的 context 一律附上 `active_announcements`(`Announcement.objects.filter(is_active=True)`,依 model 預設的 `display_order` 排序),`templates/dashboard/participant_v2_panels.html`(Tutor/Tutee 共用同一份 partial)新增「公告欄」頁籤,以編號清單呈現,套用一個柔和黃色的提醒框樣式(新增 `.announcement-board`/`.announcement-list`,配色沿用既有 `.alert-active-box` 的色票但獨立成自己的 class——原本的 `.alert-active-box span/p` 選擇器只對文字子元素設定樣式,不適合直接包一個 `<ol>` 清單)。
+- 側邊欄連結刻意放在 Tutor/Tutee 的「我的首頁」正上方(使用者明確要求),但**登入後預設仍停留在「我的首頁」**:`static/js/dashboard.js` 的頁面載入邏輯是讀網址 hash(`location.hash.slice(1) || "overview"`)決定要顯示哪個分頁,與側邊欄連結在 HTML 裡的先後順序完全無關(哪個連結帶 `is-active` 也只是初始 markup 的樣式,載入後一律由這段 JS 依 hash 重新校正)。因此可以同時滿足「公告欄排在最上面」與「預設看到的還是我的首頁」這兩個表面上看似衝突的需求,不需要任何額外的特判邏輯。Admin 側邊欄新增對應的「公告欄管理」連結,位置在「系統總覽」之後。
+- 目前的 5 則公告內容是透過這個新介面由 Admin 手動輸入,不是寫死在程式碼或 migration 資料遷移裡;之後系辦要新增/修改/下架公告都直接在「公告欄管理」頁籤操作即可。
+- 測試見 `accounts/tests.py::AnnouncementTests`(Admin 建立/編輯/刪除、非 Admin 被拒、Tutor/Tutee dashboard 皆能看到依 `display_order` 排序的啟用中公告、已隱藏的公告不顯示、新增公告欄連結後預設進入分頁仍是 overview)。
+
 ## 5. 技術架構
 
 ### Runtime

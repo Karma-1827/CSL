@@ -7,7 +7,16 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .forms import ThrottledAdminAuthenticationForm
-from .models import AuditLog, DepartmentOralExamPass, PartnerProgram, Role, RosterEntry, SecurityQuestionAnswer, User
+from .models import (
+    Announcement,
+    AuditLog,
+    DepartmentOralExamPass,
+    PartnerProgram,
+    Role,
+    RosterEntry,
+    SecurityQuestionAnswer,
+    User,
+)
 
 IDLE_ACCOUNT_THRESHOLD_DAYS = 180
 
@@ -165,6 +174,16 @@ class DepartmentOralExamPassAdmin(admin.ModelAdmin):
     list_filter = ("list_type",)
     search_fields = ("student_id",)
     readonly_fields = ("imported_at",)
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    """2026-09-24:與前台「公告欄管理」頁籤並存(比照 4.10 節 ClassDocument 的既有慣例),
+    供 superuser 例外訂正或批次調整用。"""
+
+    list_display = ("__str__", "display_order", "is_active", "created_by", "updated_at")
+    list_filter = ("is_active",)
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(SecurityQuestionAnswer)

@@ -83,6 +83,7 @@ from .forms import (
     SKILL_CHOICES,
     TIME_SLOTS,
     AdminProfileEditForm,
+    AnnouncementForm,
     BilingualAuthenticationForm,
     BilingualSetPasswordForm,
     OralExamPassListImportForm,
@@ -98,6 +99,7 @@ from .forms import (
     TutorRegistrationForm,
 )
 from .models import (
+    Announcement,
     AuditLog,
     DepartmentOralExamPass,
     PartnerProgram,
@@ -335,7 +337,11 @@ def dashboard(request):
         and today >= current_semester.starts_on - timedelta(days=MATCHING_EARLY_OPEN_DAYS)
         and today <= current_semester.ends_on
     )
-    context = {"current_semester": current_semester, "matching_open": matching_open}
+    context = {
+        "current_semester": current_semester,
+        "matching_open": matching_open,
+        "active_announcements": Announcement.objects.filter(is_active=True),
+    }
     if request.user.role == Role.ADMIN:
         semester_rows = list(Semester.objects.order_by("-starts_on"))
         for row in semester_rows:
@@ -346,6 +352,9 @@ def dashboard(request):
         )
         for row in class_document_rows:
             row.edit_form = ClassDocumentUploadForm(instance=row, prefix=f"document-{row.pk}")
+        announcement_rows = list(Announcement.objects.order_by("display_order", "-created_at"))
+        for row in announcement_rows:
+            row.edit_form = AnnouncementForm(instance=row, prefix=f"announcement-{row.pk}")
         overview_semesters = semester_rows
         overview_semester = current_semester or (overview_semesters[0] if overview_semesters else None)
         requested_semester_id = request.GET.get("class_semester")
@@ -576,6 +585,8 @@ def dashboard(request):
                 "class_document_programs": class_document_programs,
                 "class_document_rows": class_document_rows,
                 "new_class_document_form": ClassDocumentUploadForm(),
+                "announcement_rows": announcement_rows,
+                "new_announcement_form": AnnouncementForm(),
                 "roster_q": roster_q,
                 "roster_role": roster_role,
                 "roster_program": roster_program,
@@ -1444,6 +1455,49 @@ def import_oral_exam_pass_list(request):
         f"Matched {result.matched_count} eligible student ID(s) ({result.created_count} newly added).",
     )
     return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def save_announcement(request, pk=None):
+    """公告欄項目建立/編輯共用同一個 view(比照 4.10 節 save_class_document() 的既有寫法)。"""
+    redirect_target = reverse("accounts:dashboard") + "#announcements"
+    instance = get_object_or_404(Announcement, pk=pk) if pk else None
+    form = AnnouncementForm(request.POST, instance=instance, prefix=f"announcement-{pk}" if pk else None)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(redirect_target)
+
+    announcement = form.save(commit=False)
+    if instance is None:
+        announcement.created_by = request.user
+    announcement.save()
+    log_event(
+        request,
+        "ANNOUNCEMENT_UPDATED" if instance else "ANNOUNCEMENT_CREATED",
+        "更新公告欄項目 / Announcement updated" if instance else "新增公告欄項目 / Announcement created",
+        metadata={"announcement_id": announcement.pk},
+    )
+    messages.success(request, "公告已儲存。 / Announcement saved.")
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def delete_announcement(request, pk):
+    announcement = get_object_or_404(Announcement, pk=pk)
+    announcement_id = announcement.pk
+    announcement.delete()
+    log_event(
+        request,
+        "ANNOUNCEMENT_DELETED",
+        "刪除公告欄項目 / Announcement deleted",
+        metadata={"announcement_id": announcement_id},
+    )
+    messages.success(request, "公告已刪除。 / Announcement deleted.")
+    return redirect(reverse("accounts:dashboard") + "#announcements")
 
 
 @role_required(Role.ADMIN)

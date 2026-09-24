@@ -3816,6 +3816,25 @@ td small {
   color: var(--ink-muted);
   font-size: 0.66rem;
 }
+.announcement-board {
+  padding: 16px 18px;
+  border: 1px solid #e2c86f;
+  border-radius: 12px;
+  background: #fff7d9;
+}
+.announcement-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding-left: 22px;
+  color: var(--navy);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+.announcement-list li::marker {
+  font-weight: 800;
+  color: #9a7620;
+}
 .empty-state.compact {
   padding: 15px;
 }
@@ -4504,6 +4523,10 @@ td small {
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 8px 22px rgba(39, 55, 77, 0.05);
+}
+/* 公告欄管理沒有「合作計畫」/「適用期間」欄位，只需 3 欄，其餘沿用既有樣式。 */
+.announcement-setting-row {
+  grid-template-columns: minmax(160px, 1fr) auto auto;
 }
 .semester-setting-name {
   display: grid;

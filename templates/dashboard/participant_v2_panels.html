@@ -1,3 +1,17 @@
+<section class="dashboard-view" data-dashboard-panel="announcements">
+  <div class="view-heading"><span>ANNOUNCEMENTS</span><h2>公告欄 <small>Announcements</small></h2></div>
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">NOTICE</span><h2>重要公告 <small>Important notices</small></h2></div></div>
+    {% if active_announcements %}
+      <div class="announcement-board">
+        <ol class="announcement-list">
+          {% for announcement in active_announcements %}<li>{{ announcement.content|linebreaksbr }}</li>{% endfor %}
+        </ol>
+      </div>
+    {% else %}<div class="empty-state">目前沒有公告。 / No announcements yet.</div>{% endif %}
+  </section>
+</section>
+
 <section class="dashboard-view" data-dashboard-panel="hours">
   <div class="view-heading"><span>{% if hours_download_allowed %}TUTORING HOURS{% else %}TUTORING HISTORY{% endif %}</span><h2>{% if hours_download_allowed %}輔導時數 <small>Tutoring hours</small>{% else %}輔導紀錄 <small>Tutoring history</small>{% endif %}</h2></div>
 

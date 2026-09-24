@@ -125,6 +125,8 @@
 >
 > **附帶記錄(非本次修改,盤點時發現)**:同一 session 稍早使用者委託另一位 AI agent「codex」完成三項功能並已部署至正式站(commit `56ef3a5`→`ca984d5`,部署紀錄六十四~六十七):①解除配對審核處理紀錄新增「提出申請者 / Requester」欄;②Admin「異常回報」待處理/已紀錄兩張卡片改為可收合區塊;③新增完整的 Admin「配對排除 / Matching exclusions」功能(`tutoring.models.MatchingExclusion`,依學期指定 Tutor/Tutee 互相不可見,支援姓名/學號搜尋與撤銷,含 migration `tutoring.0037`)。另有一筆已提交但**尚未部署**的 `b737488`(異常回報支援私有附件上傳,`tutoring.migrations.0038`)。
 
+> **2026-09-24 新增「公告欄」功能(使用者要求)**:使用者提出「tutor/tutee 左側功能欄多加一個『公告欄』在我的首頁上方,但一登入預設畫面還是我的首頁」,並附上系辦提供的 5 則配對/課程紀錄規範公告,詢問「要怎麼呈現比較好呢?」。先釐清側邊欄排序與登入預設分頁其實互相獨立(`static/js/dashboard.js` 的 `activate(location.hash.slice(1) || "overview", ...)` 只認網址 hash,與側邊欄連結的 HTML 順序無關),再詢問使用者公告內容要不要做成 Admin 可自行編輯——使用者選擇「Admin 可自行編輯(建議)」而非寫死在 template。新增 `accounts.models.Announcement`(`accounts/migrations/0021_announcement`)、`AnnouncementForm`、`accounts/admin.py::AnnouncementAdmin`,以及 `save_announcement`/`delete_announcement`(`@role_required(Role.ADMIN)`,寫入 `ANNOUNCEMENT_CREATED`/`UPDATED`/`DELETED` AuditLog)。Admin dashboard 新增「公告欄管理」頁籤(沿用 4.10 節上課文件的新增表單+逐筆卡片版面,新增 `.announcement-setting-row` 修飾類別因欄位較少只需 3 欄);Tutor/Tutee 共用的 `participant_v2_panels.html` 新增唯讀「公告欄」頁籤,以編號清單呈現並套用新增的 `.announcement-board`/`.announcement-list` 黃色提醒框樣式。側邊欄連結依使用者要求放在 Tutor/Tutee 的「我的首頁」正上方,Admin 側邊欄則在「系統總覽」之後新增「公告欄管理」連結;`dashboard()` 對三種角色一律附上 `active_announcements` context。已在 Django test client 上以 admin/tutor/tutee 三種帳號實際渲染 `/dashboard/` 確認側邊欄連結、公告面板、預設分頁三者皆正確(本次無可用瀏覽器工具,以 test client 渲染出的 HTML 取代肉眼瀏覽器巡查)。5 則公告內容已透過新的 Admin UI 在本機建立測試,正式站將於部署後由 Admin 用同一介面輸入,不隨程式碼或 migration 帶入資料。新增 7 項回歸測試(`accounts/tests.py::AnnouncementTests`),428 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。已同步更新 `CLAUDE.md` 新增第 4.11 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
