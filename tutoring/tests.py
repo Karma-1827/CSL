@@ -2706,6 +2706,33 @@ class ClassWorkflowTests(TestCase):
         self.assertIn('<th class="col-reporter">通報者 / Reporter</th>', content)
         self.assertIn(f"<time>{timezone.localtime(report.resolved_at).date()}</time><br>", content)
 
+    def test_own_incident_report_card_shows_status_badge_and_admin_note(self):
+        """2026-10-01(使用者要求):Tutor/Tutee「我送出的回報」卡片——已紀錄顯示綠色徽章、
+        尚未紀錄顯示紅色徽章，管理員的回覆內容要跟自己送出的內容明顯區分開來。"""
+        submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="尚未處理的回報內容"
+        )
+        resolved = submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="已處理的回報內容"
+        )
+        admin = User.objects.create_superuser(username="INCIDENT-BADGE-ADMIN", password="Admin-password-2026")
+        resolve_incident_report(report_id=resolved.pk, admin=admin, note="已了解，謝謝回報")
+
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+
+        pending_index = content.index("尚未處理的回報內容")
+        pending_card = content[max(0, pending_index - 400):pending_index]
+        self.assertIn('<span class="status-badge status-rejected">尚未紀錄 / Not yet logged</span>', pending_card)
+        self.assertNotIn("incident-report-admin-note", content[pending_index:pending_index + 200])
+
+        resolved_index = content.index("已處理的回報內容")
+        resolved_card = content[max(0, resolved_index - 400):resolved_index]
+        self.assertIn('<span class="status-badge status-approved">已紀錄 / Logged</span>', resolved_card)
+        admin_note_index = content.index("incident-report-admin-note", resolved_index)
+        self.assertIn("已了解，謝謝回報", content[admin_note_index:admin_note_index + 300])
+
     def test_non_admin_cannot_resolve_incident_report(self):
         report = submit_incident_report(
             reporter=self.tutor, category=IncidentReportCategory.OTHER, content="測試內容"

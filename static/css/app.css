@@ -3816,6 +3816,37 @@ td small {
   gap: 10px;
   margin-bottom: 14px;
 }
+.incident-report-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.incident-report-card-head .status-badge {
+  flex: 0 0 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+.incident-report-admin-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #b9dfca;
+  border-radius: 10px;
+  background: #edf8f2;
+}
+.incident-report-admin-note-label {
+  color: var(--success);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.incident-report-admin-note p {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.8rem;
+}
 .button-alert {
   color: #fff;
   border-color: #9a7620;

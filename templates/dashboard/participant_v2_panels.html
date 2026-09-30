@@ -106,7 +106,20 @@
     {% if own_incident_reports %}
       <div class="incident-report-list">
         {% for report in own_incident_reports %}
-          <div class="profile-note-box"><span>{{ report.created_at|date:"Y-m-d H:i" }} · {{ report.get_category_display }} · {% if report.status == 'RESOLVED' %}已紀錄 / Logged{% else %}待處理 / Pending{% endif %}</span><p>{{ report.content }}</p>{% if report.attachment %}<p><a class="button button-secondary button-small" href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a></p>{% endif %}{% if report.resolution_note %}<p><em>紀錄備註 / Note：{{ report.resolution_note }}</em></p>{% endif %}</div>
+          <div class="profile-note-box incident-report-card">
+            <div class="incident-report-card-head">
+              <span>{{ report.created_at|date:"Y-m-d H:i" }} · {{ report.get_category_display }}</span>
+              <span class="status-badge {% if report.status == 'RESOLVED' %}status-approved{% else %}status-rejected{% endif %}">{% if report.status == 'RESOLVED' %}已紀錄 / Logged{% else %}尚未紀錄 / Not yet logged{% endif %}</span>
+            </div>
+            <p>{{ report.content }}</p>
+            {% if report.attachment %}<p><a class="button button-secondary button-small" href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a></p>{% endif %}
+            {% if report.resolution_note %}
+              <div class="incident-report-admin-note">
+                <span class="incident-report-admin-note-label">系辦回覆 / Admin note</span>
+                <p>{{ report.resolution_note }}</p>
+              </div>
+            {% endif %}
+          </div>
         {% endfor %}
       </div>
     {% else %}<div class="empty-state">目前沒有送出過異常回報。 / You haven't submitted any incident reports yet.</div>{% endif %}
