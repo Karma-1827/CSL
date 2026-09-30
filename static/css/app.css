@@ -3816,16 +3816,70 @@ td small {
   gap: 10px;
   margin-bottom: 14px;
 }
-.incident-report-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+.incident-report-card {
+  overflow: hidden;
+  border: 1px solid #ebd5dd;
+  border-radius: 12px;
+  background: #fff;
 }
-.incident-report-card-head .status-badge {
+.incident-report-card > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.incident-report-card > summary::-webkit-details-marker {
+  display: none;
+}
+.incident-report-card > summary > span:first-child {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.incident-report-card > summary > span:first-child small {
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+}
+.incident-report-card > summary .status-badge {
   flex: 0 0 auto;
   margin: 0;
   white-space: nowrap;
+}
+.incident-report-card > summary > i {
+  display: grid;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f4e7eb;
+  color: var(--blue);
+  font-style: normal;
+  transition: transform 0.18s ease;
+}
+.incident-report-card > summary > i::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+.incident-report-card[open] > summary {
+  border-bottom: 1px solid #ebd5dd;
+}
+.incident-report-card[open] > summary > i {
+  transform: rotate(-135deg);
+}
+.incident-report-card-body {
+  padding: 14px 16px;
+}
+.incident-report-card .makeup-review-row {
+  border: none;
+  border-radius: 0;
 }
 .incident-report-admin-note {
   display: grid;

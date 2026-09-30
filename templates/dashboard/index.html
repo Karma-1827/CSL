@@ -316,10 +316,17 @@
           {% if pending_incident_reports %}
             <div class="makeup-review-list">
               {% for report in pending_incident_reports %}
-                <article class="makeup-review-row class-alert-row">
-                  <div><strong>{{ report.created_at|date:"Y-m-d H:i" }}</strong><span>通報者 / Reporter：{{ report.reporter.bilingual_name }}（{{ report.reporter.username }}）</span><small>{{ report.get_category_display }}</small><p>{{ report.content }}</p>{% if report.attachment %}<a class="button button-secondary button-small" href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a>{% endif %}{% if report.resolution_note %}<p class="incident-report-previous-note"><em>先前紀錄 / Previous note：{{ report.resolution_note }}</em></p>{% endif %}{% if report.replies.all %}<div class="incident-report-reply-list">{% for reply in report.replies.all %}<div class="incident-report-reply-item"><time>{{ reply.created_at|date:"Y-m-d H:i" }}</time><p>{{ reply.content }}</p></div>{% endfor %}</div>{% endif %}</div>
-                  <form action="{% url 'tutoring:resolve_incident_report' report.pk %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="紀錄備註 / Log note"><div class="inline-actions"><button class="button button-small button-success" type="submit">標記已紀錄 / Mark as logged</button></div></form>
-                </article>
+                <details class="incident-report-card"{% if forloop.first %} open{% endif %}>
+                  <summary>
+                    <span><strong>{{ report.created_at|date:"Y-m-d H:i" }}</strong><small>{{ report.get_category_display }}</small></span>
+                    <span>通報者 / Reporter：{{ report.reporter.bilingual_name }}（{{ report.reporter.username }}）</span>
+                    <i aria-hidden="true"></i>
+                  </summary>
+                  <article class="makeup-review-row class-alert-row">
+                    <div><p>{{ report.content }}</p>{% if report.attachment %}<a class="button button-secondary button-small" href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a>{% endif %}{% if report.resolution_note %}<p class="incident-report-previous-note"><em>先前紀錄 / Previous note：{{ report.resolution_note }}</em></p>{% endif %}{% if report.replies.all %}<div class="incident-report-reply-list">{% for reply in report.replies.all %}<div class="incident-report-reply-item"><time>{{ reply.created_at|date:"Y-m-d H:i" }}</time><p>{{ reply.content }}</p></div>{% endfor %}</div>{% endif %}</div>
+                    <form action="{% url 'tutoring:resolve_incident_report' report.pk %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="紀錄備註 / Log note"><div class="inline-actions"><button class="button button-small button-success" type="submit">標記已紀錄 / Mark as logged</button></div></form>
+                  </article>
+                </details>
               {% endfor %}
             </div>
           {% else %}<div class="empty-state">目前沒有待處理的異常回報。 / No pending incident reports.</div>{% endif %}

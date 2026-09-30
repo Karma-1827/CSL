@@ -106,35 +106,38 @@
     {% if own_incident_reports %}
       <div class="incident-report-list">
         {% for report in own_incident_reports %}
-          <div class="profile-note-box incident-report-card">
-            <div class="incident-report-card-head">
-              <span>{{ report.created_at|date:"Y-m-d H:i" }} · {{ report.get_category_display }}</span>
+          <details class="incident-report-card"{% if forloop.first %} open{% endif %}>
+            <summary>
+              <span><strong>{{ report.created_at|date:"Y-m-d H:i" }}</strong><small>{{ report.get_category_display }}</small></span>
               <span class="status-badge {% if report.status == 'RESOLVED' %}status-approved{% else %}status-rejected{% endif %}">{% if report.status == 'RESOLVED' %}已紀錄 / Logged{% else %}尚未紀錄 / Not yet logged{% endif %}</span>
+              <i aria-hidden="true"></i>
+            </summary>
+            <div class="incident-report-card-body">
+              <p>{{ report.content }}</p>
+              {% if report.attachment %}<p><a class="button button-secondary button-small" href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a></p>{% endif %}
+              {% if report.resolution_note %}
+                <div class="incident-report-admin-note">
+                  <span class="incident-report-admin-note-label">系辦回覆 / Admin note</span>
+                  <p>{{ report.resolution_note }}</p>
+                </div>
+              {% endif %}
+              {% if report.replies.all %}
+                <div class="incident-report-reply-list">
+                  {% for reply in report.replies.all %}
+                    <div class="incident-report-reply-item"><time>{{ reply.created_at|date:"Y-m-d H:i" }}</time><p>{{ reply.content }}</p></div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <details class="incident-report-reply-disclosure">
+                <summary>回覆 / Reply</summary>
+                <form class="stack-form" action="{% url 'tutoring:add_incident_report_reply' report.pk %}" method="post">
+                  {% csrf_token %}
+                  <textarea name="content" maxlength="1000" rows="2" placeholder="繼續補充這則回報的內容... / Add more details to this report..."></textarea>
+                  <button class="button button-secondary button-small" type="submit">送出回覆 / Send reply</button>
+                </form>
+              </details>
             </div>
-            <p>{{ report.content }}</p>
-            {% if report.attachment %}<p><a class="button button-secondary button-small" href="{% url 'tutoring:download_incident_report_attachment' report.pk %}">下載附件 / Download attachment</a></p>{% endif %}
-            {% if report.resolution_note %}
-              <div class="incident-report-admin-note">
-                <span class="incident-report-admin-note-label">系辦回覆 / Admin note</span>
-                <p>{{ report.resolution_note }}</p>
-              </div>
-            {% endif %}
-            {% if report.replies.all %}
-              <div class="incident-report-reply-list">
-                {% for reply in report.replies.all %}
-                  <div class="incident-report-reply-item"><time>{{ reply.created_at|date:"Y-m-d H:i" }}</time><p>{{ reply.content }}</p></div>
-                {% endfor %}
-              </div>
-            {% endif %}
-            <details class="incident-report-reply-disclosure">
-              <summary>回覆 / Reply</summary>
-              <form class="stack-form" action="{% url 'tutoring:add_incident_report_reply' report.pk %}" method="post">
-                {% csrf_token %}
-                <textarea name="content" maxlength="1000" rows="2" placeholder="繼續補充這則回報的內容... / Add more details to this report..."></textarea>
-                <button class="button button-secondary button-small" type="submit">送出回覆 / Send reply</button>
-              </form>
-            </details>
-          </div>
+          </details>
         {% endfor %}
       </div>
     {% else %}<div class="empty-state">目前沒有送出過異常回報。 / You haven't submitted any incident reports yet.</div>{% endif %}
