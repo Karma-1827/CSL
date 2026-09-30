@@ -3847,6 +3847,48 @@ td small {
   color: var(--navy);
   font-size: 0.8rem;
 }
+.class-alert-row .incident-report-previous-note {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.incident-report-reply-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.incident-report-reply-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.incident-report-reply-item time {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink-muted);
+  font-size: 0.66rem;
+}
+.incident-report-reply-item p {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.8rem;
+}
+.incident-report-reply-disclosure {
+  margin-top: 10px;
+  text-align: right;
+}
+.incident-report-reply-disclosure summary {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.incident-report-reply-disclosure .stack-form {
+  gap: 8px;
+  margin-top: 8px;
+  text-align: left;
+}
 .button-alert {
   color: #fff;
   border-color: #9a7620;

@@ -37,6 +37,7 @@ from .models import (
     ConfirmationStatus,
     IncidentReport,
     IncidentReportCategory,
+    IncidentReportReply,
     IncidentReportStatus,
     validate_qualification_file,
 )
@@ -1398,6 +1399,28 @@ def submit_incident_report(*, reporter, category, content, attachment=None):
         content=content,
         attachment=attachment,
     )
+
+
+@transaction.atomic
+def add_incident_report_reply(*, report_id, reporter, content):
+    """通報者在自己送出的回報下方追加補充內容(2026-10-01 新增,使用者要求)。
+
+    只有原通報者可以追加,管理員不透過這裡回應(仍用既有的 `resolve_incident_report()`
+    留言)。若這則回報先前已被標記「已紀錄」,追加回覆會把狀態改回「待處理」,提醒
+    管理員有新內容(2026-10-01 使用者確認採用這個行為)——`resolution_note`/
+    `resolved_by`/`resolved_at` 刻意保留不清空,讓管理員仍看得到先前的處理紀錄。
+    """
+    report = IncidentReport.objects.select_for_update().get(pk=report_id)
+    if report.reporter_id != reporter.pk:
+        raise ValidationError("只能在自己送出的回報下方追加回覆。 / You may only reply to your own report.")
+    content = content.strip()
+    if not content:
+        raise ValidationError("請填寫回覆內容。 / Reply content is required.")
+    reply = IncidentReportReply.objects.create(report=report, content=content)
+    if report.status == IncidentReportStatus.RESOLVED:
+        report.status = IncidentReportStatus.PENDING
+        report.save(update_fields=["status"])
+    return reply
 
 
 @transaction.atomic

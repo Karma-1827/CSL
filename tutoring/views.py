@@ -33,6 +33,7 @@ from .reporting import (
 )
 from .services import (
     acknowledge_pairing_release_notice,
+    add_incident_report_reply,
     cancel_class,
     cancel_class_alert,
     cancel_invitation,
@@ -910,6 +911,30 @@ def incident_report(request):
             metadata={"report_id": report.pk, "category": report.category},
         )
         messages.success(request, "異常回報已送出。 / Incident report submitted.")
+    return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
+
+
+@login_required
+@require_POST
+def add_incident_report_reply_view(request, report_id):
+    """2026-10-01(使用者要求):讓通報者可以在自己的回報下方追加補充內容,不是雙向對話——
+    管理員仍只透過 `resolve_incident_report_view()` 的備註回應,見 service 的說明。"""
+    if request.user.role not in {Role.TUTOR, Role.TUTEE}:
+        raise Http404
+    try:
+        add_incident_report_reply(
+            report_id=report_id, reporter=request.user, content=request.POST.get("content", "")
+        )
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        AuditLog.record(
+            actor=request.user,
+            event_type="INCIDENT_REPORT_REPLY_ADDED",
+            description="異常回報追加回覆 / Incident report reply added",
+            metadata={"report_id": report_id},
+        )
+        messages.success(request, "回覆已送出。 / Reply sent.")
     return redirect(f"{reverse('accounts:dashboard')}#incident-reports")
 
 

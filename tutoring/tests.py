@@ -45,6 +45,7 @@ from .models import (
     HourAdjustment,
     IncidentReport,
     IncidentReportCategory,
+    IncidentReportReply,
     IncidentReportStatus,
     ClassReviewStatus,
     validate_class_document_file,
@@ -63,6 +64,7 @@ from .admin import (
 )
 from .services import (
     active_semester,
+    add_incident_report_reply,
     anonymous_tutee_candidates,
     anonymous_tutor_candidates,
     archive_expired_semesters,
@@ -2732,6 +2734,61 @@ class ClassWorkflowTests(TestCase):
         self.assertIn('<span class="status-badge status-approved">已紀錄 / Logged</span>', resolved_card)
         admin_note_index = content.index("incident-report-admin-note", resolved_index)
         self.assertIn("已了解，謝謝回報", content[admin_note_index:admin_note_index + 300])
+
+    def test_reporter_can_add_reply_to_own_report(self):
+        report = submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="原始內容"
+        )
+        reply = add_incident_report_reply(report_id=report.pk, reporter=self.tutor, content="補充說明")
+        self.assertEqual(reply.report_id, report.pk)
+        self.assertEqual(IncidentReportReply.objects.filter(report=report).count(), 1)
+
+    def test_cannot_reply_to_someone_elses_report(self):
+        report = submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="原始內容"
+        )
+        with self.assertRaises(ValidationError):
+            add_incident_report_reply(report_id=report.pk, reporter=self.tutee, content="不該成功")
+        self.assertFalse(IncidentReportReply.objects.filter(report=report).exists())
+
+    def test_reply_reopens_a_resolved_report_but_keeps_the_previous_note(self):
+        """2026-10-01(使用者確認採用):追加回覆後自動改回「尚未紀錄」，提醒管理員有新內容，
+        但 resolution_note/resolved_by 保留，讓管理員仍看得到先前處理紀錄。"""
+        report = submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="原始內容"
+        )
+        admin = User.objects.create_superuser(username="REPLY-REOPEN-ADMIN", password="Admin-password-2026")
+        resolve_incident_report(report_id=report.pk, admin=admin, note="已了解")
+        add_incident_report_reply(report_id=report.pk, reporter=self.tutor, content="後續補充")
+        report.refresh_from_db()
+        self.assertEqual(report.status, IncidentReportStatus.PENDING)
+        self.assertEqual(report.resolution_note, "已了解")
+        self.assertEqual(report.resolved_by, admin)
+
+    def test_reply_to_a_still_pending_report_does_not_change_status(self):
+        report = submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="原始內容"
+        )
+        add_incident_report_reply(report_id=report.pk, reporter=self.tutor, content="補充")
+        report.refresh_from_db()
+        self.assertEqual(report.status, IncidentReportStatus.PENDING)
+
+    def test_reply_view_end_to_end_and_admin_sees_it_in_pending_list(self):
+        report = submit_incident_report(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="原始內容"
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.post(
+            reverse("tutoring:add_incident_report_reply", args=[report.pk]),
+            {"content": "後續補充內容"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#incident-reports")
+        self.assertTrue(IncidentReportReply.objects.filter(report=report, content="後續補充內容").exists())
+
+        admin = User.objects.create_superuser(username="REPLY-VIEW-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        admin_response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(admin_response, "後續補充內容")
 
     def test_non_admin_cannot_resolve_incident_report(self):
         report = submit_incident_report(

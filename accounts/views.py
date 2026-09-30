@@ -865,7 +865,7 @@ def dashboard(request):
                 ],
                 "unread_message_total": sum(pairing.unread_count for pairing in conversation_pairings),
                 "incident_report_form": StandaloneIncidentReportForm(),
-                "own_incident_reports": IncidentReport.objects.filter(reporter=request.user).order_by("-created_at"),
+                "own_incident_reports": IncidentReport.objects.filter(reporter=request.user).prefetch_related("replies").order_by("-created_at"),
                 "release_notices": release_notices,
             }
         )
@@ -917,10 +917,10 @@ def dashboard(request):
         ).select_related("session__pairing__semester", "reporter", "resolved_by")[:30]
         context["pending_incident_reports"] = IncidentReport.objects.filter(
             status=IncidentReportStatus.PENDING
-        ).select_related("reporter")
+        ).select_related("reporter").prefetch_related("replies")
         context["incident_report_history"] = IncidentReport.objects.filter(
             status=IncidentReportStatus.RESOLVED
-        ).select_related("reporter", "resolved_by")[:30]
+        ).select_related("reporter", "resolved_by").prefetch_related("replies")[:30]
     return render(request, "dashboard/index.html", context)
 
 

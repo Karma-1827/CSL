@@ -12,6 +12,7 @@ from .models import (
     ClassSession,
     HourAdjustment,
     IncidentReport,
+    IncidentReportReply,
     MatchingInvitation,
     Pairing,
     PairingReleaseRequest,
@@ -146,6 +147,13 @@ class IncidentReportAdmin(admin.ModelAdmin):
     list_filter = ("status", "category")
     search_fields = ("reporter__username", "content")
     readonly_fields = ("created_at", "resolved_at")
+
+
+@admin.register(IncidentReportReply)
+class IncidentReportReplyAdmin(admin.ModelAdmin):
+    list_display = ("report", "created_at")
+    search_fields = ("content", "report__reporter__username")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(HourAdjustment)

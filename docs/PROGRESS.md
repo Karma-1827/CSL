@@ -137,6 +137,8 @@
 
 > **2026-10-01 Tutor/Tutee「我送出的回報」卡片改版(使用者要求,分兩批處理)**:使用者提出 4 項改動——①「已紀錄」變成右上角綠色標籤;②尚未紀錄的變成紅色「尚未紀錄」標籤;③自己送出的內容跟管理員紀錄內容要明顯區分;④右下角加「回覆」功能讓回報可以延伸對話。**先完成①②③這三項明確的畫面調整**:狀態徽章沿用既有 `.status-badge`/`.status-approved`/`.status-rejected` 樣式(不是新樣式),放在卡片右上角;管理員回覆改放進獨立的綠色提示框(`.incident-report-admin-note`,色票沿用 `.completion-box`)。新增 1 項回歸測試(`tutoring/tests.py::ClassWorkflowTests::test_own_incident_report_card_shows_status_badge_and_admin_note`),438 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template/CSS 改動無 model/migration 變更。**第④項「回覆」功能涉及新增資料模型(目前 `IncidentReport` 只有一筆 `content`+一筆 `resolution_note`,是一次性的單向紀錄,不是可以來回延伸的對話串)與 Admin 端配合的畫面改動,列為獨立任務,已向使用者確認範圍後再實作**,見下一則記錄。詳見 `CLAUDE.md` 第 4.7 節。
 
+> **2026-10-01 異常回報新增「回覆」功能(使用者確認範圍後實作)**:透過 `AskUserQuestion` 確認兩個關鍵設計:①回覆只給通報者用(不是通報者與管理員都能回覆的雙向對話串,管理員仍用既有「紀錄備註」回應,不另外做管理員回覆介面);②在已「已紀錄」的回報下追加回覆時,自動把狀態改回「尚未紀錄」提醒管理員。新增 `tutoring.models.IncidentReportReply`(`report` FK + `content` + `created_at`,無 `author` 欄位,因為回覆者固定是 `report.reporter`)與 `tutoring/services.py::add_incident_report_reply()`(檢查只有原通報者可追加;若原本已 `RESOLVED` 則改回 `PENDING`,但保留 `resolution_note`/`resolved_by`/`resolved_at` 讓管理員仍看得到先前紀錄)。Tutor/Tutee 卡片新增回覆列表與右下角的「回覆 / Reply」收合表單;Admin 端待處理卡片與已紀錄表格的「細節」都會顯示完整回覆列表,待處理卡片另外顯示「先前紀錄 / Previous note」(斜體區隔)方便管理員理解為何重新出現在待處理清單。新增 5 項回歸測試,443 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。**含 1 個 migration**:`tutoring/migrations/0039_incidentreportreply.py`(新增資料表,無資料遷移)。詳見 `CLAUDE.md` 第 4.7 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

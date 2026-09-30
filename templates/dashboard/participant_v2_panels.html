@@ -119,6 +119,21 @@
                 <p>{{ report.resolution_note }}</p>
               </div>
             {% endif %}
+            {% if report.replies.all %}
+              <div class="incident-report-reply-list">
+                {% for reply in report.replies.all %}
+                  <div class="incident-report-reply-item"><time>{{ reply.created_at|date:"Y-m-d H:i" }}</time><p>{{ reply.content }}</p></div>
+                {% endfor %}
+              </div>
+            {% endif %}
+            <details class="incident-report-reply-disclosure">
+              <summary>回覆 / Reply</summary>
+              <form class="stack-form" action="{% url 'tutoring:add_incident_report_reply' report.pk %}" method="post">
+                {% csrf_token %}
+                <textarea name="content" maxlength="1000" rows="2" placeholder="繼續補充這則回報的內容... / Add more details to this report..."></textarea>
+                <button class="button button-secondary button-small" type="submit">送出回覆 / Send reply</button>
+              </form>
+            </details>
           </div>
         {% endfor %}
       </div>

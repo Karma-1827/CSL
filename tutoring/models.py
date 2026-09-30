@@ -848,6 +848,28 @@ class IncidentReport(models.Model):
         return self.original_attachment_filename or Path(self.attachment.name).name
 
 
+class IncidentReportReply(models.Model):
+    """通報者在自己送出的異常回報下方追加的補充內容(2026-10-01 新增,使用者要求)。
+
+    刻意只給通報者用,不做成管理員也能回覆的雙向對話串(已與使用者確認):管理員仍
+    維持用既有的 `IncidentReport.resolution_note`(標記已紀錄時留的單一備註)回應,
+    不另外做一套管理員回覆介面。因此這裡不需要 `author` 欄位——回覆者永遠是
+    `report.reporter`,不需要另外記錄。
+    """
+
+    report = models.ForeignKey(IncidentReport, on_delete=models.CASCADE, related_name="replies")
+    content = models.TextField("回覆內容 / Reply content", max_length=1000)
+    created_at = models.DateTimeField("送出時間 / Sent at", auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "異常回報追加回覆 / Incident report reply"
+        verbose_name_plural = "異常回報追加回覆 / Incident report replies"
+
+    def __str__(self):
+        return self.content[:40]
+
+
 class HourAdjustment(models.Model):
     """Manual credit for hours not captured by a real ClassSession (e.g. paper records
     predating this system). Additive only, never itemized on the official certificate PDF

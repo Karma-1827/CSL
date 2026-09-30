@@ -58,5 +58,10 @@ urlpatterns = [
         views.resolve_incident_report_view,
         name="resolve_incident_report",
     ),
+    path(
+        "incident-reports/<int:report_id>/reply/",
+        views.add_incident_report_reply_view,
+        name="add_incident_report_reply",
+    ),
     path("classes/<int:pk>/review/", views.review_class, name="review_class"),
 ]
