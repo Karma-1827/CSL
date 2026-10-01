@@ -34,7 +34,10 @@
         </form>
       </section>
     {% elif class_review.status == 'WAITING' %}
-      <section class="panel"><div class="completion-box"><strong>{{ class_review.get_status_display }}</strong></div></section>
+      <section class="panel">
+        <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong></div>
+        {% if class_review.review_note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review.review_note|linebreaksbr }}</p>{% endif %}
+      </section>
     {% elif class_review %}
       <section class="panel">
         <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_by %}<small>{{ class_review.reviewed_by.bilingual_name }} · {{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div>

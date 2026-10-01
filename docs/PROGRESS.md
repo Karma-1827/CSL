@@ -155,6 +155,8 @@
 
 > **2026-10-01 審核意見表單上方新增「上一則留言 / Previous comment」(使用者要求「這樣比較好追蹤」)**:情境是 REVISE 後 Tutor/Tutee 補正、重新互相確認、審核回到 `PENDING` 等待再次決定——原本 `submit_class_record()` 的重置邏輯與 `revert_class_review()` 都會把 `review_note` 清空,管理員下次面對決定表單完全看不到自己上一次寫了什麼。改為兩處都不再清空 `review_note`(只清 `reviewed_by`/`reviewed_at`),保留到下一次 `review_class_session()` 送出新意見時整個覆蓋掉。`admin_class_detail.html` 的決定表單、`templates/dashboard/index.html` 的課程審核頁籤皆在意見輸入框上方顯示「上一則留言 / Previous comment」(PENDING 狀態專用標籤,與已決定狀態的「審核意見 / Comments」區分)。新增 1 項回歸測試,更新 2 項既有測試的斷言(撤回後 `review_note` 不再歸零),457 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純邏輯/template 調整無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-01 補齊 WAITING 狀態下的「上一則留言」顯示(使用者要求「只要admin有給建議，都要顯示出來」)**:上一輪只處理了審核回到 `PENDING` 之後的畫面,但 REVISE 後學生剛編輯完紀錄、對方還沒重新確認的這段 `WAITING` 空窗期,管理員的留言在三處畫面(Admin 課程詳情頁、Admin dashboard 課程審核清單、Tutor/Tutee 自己的課程詳情頁)全部消失不見。修正 `admin_class_detail.html` 的 `WAITING` 分支補上留言顯示、dashboard 清單的標籤判斷擴大到 `PENDING`/`WAITING` 皆用「上一則留言」、Tutor/Tutee 的「管理員審核結果」面板改成「非 WAITING,或雖是 WAITING 但有殘留留言」才顯示(全新、從未審核過的課程仍正確保持隱藏,不是整個改成「WAITING 就顯示」)。新增 1 項回歸測試,458 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template 調整。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

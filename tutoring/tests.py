@@ -1923,6 +1923,35 @@ class ClassWorkflowTests(TestCase):
         session.class_review.refresh_from_db()
         self.assertEqual(session.class_review.review_note, "已補齊")
 
+    def test_review_note_still_visible_while_waiting_for_mutual_reconfirmation(self):
+        """2026-10-01(使用者要求「只要admin有給建議，都要顯示出來」):上一則測試只涵蓋
+        重新確認完成、回到 PENDING 之後的畫面——這裡補上「學生剛編輯完紀錄、對方還沒重新
+        確認、審核仍停留在 WAITING」這段期間,三處畫面(Admin 課程詳情頁、Admin dashboard
+        課程審核清單、Tutor/Tutee 自己的課程詳情頁)都必須繼續顯示管理員上一次的留言,不能
+        因為狀態還是 WAITING 就整個藏起來。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="WAITING-NOTE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補充授課照片")
+        now = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"), now=now)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+
+        self.client.force_login(admin)
+        detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(detail, "上一則留言 / Previous comment")
+        self.assertContains(detail, "請補充授課照片")
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "上一則留言 / Previous comment")
+        self.assertContains(dashboard, "請補充授課照片")
+
+        self.client.force_login(self.tutor)
+        own_detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(own_detail, "管理員審核結果")
+        self.assertContains(own_detail, "上一則留言 / Previous comment")
+        self.assertContains(own_detail, "請補充授課照片")
+
     def test_admin_review_forms_show_three_decision_buttons(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="THREE-BUTTON-ADMIN", password="Admin-password-2026")
