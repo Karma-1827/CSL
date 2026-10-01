@@ -873,9 +873,14 @@ def dashboard(request):
         class_reviews = list(
             ClassReview.objects.select_related(
                 "session__pairing__semester", "session__pairing__tutor", "session__pairing__tutee", "reviewed_by"
-            ).prefetch_related("session__attendances", "session__class_records").order_by("-created_at")
+            ).prefetch_related("session__attendances", "session__class_records", "decisions").order_by("-created_at")
         )
         for review in class_reviews:
+            # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):列表裡的
+            # 「上一則留言」改從 ClassReviewDecision 歷史表取最新一筆,review_note 現在在
+            # WAITING/PENDING 時會被清空,不能再直接拿它當顯示來源。
+            decisions = list(review.decisions.all())
+            review.latest_decision = decisions[0] if decisions else None
             has_makeup_attendance = any(row.is_makeup for row in review.session.attendances.all())
             has_makeup_record = any(row.is_makeup for row in review.session.class_records.all())
             if has_makeup_attendance and has_makeup_record:

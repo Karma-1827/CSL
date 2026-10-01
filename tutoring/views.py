@@ -636,6 +636,7 @@ def class_detail(request, pk):
         tutee_confirmation = next(
             (row for row in session.confirmations.all() if row.subject_id == session.pairing.tutee_id), None
         )
+        class_review = getattr(session, "class_review", None)
         return render(
             request,
             "tutoring/admin_class_detail.html",
@@ -647,11 +648,15 @@ def class_detail(request, pk):
                 "tutee_record": tutee_record,
                 "tutor_confirmation": tutor_confirmation,
                 "tutee_confirmation": tutee_confirmation,
-                "class_review": getattr(session, "class_review", None),
+                "class_review": class_review,
+                # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):
+                # 完整審核歷程,不受 ClassReview 本身重置/撤回影響,見 ClassReviewDecision。
+                "class_review_history": list(class_review.decisions.all()) if class_review else [],
                 "is_valid_class": class_is_valid(session),
             },
         )
     counterpart = session.pairing.tutee if request.user.pk == session.pairing.tutor_id else session.pairing.tutor
+    class_review = getattr(session, "class_review", None)
     own_record = next((row for row in session.class_records.all() if row.author_id == request.user.pk), None)
     counterpart_record = next((row for row in session.class_records.all() if row.author_id == counterpart.pk), None)
     own_attendance = next((row for row in session.attendances.all() if row.participant_id == request.user.pk), None)
@@ -726,7 +731,8 @@ def class_detail(request, pk):
             "is_valid_class": class_is_valid(session),
             # 2026-10-01(使用者要求):管理員的審核意見原本只有 Admin 自己看得到
             # (admin_class_detail.html),Tutor/Tutee 完全看不到審核結果或備註。
-            "class_review": getattr(session, "class_review", None),
+            "class_review": class_review,
+            "class_review_history": list(class_review.decisions.all()) if class_review else [],
         },
     )
 

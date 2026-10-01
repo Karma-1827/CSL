@@ -9,6 +9,7 @@ from .models import (
     ClassDocument,
     ClassRecord,
     ClassReview,
+    ClassReviewDecision,
     ClassSession,
     HourAdjustment,
     IncidentReport,
@@ -131,6 +132,12 @@ class ClassConfirmationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
 class ClassReviewAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("session", "status", "reviewed_by", "reviewed_at")
     list_filter = ("status", "session__pairing__semester")
+
+
+@admin.register(ClassReviewDecision)
+class ClassReviewDecisionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ("review", "status", "reviewed_by", "created_at")
+    list_filter = ("status",)
 
 
 @admin.register(ClassAlert)

@@ -756,6 +756,24 @@ class ClassReview(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class ClassReviewDecision(models.Model):
+    """2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):append-only 的
+    審核歷史紀錄。ClassReview 本身只存「目前這一次決定」的單一欄位組合(status/review_note/
+    reviewed_by/reviewed_at),每次重新審核(REVISE 後補正重審、撤回後再審)都會被覆蓋或清空,
+    過去寫過的意見因此永久消失,Admin 無法回溯「這堂課前後總共被要求補正幾次、每次說了什
+    麼」。這張表在每次 review_class_session() 成功時額外寫入一筆快照,不受 ClassReview
+    本身重置/撤回影響,專門用於畫面上列出完整審核歷程。"""
+
+    review = models.ForeignKey(ClassReview, on_delete=models.CASCADE, related_name="decisions")
+    status = models.CharField(max_length=12, choices=ClassReviewStatus.choices)
+    note = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="class_review_decisions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class ClassAlertStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "待處理 / Active"
     CANCELLED = "CANCELLED", "已取消 / Cancelled"

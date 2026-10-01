@@ -157,6 +157,8 @@
 
 > **2026-10-01 補齊 WAITING 狀態下的「上一則留言」顯示(使用者要求「只要admin有給建議，都要顯示出來」)**:上一輪只處理了審核回到 `PENDING` 之後的畫面,但 REVISE 後學生剛編輯完紀錄、對方還沒重新確認的這段 `WAITING` 空窗期,管理員的留言在三處畫面(Admin 課程詳情頁、Admin dashboard 課程審核清單、Tutor/Tutee 自己的課程詳情頁)全部消失不見。修正 `admin_class_detail.html` 的 `WAITING` 分支補上留言顯示、dashboard 清單的標籤判斷擴大到 `PENDING`/`WAITING` 皆用「上一則留言」、Tutor/Tutee 的「管理員審核結果」面板改成「非 WAITING,或雖是 WAITING 但有殘留留言」才顯示(全新、從未審核過的課程仍正確保持隱藏,不是整個改成「WAITING 就顯示」)。新增 1 項回歸測試,458 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template 調整。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-01 新增 `ClassReviewDecision` 歷史表,改用它實作「列出所有審核紀錄」(使用者追問「在哪裡顯示？」並要求「如果是通過/待補正也要接列出所有審核紀錄」)**:發現前兩輪「刻意不清空 `review_note`」的做法本質上有缺陷——`ClassReview` 只有一組欄位,每次重新審核都整個覆蓋,補正兩次以上較早的意見就會永久遺失,無法列出完整歷史。改為新增 `ClassReviewDecision`(`review` FK、`status`、`note`、`reviewed_by`、`created_at`,append-only,migration `tutoring/0042_classreviewdecision.py`),`review_class_session()` 每次決定時另外寫入一筆快照;原本「刻意保留」的 hack 撤回,`review_note` 重新在重置/撤回時清空,所有「上一則留言」顯示改讀這張歷史表的最新一筆。`admin_class_detail.html` 新增不受目前狀態影響的「審核紀錄 / Review history」區塊,永遠列出該堂課完整的審核歷程(沿用 `.incident-report-reply-list` 既有樣式)。新增 2 項回歸測試、重寫 2 項既有測試斷言,460 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

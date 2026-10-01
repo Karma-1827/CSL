@@ -31,6 +31,7 @@ from .models import (
     ClassDocument,
     ClassRecord,
     ClassReview,
+    ClassReviewDecision,
     ClassReviewStatus,
     ClassSession,
     ClassSessionStatus,
@@ -1205,12 +1206,14 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
         if review.status in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
             review.status = ClassReviewStatus.WAITING
             review.reviewed_by = None
-            # 2026-10-01(使用者要求「審核意見上方也列出上一則留言，這樣比較好追蹤」):
-            # 刻意不清空 review_note——保留上一次的審核意見，讓管理員下次重新審核時
-            # 還能看到自己先前寫了什麼(例如「請補充授課照片」),下一次 review_class_session()
-            # 送出新意見時會原地覆蓋掉,不會一直累積。
+            # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」後改用
+            # ClassReviewDecision 歷史表):review_note 清空不會遺失過去的意見——每次
+            # review_class_session() 成功時都會在 ClassReviewDecision 另外留一筆快照,
+            # 畫面上的「上一則留言」與「完整審核紀錄」改讀那張表,不再依賴這裡保留一份
+            # 容易混淆語意的殘留值(review_note 清空後才真正代表「目前沒有決定中的意見」)。
+            review.review_note = ""
             review.reviewed_at = None
-            review.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
+            review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
     ClassConfirmation.objects.filter(session=session, subject=author).delete()
     # 2026-10-01(使用者回報「tutee放未確認，為什麼會放在等待管理員核准的區塊」):
     # 刪除對方針對這筆紀錄的舊確認之後,必須重新呼叫 _sync_class_review() 讓審核狀態
@@ -1303,6 +1306,10 @@ def review_class_session(*, session_id, admin, decision, note=""):
     review.review_note = note.strip()
     review.reviewed_at = timezone.now()
     review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):額外寫入一筆
+    # 不受後續重置/撤回影響的歷史快照,讓畫面能列出這堂課完整的審核歷程(例如先被要求
+    # 補正兩次、第三次才通過),不是只看得到「目前這一次」的決定。
+    ClassReviewDecision.objects.create(review=review, status=review.status, note=review.review_note, reviewed_by=admin)
     # 2026-09-16(使用者要求):課程審核的核准/不核准/撤回原本完全沒有稽核紀錄,補上與其餘
     # 審核類操作(口語能力審核、解除配對)一致的 AuditLog;比照 create_admin_pairing() 的
     # 既有慣例,target_user 用 tutee、metadata 另外帶 tutor/tutee 學號方便查詢。
@@ -1335,10 +1342,13 @@ def revert_class_review(*, session_id, admin):
         raise ValidationError("此課程尚未有審核結果,無法撤回。 / This class has no review result to revert yet.")
     review.status = ClassReviewStatus.PENDING
     review.reviewed_by = None
-    # 2026-10-01(使用者要求):撤回後一樣保留 review_note 不清空,道理同 submit_class_record()
-    # 的重置邏輯——管理員重新審核時還能看到自己上次寫的意見,下次送出新決定會整個覆蓋掉。
+    # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」後改用
+    # ClassReviewDecision 歷史表):撤回一樣清空 review_note——撤回前的決定與意見已經
+    # 在 review_class_session() 當下寫進 ClassReviewDecision,不會因為這裡清空而遺失,
+    # 畫面的「上一則留言」改讀那張歷史表,不需要靠這個欄位殘留舊值。
+    review.review_note = ""
     review.reviewed_at = None
-    review.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
+    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
     AuditLog.record(
         actor=admin,
         target_user=review.session.pairing.tutee,

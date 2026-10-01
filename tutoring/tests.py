@@ -1565,9 +1565,10 @@ class ClassWorkflowTests(TestCase):
 
     def test_revert_class_review_resets_approved_result_back_to_pending(self):
         """2026-09-16(使用者要求):比照口語能力審核既有的撤回機制,課程審核也要能撤回
-        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。2026-10-01(使用者要求「審核
-        意見上方也列出上一則留言」)起,撤回刻意不再清空 review_note——保留上一次的意見
-        供管理員重新審核時對照,下次送出新決定會整個覆蓋掉。"""
+        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。2026-10-01(使用者要求「如果
+        是通過/待補正也要接列出所有審核紀錄」)起,改用 ClassReviewDecision 歷史表保留
+        過去每一次的意見,撤回時 ClassReview.review_note 恢復清空(語意是「目前沒有決定
+        中的意見」),但撤回前那筆決定與意見已經永久留在歷史表裡,不會真的遺失。"""
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
@@ -1578,8 +1579,13 @@ class ClassWorkflowTests(TestCase):
         reverted = revert_class_review(session_id=session.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
-        self.assertEqual(reverted.review_note, "已確認")
+        self.assertEqual(reverted.review_note, "")
         self.assertIsNone(reverted.reviewed_at)
+        history = list(reverted.decisions.all())
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].status, ClassReviewStatus.APPROVED)
+        self.assertEqual(history[0].note, "已確認")
+        self.assertEqual(history[0].reviewed_by, admin)
 
     def test_revert_class_review_rejects_pending_or_waiting_review(self):
         class_date = timezone.localdate() + timedelta(days=1)
@@ -1874,8 +1880,10 @@ class ClassWorkflowTests(TestCase):
         reverted = revert_class_review(session_id=session.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
-        self.assertEqual(reverted.review_note, "請補正")
+        self.assertEqual(reverted.review_note, "")
         self.assertIsNone(reverted.reviewed_at)
+        self.assertEqual(reverted.decisions.count(), 1)
+        self.assertEqual(reverted.decisions.first().note, "請補正")
 
     def test_editing_own_record_after_revise_resets_pending_review_to_waiting(self):
         """REVISE 跟 APPROVED/REJECTED 一樣是「已決定」的終局狀態之一,任一方修改自己的
@@ -1893,8 +1901,11 @@ class ClassWorkflowTests(TestCase):
 
     def test_review_note_carries_over_as_previous_comment_until_next_decision(self):
         """2026-10-01(使用者要求「admin的審核意見上方也列出上一則留言，這樣比較好追蹤」):
-        REVISE 後學生補正、雙方重新確認、審核回到 PENDING 的這段期間,review_note 不應該
-        被清空——管理員要能在下一次做決定前看到自己上一次寫了什麼。"""
+        REVISE 後學生補正、雙方重新確認、審核回到 PENDING 的這段期間,管理員要能在下一次
+        做決定前看到自己上一次寫了什麼。**2026-10-01 當天使用者再要求「如果是通過/待補正
+        也要接列出所有審核紀錄」後改用 ClassReviewDecision 歷史表實作**:ClassReview.
+        review_note 這個即時欄位在 WAITING/PENDING 時正確清空(代表「目前沒有決定中的
+        意見」),「上一則留言」改從歷史表的最新一筆讀取,過去的意見不會因此遺失。"""
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="PREV-NOTE-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補充授課照片")
@@ -1902,13 +1913,15 @@ class ClassWorkflowTests(TestCase):
         submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"), now=now)
         session.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
-        self.assertEqual(session.class_review.review_note, "請補充授課照片")
+        self.assertEqual(session.class_review.review_note, "")
 
         confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
         confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
         session.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
-        self.assertEqual(session.class_review.review_note, "請補充授課照片")
+        self.assertEqual(session.class_review.review_note, "")
+        self.assertEqual(session.class_review.decisions.count(), 1)
+        self.assertEqual(session.class_review.decisions.first().note, "請補充授課照片")
 
         self.client.force_login(admin)
         detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
@@ -1922,6 +1935,7 @@ class ClassWorkflowTests(TestCase):
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
         session.class_review.refresh_from_db()
         self.assertEqual(session.class_review.review_note, "已補齊")
+        self.assertEqual(session.class_review.decisions.count(), 2)
 
     def test_review_note_still_visible_while_waiting_for_mutual_reconfirmation(self):
         """2026-10-01(使用者要求「只要admin有給建議，都要顯示出來」):上一則測試只涵蓋
@@ -1951,6 +1965,59 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(own_detail, "管理員審核結果")
         self.assertContains(own_detail, "上一則留言 / Previous comment")
         self.assertContains(own_detail, "請補充授課照片")
+
+    def test_review_class_session_accumulates_full_decision_history(self):
+        """2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):同一堂課
+        若被要求補正多次,每一次 review_class_session() 都要在 ClassReviewDecision 另外
+        留一筆快照,不能因為後面的決定覆蓋 ClassReview 本身的欄位就遺失較早的那幾筆。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="HISTORY-ADMIN", password="Admin-password-2026")
+        now = self.aware(timezone.localdate(), time(11, 5))
+
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="第一次：請補照片")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正一"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="第二次：教材還是不夠詳細")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正二"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊，通過")
+
+        session.class_review.refresh_from_db()
+        history = list(session.class_review.decisions.all())
+        self.assertEqual(len(history), 3)
+        # Meta ordering is "-created_at": newest first.
+        self.assertEqual([entry.status for entry in history], [
+            ClassReviewStatus.APPROVED, ClassReviewStatus.REVISE, ClassReviewStatus.REVISE,
+        ])
+        self.assertEqual(history[0].note, "已補齊，通過")
+        self.assertEqual(history[1].note, "第二次：教材還是不夠詳細")
+        self.assertEqual(history[2].note, "第一次：請補照片")
+        self.assertTrue(all(entry.reviewed_by == admin for entry in history))
+
+    def test_admin_class_detail_lists_full_review_history_regardless_of_current_status(self):
+        """2026-10-01(使用者要求):即使課程最後通過了,之前被要求補正的紀錄也要能在
+        Admin 課程詳情頁完整看到,不是只有「目前狀態」那一筆。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="HISTORY-VIEW-ADMIN", password="Admin-password-2026")
+        now = self.aware(timezone.localdate(), time(11, 5))
+
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補照片")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
+
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "審核紀錄")
+        self.assertContains(response, "請補照片")
+        self.assertContains(response, "已補齊")
+        self.assertContains(response, "待補正 / Revise")
+        self.assertContains(response, "通過 / Approved")
 
     def test_admin_review_forms_show_three_decision_buttons(self):
         session = self._confirmed_pending_session()
