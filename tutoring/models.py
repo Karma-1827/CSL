@@ -666,7 +666,7 @@ class ClassRecord(models.Model):
     author = models.ForeignKey(User, on_delete=models.PROTECT, related_name="class_records")
     location = models.CharField("上課地點 / Location", max_length=150)
     topic = models.CharField("本次教學目標 / Teaching goal for this session", max_length=200)
-    content = models.TextField("本日教學範圍與流程 / Today's teaching scope and process", max_length=500)
+    content = models.TextField("本日教學範圍與完整流程 / Today's teaching scope and complete process", max_length=500)
     reflection = models.TextField("學習成果與回饋 / Outcome and reflection")
     materials_used = models.TextField(
         "使用之教材、教具及設備 / Materials, teaching aids, and equipment used", max_length=200, default="",

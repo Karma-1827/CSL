@@ -145,6 +145,8 @@
 
 > **2026-10-01 修正真實 bug:課程審核卡在 PENDING,跟對方實際上已不算確認互相矛盾**:使用者回報「9/23 唐子雯 x 朴敍亨，tutee放未確認，為什麼會放在等待管理員核准的區塊」。查正式站資料(session 129)確認:雙方原本都已確認過,`ClassReview` 正確變成 `PENDING`;之後唐子雯(Tutor)又編輯了一次自己的課堂紀錄,依既有規則這會刪除「朴敍亨對唐子雯這份紀錄的舊確認」,確認筆數從 2 掉回 1——但 `tutoring/services.py::submit_class_record()` 只在 `ClassReview.status` 已經是 `APPROVED`/`REJECTED` 時才會把狀態退回 `WAITING`,漏掉了「審核還停留在 `PENDING`(兩人都確認過、Admin 還沒審)」這個中間狀態,導致畫面一直卡在「等待管理員核准」。修法:在刪除舊確認之後無條件呼叫既有的 `_sync_class_review()`(與 `confirm_counterpart()` 的既有呼叫方式一致),讓審核狀態永遠跟目前真正的確認筆數同步。新增回歸測試前**先驗證移除修法後測試真的會失敗**(排除誤判),1 項新測試,448 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 model/migration 變更。**一次性資料修正**:部署後對所有目前狀態為 `PENDING` 的 `ClassReview` 重新呼叫 `_sync_class_review()`(沿用修好的同一個函式,不是另外寫規則),讓受這個既有 bug 影響的歷史資料(含使用者回報的這筆)自動修正回正確的 `WAITING`,真正已符合 2 筆確認的 `PENDING` 不受影響。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-01 課堂紀錄欄位文字調整(使用者要求)**:①`ClassRecord.content` 標籤「本日教學範圍與流程」改為「本日教學範圍與完整流程」(`tutoring/migrations/0040_alter_classrecord_content`,純標籤變更,無資料異動);同步更新兩處原本寫死這個標籤文字的唯讀顯示模板(`templates/tutoring/class_detail.html`、`templates/tutoring/admin_record_card.html`——表單本身的 label 直接來自 model 的 `verbose_name`,改 model 就自動套用,不需要另外改)。②Tutee 版「佐證連結」說明文字,從「例如實際授課照片、教材、作業或錄影」改為「必須上傳實際授課照片、詳細教材等，作業或錄影可選填」,純文字措辭調整,實際驗證規則(Tutee 仍是 0–5 個皆可)不變。兩處同步更新 `templates/accounts/handbook.html` 對應段落維持一致。448 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
