@@ -351,14 +351,18 @@
               <div class="makeup-review-list">
                 {% for review in section.page %}
                   <article class="makeup-review-row review-history-row">
-                    {# 2026-10-02(使用者要求「審核意見拿掉，因為都要點進課堂紀錄查看才會審核」):
-                       不再於列表預覽審核意見/上一則留言,因為實際審核前管理員一定要點進
-                       詳情頁查看簽到與課堂紀錄,列表內先秀一段意見文字並不會少點一次。 #}
+                    {% comment %}
+                      2026-10-02(使用者要求「審核意見拿掉，因為都要點進課堂紀錄查看才會
+                      審核」):不再於列表預覽審核意見/上一則留言,因為實際審核前管理員一定
+                      要點進詳情頁查看簽到與課堂紀錄,列表內先秀一段意見文字並不會少點一次。
+                    {% endcomment %}
                     <a class="review-detail-link" href="{% url 'tutoring:class_detail' review.session_id %}"><strong>{{ review.session.class_date|date:"Y-m-d" }} · {{ review.session.start_time|time:"H:i" }}</strong><span>{{ review.session.pairing.tutor.bilingual_name }} × {{ review.session.pairing.tutee.bilingual_name }}</span>{% if review.reviewed_by %}<small>審核人員 / Reviewed by：{{ review.reviewed_by.bilingual_name }} · {{ review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}<em>查看簽到與課堂紀錄 / View details →</em></a>
                     <div class="review-row-actions">
-                      {# 2026-10-02(使用者要求「標籤都可以移到右邊，第一行是審核狀態這四大類
-                         標籤，第二行才是一般課程標籤」):狀態徽章放第一行、課程分類放第二行,
-                         整組移到卡片右側(本來就是這個 2 欄 grid 的第二欄),不再夾在左側文字裡。 #}
+                      {% comment %}
+                        2026-10-02(使用者要求「標籤都可以移到右邊」,接著回報「整個卡片就
+                        橫著，這樣省高度」):標籤改回橫排同一行、靠右對齊,不再疊成兩行墊高
+                        卡片高度。
+                      {% endcomment %}
                       <div class="review-row-badges">
                         <i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>
                         <b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b>

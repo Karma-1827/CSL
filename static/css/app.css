@@ -3532,8 +3532,10 @@ td small {
 }
 .review-row-badges {
   display: flex !important;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 6px;
 }
 .review-row-badges .status-badge {

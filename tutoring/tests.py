@@ -2205,6 +2205,20 @@ class ClassWorkflowTests(TestCase):
         category_index = content.index("一般課程", badges_start)
         self.assertLess(status_index, category_index)
 
+    def test_admin_dashboard_class_review_cards_have_no_leaked_template_comments(self):
+        """2026-10-02(使用者截圖回報真實 bug,是同一個坑踩了第二次):Django 的 `{# #}`
+        單行註解語法不支援跨多行,之前已經在 admin_class_detail.html 犯過一次這個錯誤
+        (見 CLAUDE.md 4.6 節),這次在 dashboard/index.html 改用跨行 `{# ... #}` 寫法時
+        又重犯一次,導致整段中文註解文字原封不動輸出到畫面上。這裡直接鎖住正確的
+        `{% comment %}` 寫法,確保這兩段說明文字不會再次洩漏到渲染出的 HTML 裡。"""
+        self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="NO-LEAK-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        content = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertNotIn("{#", content)
+        self.assertNotIn("使用者要求", content)
+        self.assertNotIn("審核意見拿掉，因為都要點進課堂紀錄查看才會審核", content)
+
     def test_admin_dashboard_class_review_section_paginates_at_seven_per_page(self):
         """2026-10-02(使用者要求「比數會越來越多，每個區塊只7筆就換第二頁」):單一狀態
         區塊超過 7 筆時要分頁,且每個區塊各自獨立分頁(用各自的查詢參數,不是共用一個)。"""
