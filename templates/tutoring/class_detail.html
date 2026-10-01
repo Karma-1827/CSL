@@ -104,7 +104,8 @@
           <div class="panel-heading"><div><span class="eyebrow">ADMIN REVIEW</span><h2>管理員審核結果 <small>Admin review result</small></h2></div></div>
           <p><span class="status-badge status-{{ class_review.status|lower }}">{{ class_review.get_status_display }}</span></p>
           {% if latest_note %}<p class="class-review-note"><strong>{% if class_review.status == 'WAITING' or class_review.status == 'PENDING' %}上一則留言 / Previous comment{% else %}審核意見 / Review comments{% endif %}：</strong>{{ latest_note|linebreaksbr }}</p>{% endif %}
-          {% if class_review.reviewed_by %}<p class="help-text">{{ class_review.reviewed_by.bilingual_name }} · {{ class_review.reviewed_at|date:"Y-m-d H:i" }}</p>{% endif %}
+          {# 2026-10-02(使用者要求):Tutor/Tutee 介面不顯示是哪位管理員審核的，只留審核時間。 #}
+          {% if class_review.reviewed_at %}<p class="help-text">{{ class_review.reviewed_at|date:"Y-m-d H:i" }}</p>{% endif %}
         </section>
       {% endif %}
       {% endwith %}

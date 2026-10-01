@@ -2046,7 +2046,7 @@ class ClassWorkflowTests(TestCase):
 
     def test_admin_class_detail_approved_review_has_no_duplicate_single_result_summary(self):
         """合併後,已通過/未通過/待補正的課程不應該再額外有一個獨立的「目前狀態」完成框
-        重複顯示跟審核紀錄清單同樣的結果——撤回按鈕改附加在審核紀錄區塊的標題旁。"""
+        重複顯示跟審核紀錄清單同樣的結果——撤回按鈕改附加在審核紀錄清單最新一筆卡片裡。"""
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="NO-DUPLICATE-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
@@ -2057,6 +2057,29 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(content.count("completion-box"), 0)
         self.assertContains(response, "撤回 / Revert")
         self.assertNotContains(response, "課程審核 <small>Class review decision")
+
+    def test_admin_class_detail_revert_button_attaches_only_to_latest_history_card(self):
+        """2026-10-02(使用者要求「撤回功能放在每個審核意見卡片，就是可以針對單一建議
+        撤回」):撤回對「目前這一筆決定」才有意義(ClassReview 本身只有單一一組現在狀態),
+        所以只應該出現在歷史清單最新一筆卡片裡,不是區塊共用一顆按鈕;同一堂課被要求補正
+        兩次以上時,只有恰好一顆「撤回」按鈕存在,且位置落在第一張卡片(最新一筆)裡面。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVERT-CARD-ADMIN", password="Admin-password-2026")
+        now = self.aware(timezone.localdate(), time(11, 5))
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="第一次意見")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
+
+        self.client.force_login(admin)
+        content = self.client.get(reverse("tutoring:class_detail", args=[session.pk])).content.decode()
+        self.assertEqual(content.count("撤回 / Revert"), 1)
+        latest_card_start = content.index("已補齊")
+        older_card_start = content.index("第一次意見")
+        revert_index = content.index("撤回 / Revert")
+        self.assertLess(latest_card_start, revert_index)
+        self.assertLess(revert_index, older_card_start)
 
     def test_admin_class_detail_pending_with_no_history_shows_no_stray_completion_box(self):
         """2026-10-01(回歸測試,部署後用正式站真實的 PENDING 課程發現的真實 bug):合併
@@ -2148,6 +2171,30 @@ class ClassWorkflowTests(TestCase):
             self.assertContains(response, "待補正 / Revise")
             self.assertContains(response, "請補上教材照片")
             self.assertContains(response, 'status-badge status-revise')
+
+    def test_tutor_and_tutee_class_detail_hides_reviewer_name_but_shows_time(self):
+        """2026-10-02(使用者要求「tutor/tutee介面都不能顯示是哪個admin審核的，可以放
+        時間」):Tutor/Tutee 的「管理員審核結果」區塊不可以洩漏是哪位管理員審核的,但審核
+        時間仍要顯示。Admin 自己的 `admin_class_detail.html`(審核紀錄清單)不受影響,
+        仍需要知道是哪位同事審核過。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVIEWER-NAME-HIDDEN-ADMIN", password="Admin-password-2026")
+        admin.name_zh = "測試管理員"
+        admin.save(update_fields=["name_zh"])
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
+        session.class_review.refresh_from_db()
+        reviewed_at = session.class_review.reviewed_at
+
+        for user in (self.tutor, self.tutee):
+            self.client.force_login(user)
+            response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+            self.assertNotContains(response, "測試管理員")
+            self.assertNotContains(response, "REVIEWER-NAME-HIDDEN-ADMIN")
+            self.assertContains(response, reviewed_at.astimezone(timezone.get_current_timezone()).strftime("%Y-%m-%d %H:%M"))
+
+        self.client.force_login(admin)
+        admin_response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(admin_response, "測試管理員")
 
     def test_tutor_and_tutee_class_detail_hides_admin_review_panel_while_waiting(self):
         class_date = timezone.localdate()

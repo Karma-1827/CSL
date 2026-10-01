@@ -26,18 +26,24 @@
 
     {% if class_review_history %}
       <section class="panel">
-        <div class="panel-heading">
-          <div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div>
-          {% if class_review.status == 'APPROVED' or class_review.status == 'REJECTED' or class_review.status == 'REVISE' %}
-            <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
-          {% endif %}
-        </div>
+        <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div></div>
         <ul class="incident-report-reply-list">
           {% for entry in class_review_history %}
             <li class="incident-report-reply-item">
               <time>{{ entry.created_at|date:"Y-m-d H:i" }} · {{ entry.reviewed_by.bilingual_name }}</time>
               <p><span class="status-badge status-{{ entry.status|lower }}">{{ entry.get_status_display }}</span></p>
               {% if entry.note %}<p>{{ entry.note|linebreaksbr }}</p>{% endif %}
+              {% if forloop.first %}
+                {% if class_review.status == 'APPROVED' or class_review.status == 'REJECTED' or class_review.status == 'REVISE' %}
+                  <!-- 2026-10-01(使用者要求「撤回功能放在每個審核意見卡片，就是可以針對
+                       單一建議撤回」):撤回只對「目前這一筆決定」有意義(ClassReview 本身
+                       只有單一一組現在狀態),所以只掛在最新一筆(class_review_history 依
+                       -created_at 排序,第一筆就是目前狀態對應的那一筆)卡片上,不是整個
+                       區塊共用一顆按鈕——讓撤回的對象在畫面上就是「這一張卡片」,而不是
+                       整份清單。 -->
+                  <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
+                {% endif %}
+              {% endif %}
             </li>
           {% endfor %}
         </ul>
