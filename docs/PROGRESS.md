@@ -149,6 +149,8 @@
 
 > **2026-10-01 佐證連結說明文字：Tutor 版也要一併調整(使用者指出「tutor也要改啊，不然很多tutor都沒有上傳授課照片」)**:上一則只改了 Tutee 版,使用者指出 Tutor(原本必填 1–5 個)也要套用同樣的「必須上傳實際授課照片、詳細教材等，作業或錄影可選填」措辭,因為許多 Tutor 送出的連結裡實際上都沒有附課堂照片。`tutoring/forms.py::ClassRecordForm.__init__` 的 Tutor 分支說明文字同步改寫;`templates/accounts/handbook.html` 裡 Tutor 版的條列式清單(原本只是單純列出四種範例,沒有必要/選填區分)也一併調整,四個項目分別標上「（必要）」「（選填）」。純文字調整,驗證規則不變(Tutor 仍是至少 1 個、Tutee 仍是 0–5 個皆可,系統都不檢查連結內容實際類型)。448 項測試全數通過,`ruff` 乾淨,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-01 修正另一個真實 bug:Admin 課程詳情頁「確認結果」秀在錯的一邊卡片上**:使用者回報「晏祥徵 x 譚小珍，為什麼tutee沒有填寫課堂紀錄，tutor還可以確認無誤」。查正式站資料(session 258)重建:Tutee 完成簽到但沒有送出課堂紀錄,Tutor 已送出課堂紀錄並被 Tutee 確認無誤——但 Admin 頁面上「確認無誤」卻顯示在「學生提交資料」卡片下方,「老師提交資料」卡片反而顯示「尚未確認」,跟實際情況完全顛倒。原因:`tutoring/views.py::class_detail()` 的 Admin 分支用 `ClassConfirmation.reviewer_id`(審核者)篩選要顯示在每張卡片上的確認結果,但應該用 `subject_id`(被確認的對象)篩選——「老師提交資料」卡片要顯示的是「老師的紀錄有沒有被確認」,不是「老師有沒有確認過別人」。修法:兩個變數都改用 `subject_id` 篩選。**純屬 Admin 唯讀頁面的顯示 bug,不影響實際的有效時數計算**(`ClassReview`/`class_is_valid()` 都直接讀整個 `confirmations` queryset,沒有經過這兩個被寫錯的變數),所以這次沒有需要額外修正的歷史資料。新增回歸測試前先確認移除修法後測試真的會失敗,重現出的錯誤訊息與使用者回報的畫面一致。1 項新測試,449 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

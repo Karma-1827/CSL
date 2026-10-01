@@ -1799,6 +1799,43 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         self.assertContains(response, "review-result-revision")
 
+    def test_admin_class_detail_confirmation_shows_under_the_confirmed_persons_own_card(self):
+        """2026-10-01(使用者回報):「晏祥徵 x 譚小珍，為什麼tutee沒有填寫課堂紀錄，tutor
+        還可以確認無誤」。實際原因:`class_detail()` 的 Admin 分支原本用 `reviewer_id` 篩選
+        `tutor_confirmation`/`tutee_confirmation`,等於把「這個人審核對方的那筆確認」秀在
+        「這個人自己提交資料」的卡片上,跟 `admin_record_card.html` 的 heading(老師/學生
+        提交資料)語意顛倒——必須改用 `subject_id`(被確認的對象)篩選,才會跟卡片上顯示的
+        那份紀錄對得起來。這裡重現:Tutor 簽到並送出紀錄,Tutee 只簽到、沒有送出課堂紀錄,
+        Tutee 確認 Tutor 的紀錄無誤。「確認無誤」必須出現在老師的卡片而非學生的卡片下方,
+        學生卡片應顯示「尚未確認」。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
+        check_in(session_id=session.pk, participant=self.tutee, now=normal_now)
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=normal_now
+        )
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+
+        admin = User.objects.create_superuser(username="CARD-SWAP-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        content = response.content.decode()
+
+        teacher_index = content.index("老師提交資料")
+        student_index = content.index("學生提交資料")
+        teacher_section = content[teacher_index:student_index]
+        student_section = content[student_index:]
+
+        self.assertIn("review-result-confirmed", teacher_section)
+        self.assertIn("確認無誤", teacher_section)
+        self.assertNotIn("review-result-confirmed", student_section)
+        self.assertIn("尚未確認", student_section)
+
     def test_class_record_materials_used_and_individual_progress_saved_and_shown_to_counterpart_and_admin(self):
         class_date = timezone.localdate()
         session = schedule_classes(

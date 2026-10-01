@@ -625,11 +625,16 @@ def class_detail(request, pk):
         tutee_record = next(
             (row for row in session.class_records.all() if row.author_id == session.pairing.tutee_id), None
         )
+        # 2026-10-01(使用者回報「tutee沒有填寫課堂紀錄，tutor還可以確認無誤」):原本用
+        # reviewer_id 篩選,等於拿「這個人審核別人的那筆確認」秀在「這個人自己提交資料」的
+        # 卡片上——跟 admin_record_card.html 的 heading（老師/學生提交資料）語意顛倒。這裡
+        # 要顯示的是「這個人的提交內容有沒有被對方確認」,必須用 subject_id(ClassConfirmation
+        # 裡「被確認的對象」)篩選,才會跟卡片上顯示的那份紀錄對得起來。
         tutor_confirmation = next(
-            (row for row in session.confirmations.all() if row.reviewer_id == session.pairing.tutor_id), None
+            (row for row in session.confirmations.all() if row.subject_id == session.pairing.tutor_id), None
         )
         tutee_confirmation = next(
-            (row for row in session.confirmations.all() if row.reviewer_id == session.pairing.tutee_id), None
+            (row for row in session.confirmations.all() if row.subject_id == session.pairing.tutee_id), None
         )
         return render(
             request,
