@@ -1618,9 +1618,11 @@ class ClassWorkflowTests(TestCase):
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
         self.client.force_login(admin)
 
-        response = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(response, "撤回 / Revert")
-
+        # 2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片外做審核」):
+        # dashboard 課程審核清單不再提供撤回按鈕(連同審核意見輸入框、通過/待補正/未通過
+        # 三顆按鈕一起移除),撤回只能在 admin_class_detail.html 進行;這裡改成直接 POST 到
+        # review_class 這個 service-backing view(與使用者實際點擊 admin_class_detail.html
+        # 上的撤回按鈕送出的請求相同),驗證後端行為與導向仍然正確。
         response = self.client.post(
             reverse("tutoring:review_class", args=[session.pk]), {"action": "revert"}
         )
@@ -2172,20 +2174,47 @@ class ClassWorkflowTests(TestCase):
         migration_module.backfill_existing_decisions(real_apps, None)
         self.assertEqual(session.class_review.decisions.count(), 1)
 
-    def test_admin_review_forms_show_three_decision_buttons(self):
+    def test_admin_class_detail_shows_three_decision_buttons(self):
+        """決定課程審核結果的 3 顆按鈕(通過/待補正/未通過)只存在 Admin 課程詳情頁
+        (`admin_class_detail.html`)——2026-10-02(使用者要求「都說審核欄位和三個按鈕可以
+        拿掉了，不會在卡片外做審核」)起,dashboard 課程審核清單已不再提供這組按鈕,
+        見 `test_admin_dashboard_class_review_list_has_no_inline_actions`。"""
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="THREE-BUTTON-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
-
-        dashboard = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(dashboard, '<button class="button button-small button-success" name="action" value="approve">通過 / Approve</button>', html=True)
-        self.assertContains(dashboard, '<button class="button button-small button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
-        self.assertContains(dashboard, '<button class="button button-small button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
 
         detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         self.assertContains(detail, '<button class="button button-success" name="action" value="approve">通過 / Approve</button>', html=True)
         self.assertContains(detail, '<button class="button button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
         self.assertContains(detail, '<button class="button button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
+
+    def test_admin_dashboard_class_review_list_has_no_inline_actions(self):
+        """2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片外做
+        審核」):dashboard 課程審核清單的每一列不應該再有任何審核意見輸入框、通過/待補正/
+        未通過按鈕或撤回按鈕——所有決定一律要點進詳情頁才能做。涵蓋 PENDING(原本有 3 顆
+        決定按鈕)、WAITING(原本有多餘的「目前狀態」方塊)、已決定(原本有撤回按鈕)三種
+        情境,確認三者都只剩下純瀏覽用的卡片。"""
+        pending_session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="NO-INLINE-ACTIONS-ADMIN", password="Admin-password-2026")
+
+        waiting_session = self._confirmed_pending_session(class_date=timezone.localdate() + timedelta(days=10))
+        waiting_session.class_review.status = ClassReviewStatus.WAITING
+        waiting_session.class_review.save(update_fields=["status", "updated_at"])
+
+        decided_session = self._confirmed_pending_session(class_date=timezone.localdate() + timedelta(days=20))
+        review_class_session(session_id=decided_session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
+
+        self.client.force_login(admin)
+        content = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertNotIn('name="note" placeholder="審核意見', content)
+        self.assertNotIn('value="approve">通過 / Approve', content)
+        self.assertNotIn('value="revise">待補正 / Revise', content)
+        self.assertNotIn('value="reject">未通過 / Reject', content)
+        self.assertNotIn("撤回 / Revert", content)
+        self.assertNotIn("目前狀態 / Current status", content)
+        # 確認這三堂課依然正確列在清單裡(只是不再帶動作元件),不是整個被漏掉。
+        for session in (pending_session, waiting_session, decided_session):
+            self.assertIn(session.class_date.strftime("%Y-%m-%d"), content)
 
     def test_admin_dashboard_class_review_card_omits_note_preview_and_orders_badges_status_first(self):
         """2026-10-02(使用者要求):①「審核意見拿掉，因為都要點進課堂紀錄查看才會審核」——

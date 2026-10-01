@@ -3499,6 +3499,14 @@ td small {
   border: 1px solid #ebd5dd;
   border-radius: 12px;
 }
+.review-history-row {
+  /* 2026-10-02(使用者要求移除審核意見欄位與三顆按鈕):這個修飾類別只用在「課程審核」
+     清單(.class-alert-row 等其他沿用 .makeup-review-row 的卡片仍保留表單,不受影響)。
+     右欄原本要容納審核意見輸入框與三顆按鈕,需要較寬的 minmax(320px, 0.8fr);現在右欄
+     只剩 badges,改用 auto 讓欄寬跟著內容縮小,不留一大片空白。 */
+  grid-template-columns: minmax(240px, 1fr) auto;
+  align-items: center;
+}
 .makeup-review-row > div,
 .makeup-review-row form {
   display: grid;
