@@ -1928,9 +1928,13 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, "上一則留言 / Previous comment")
         self.assertContains(detail, "請補充授課照片")
 
+        # 2026-10-02(使用者要求「審核意見拿掉，因為都要點進課堂紀錄查看才會審核」):
+        # dashboard 課程審核清單不再預覽審核意見/上一則留言,只確認課程本身仍正確列在
+        # PENDING 區塊裡(真正的留言內容只在點進去的詳情頁才看得到,已由上面的 detail 斷言
+        # 涵蓋)。
         dashboard = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(dashboard, "上一則留言 / Previous comment")
-        self.assertContains(dashboard, "請補充授課照片")
+        self.assertContains(dashboard, session.class_date.strftime("%Y-%m-%d"))
+        self.assertNotContains(dashboard, "請補充授課照片")
 
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
         session.class_review.refresh_from_db()
@@ -1960,9 +1964,12 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, "審核紀錄")
         self.assertContains(detail, "請補充授課照片")
 
+        # 2026-10-02(使用者要求「審核意見拿掉」):dashboard 清單不再預覽留言內容,
+        # 只確認這堂課仍正確列在 WAITING 區塊(狀態徽章/分類標籤還在,見專屬的
+        # test_admin_dashboard_class_review_cards_* 系列測試)。
         dashboard = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(dashboard, "上一則留言 / Previous comment")
-        self.assertContains(dashboard, "請補充授課照片")
+        self.assertContains(dashboard, session.class_date.strftime("%Y-%m-%d"))
+        self.assertNotContains(dashboard, "請補充授課照片")
 
         self.client.force_login(self.tutor)
         own_detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
@@ -2179,6 +2186,46 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, '<button class="button button-success" name="action" value="approve">通過 / Approve</button>', html=True)
         self.assertContains(detail, '<button class="button button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
         self.assertContains(detail, '<button class="button button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
+
+    def test_admin_dashboard_class_review_card_omits_note_preview_and_orders_badges_status_first(self):
+        """2026-10-02(使用者要求):①「審核意見拿掉，因為都要點進課堂紀錄查看才會審核」——
+        dashboard 課程審核清單不再預覽審核意見;②「標籤都可以移到右邊，第一行是…四大類
+        標籤，第二行才是…標籤」——狀態徽章(等待管理員核准/通過/未通過/待補正/等待雙方
+        確認)在卡片的 `.review-row-badges` 容器裡要排在課程分類標籤(一般課程等)之前。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="CARD-LAYOUT-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="資料不完整，請重新確認")
+
+        self.client.force_login(admin)
+        content = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertNotIn("資料不完整，請重新確認", content)
+
+        badges_start = content.index('class="review-row-badges"')
+        status_index = content.index("未通過 / Rejected", badges_start)
+        category_index = content.index("一般課程", badges_start)
+        self.assertLess(status_index, category_index)
+
+    def test_admin_dashboard_class_review_section_paginates_at_seven_per_page(self):
+        """2026-10-02(使用者要求「比數會越來越多，每個區塊只7筆就換第二頁」):單一狀態
+        區塊超過 7 筆時要分頁,且每個區塊各自獨立分頁(用各自的查詢參數,不是共用一個)。"""
+        base_date = timezone.localdate() + timedelta(days=7)
+        for i in range(9):
+            self._confirmed_pending_session(class_date=base_date + timedelta(weeks=i))
+        admin = User.objects.create_superuser(username="PAGINATE-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+
+        page1 = self.client.get(reverse("accounts:dashboard"))
+        page1_content = page1.content.decode()
+        self.assertIn('aria-label="等待管理員核准分頁', page1_content)
+        self.assertEqual(page1_content.count("review-detail-link"), 7)
+        self.assertContains(page1, "下一頁 / Next")
+        self.assertNotContains(page1, "上一頁 / Previous")
+
+        page2 = self.client.get(reverse("accounts:dashboard"), {"pending_page": 2})
+        page2_content = page2.content.decode()
+        self.assertEqual(page2_content.count("review-detail-link"), 2)
+        self.assertContains(page2, "上一頁 / Previous")
+        self.assertNotContains(page2, "下一頁 / Next")
 
     def test_tutor_and_tutee_class_detail_shows_admin_review_result_and_note(self):
         """2026-10-01(使用者要求):Admin 的課堂審核意見原本只有 Admin 自己的

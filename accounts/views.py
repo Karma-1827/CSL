@@ -902,16 +902,24 @@ def dashboard(request):
             (ClassReviewStatus.REJECTED, "未通過", "Rejected", False),
             (ClassReviewStatus.REVISE, "待補正", "Revise", False),
         )
-        context["class_review_sections"] = [
-            {
+        # 2026-10-02(使用者要求「比數會越來越多，每個區塊只7筆就換第二頁」):五個狀態
+        # 區塊各自獨立分頁,比照 roster_page/pairing_page 既有慣例,用各自的查詢參數
+        # (如 pending_page)而非共用一個,翻某一個區塊的頁不會影響其他區塊。預設只展開
+        # PENDING,但如果使用者正在某個區塊翻頁(該區塊的頁碼參數出現在網址上),重新整理
+        # 後那個區塊要維持展開,不能讓 <details> 收合回去、翻頁翻到一半又看不到結果。
+        class_review_sections = []
+        for status, label, label_en, is_open in status_definitions:
+            page_param = f"{status.lower()}_page"
+            rows = [review for review in class_reviews if review.status == status]
+            class_review_sections.append({
                 "status": status,
                 "label": label,
                 "label_en": label_en,
-                "open": is_open,
-                "rows": [review for review in class_reviews if review.status == status],
-            }
-            for status, label, label_en, is_open in status_definitions
-        ]
+                "open": is_open or page_param in request.GET,
+                "page_param": page_param,
+                "page": Paginator(rows, 7).get_page(request.GET.get(page_param)),
+            })
+        context["class_review_sections"] = class_review_sections
         context["pending_class_reviews"] = [
             review for review in class_reviews if review.status == ClassReviewStatus.PENDING
         ]

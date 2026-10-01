@@ -3532,9 +3532,15 @@ td small {
 }
 .review-row-badges {
   display: flex !important;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.review-row-badges .status-badge {
+  /* same fix as .class-review-history-actions .status-badge: .status-badge's default
+     margin (18px 0 8px) is for standalone use and throws off spacing inside this flex
+     stack — reset to 0 so the container's own gap is the only spacing in play. */
+  margin: 0;
 }
 .review-row-badges b {
   padding: 5px 8px;

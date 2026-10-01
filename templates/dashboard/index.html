@@ -347,17 +347,30 @@
         <div class="review-status-sections">
           {% for section in class_review_sections %}
             <details class="panel review-status-group status-group-{{ section.status|lower }}"{% if section.open %} open{% endif %}>
-              <summary><span><strong>{{ section.label }}</strong><small>{{ section.label_en }}</small></span><em>{{ section.rows|length }}</em></summary>
+              <summary><span><strong>{{ section.label }}</strong><small>{{ section.label_en }}</small></span><em>{{ section.page.paginator.count }}</em></summary>
               <div class="makeup-review-list">
-                {% for review in section.rows %}
+                {% for review in section.page %}
                   <article class="makeup-review-row review-history-row">
-                    <a class="review-detail-link" href="{% url 'tutoring:class_detail' review.session_id %}"><span class="review-row-badges"><b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b><i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i></span><strong>{{ review.session.class_date|date:"Y-m-d" }} · {{ review.session.start_time|time:"H:i" }}</strong><span>{{ review.session.pairing.tutor.bilingual_name }} × {{ review.session.pairing.tutee.bilingual_name }}</span>{% if review.reviewed_by %}<small>審核人員 / Reviewed by：{{ review.reviewed_by.bilingual_name }} · {{ review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}{% if review.latest_decision.note %}<small>{% if review.status == 'PENDING' or review.status == 'WAITING' %}上一則留言 / Previous comment{% else %}審核意見 / Comments{% endif %}：{{ review.latest_decision.note }}</small>{% endif %}<em>查看簽到與課堂紀錄 / View details →</em></a>
-                    {% if review.status == 'PENDING' %}<form action="{% url 'tutoring:review_class' review.session_id %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="審核意見 / Review comments"><div class="inline-actions"><button class="button button-small button-success" name="action" value="approve">通過 / Approve</button><button class="button button-small button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-small button-danger" name="action" value="reject">未通過 / Reject</button></div></form>
-                    {% elif review.status == 'WAITING' %}<div class="review-history-state"><span>目前狀態 / Current status</span><strong>{{ review.get_status_display }}</strong></div>
-                    {% else %}<div class="review-history-state"><span>目前狀態 / Current status</span><strong>{{ review.get_status_display }}</strong></div><form action="{% url 'tutoring:review_class' review.session_id %}" method="post">{% csrf_token %}<input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>{% endif %}
+                    {# 2026-10-02(使用者要求「審核意見拿掉，因為都要點進課堂紀錄查看才會審核」):
+                       不再於列表預覽審核意見/上一則留言,因為實際審核前管理員一定要點進
+                       詳情頁查看簽到與課堂紀錄,列表內先秀一段意見文字並不會少點一次。 #}
+                    <a class="review-detail-link" href="{% url 'tutoring:class_detail' review.session_id %}"><strong>{{ review.session.class_date|date:"Y-m-d" }} · {{ review.session.start_time|time:"H:i" }}</strong><span>{{ review.session.pairing.tutor.bilingual_name }} × {{ review.session.pairing.tutee.bilingual_name }}</span>{% if review.reviewed_by %}<small>審核人員 / Reviewed by：{{ review.reviewed_by.bilingual_name }} · {{ review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}<em>查看簽到與課堂紀錄 / View details →</em></a>
+                    <div class="review-row-actions">
+                      {# 2026-10-02(使用者要求「標籤都可以移到右邊，第一行是審核狀態這四大類
+                         標籤，第二行才是一般課程標籤」):狀態徽章放第一行、課程分類放第二行,
+                         整組移到卡片右側(本來就是這個 2 欄 grid 的第二欄),不再夾在左側文字裡。 #}
+                      <div class="review-row-badges">
+                        <i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>
+                        <b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b>
+                      </div>
+                      {% if review.status == 'PENDING' %}<form action="{% url 'tutoring:review_class' review.session_id %}" method="post">{% csrf_token %}<input type="text" name="note" placeholder="審核意見 / Review comments"><div class="inline-actions"><button class="button button-small button-success" name="action" value="approve">通過 / Approve</button><button class="button button-small button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-small button-danger" name="action" value="reject">未通過 / Reject</button></div></form>
+                      {% elif review.status == 'WAITING' %}<div class="review-history-state"><span>目前狀態 / Current status</span><strong>{{ review.get_status_display }}</strong></div>
+                      {% else %}<div class="review-history-state"><span>目前狀態 / Current status</span><strong>{{ review.get_status_display }}</strong></div><form action="{% url 'tutoring:review_class' review.session_id %}" method="post">{% csrf_token %}<input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>{% endif %}
+                    </div>
                   </article>
                 {% empty %}<div class="empty-state compact">此狀態目前沒有資料。 / No records in this status.</div>{% endfor %}
               </div>
+              {% if section.page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="{{ section.label }}分頁 / {{ section.label_en }} pages">{% if section.page.has_previous %}<a href="?{{ section.page_param }}={{ section.page.previous_page_number }}#class-review">← 上一頁 / Previous</a>{% endif %}<span>{{ section.page.number }} / {{ section.page.paginator.num_pages }}</span>{% if section.page.has_next %}<a href="?{{ section.page_param }}={{ section.page.next_page_number }}#class-review">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
             </details>
           {% endfor %}
         </div>
