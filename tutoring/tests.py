@@ -2019,6 +2019,49 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "待補正 / Revise")
         self.assertContains(response, "通過 / Approved")
 
+    def test_backfill_classreviewdecision_history_migration(self):
+        """2026-10-01(使用者回報「所以通過不會列出所有審核紀錄嗎？」):`ClassReviewDecision`
+        是跟著 0042 新增的,在那之前就已經通過/未通過/待補正的課程完全沒有對應的歷史紀錄,
+        導致「審核紀錄」區塊對這些舊資料整個不顯示。0043 這個一次性資料遷移要能補上一筆
+        對應快照;沒有審核人員的 grandfathered 紀錄(0031,系統自動核准、非真人審核)則
+        刻意跳過,且重複執行不可產生重複紀錄(冪等)。"""
+        import importlib
+
+        migration_module = importlib.import_module(
+            "tutoring.migrations.0043_backfill_classreviewdecision_history"
+        )
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="BACKFILL-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
+        # Simulate "this decision pre-dates the history feature": the live call above
+        # already created a ClassReviewDecision, so delete it to reproduce the state of a
+        # pre-0042 ClassReview that only has its single status/review_note/reviewed_by.
+        session.class_review.decisions.all().delete()
+
+        grandfathered_session = self._confirmed_pending_session(class_date=timezone.localdate() + timedelta(days=10))
+        grandfathered_review = grandfathered_session.class_review
+        grandfathered_review.status = ClassReviewStatus.APPROVED
+        grandfathered_review.reviewed_by = None
+        grandfathered_review.review_note = "系統自動核准 / Auto approved"
+        grandfathered_review.save(update_fields=["status", "reviewed_by", "review_note", "updated_at"])
+
+        from django.apps import apps as real_apps
+        migration_module.backfill_existing_decisions(real_apps, None)
+
+        session.class_review.refresh_from_db()
+        history = list(session.class_review.decisions.all())
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].status, ClassReviewStatus.APPROVED)
+        self.assertEqual(history[0].note, "已確認")
+        self.assertEqual(history[0].reviewed_by, admin)
+
+        grandfathered_review.refresh_from_db()
+        self.assertEqual(grandfathered_review.decisions.count(), 0)
+
+        # Idempotent: running it again must not create a duplicate entry.
+        migration_module.backfill_existing_decisions(real_apps, None)
+        self.assertEqual(session.class_review.decisions.count(), 1)
+
     def test_admin_review_forms_show_three_decision_buttons(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="THREE-BUTTON-ADMIN", password="Admin-password-2026")

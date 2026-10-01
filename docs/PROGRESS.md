@@ -159,6 +159,8 @@
 
 > **2026-10-01 新增 `ClassReviewDecision` 歷史表,改用它實作「列出所有審核紀錄」(使用者追問「在哪裡顯示？」並要求「如果是通過/待補正也要接列出所有審核紀錄」)**:發現前兩輪「刻意不清空 `review_note`」的做法本質上有缺陷——`ClassReview` 只有一組欄位,每次重新審核都整個覆蓋,補正兩次以上較早的意見就會永久遺失,無法列出完整歷史。改為新增 `ClassReviewDecision`(`review` FK、`status`、`note`、`reviewed_by`、`created_at`,append-only,migration `tutoring/0042_classreviewdecision.py`),`review_class_session()` 每次決定時另外寫入一筆快照;原本「刻意保留」的 hack 撤回,`review_note` 重新在重置/撤回時清空,所有「上一則留言」顯示改讀這張歷史表的最新一筆。`admin_class_detail.html` 新增不受目前狀態影響的「審核紀錄 / Review history」區塊,永遠列出該堂課完整的審核歷程(沿用 `.incident-report-reply-list` 既有樣式)。新增 2 項回歸測試、重寫 2 項既有測試斷言,460 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-01 回填部署前既有已決定課程的審核歷史(使用者追問「所以通過不會列出所有審核紀錄嗎？」)**:`ClassReviewDecision` 只從上一輪部署起才開始記錄,部署前就已經通過/未通過/待補正的課程完全沒有歷史紀錄,導致「審核紀錄」區塊對這些舊資料整個不顯示。新增一次性資料遷移 `tutoring/migrations/0043_backfill_classreviewdecision_history.py`,為每一筆已是終局決定、但還沒有任何 `ClassReviewDecision` 的 `ClassReview` 補一筆快照(內容即目前僅有的那組 status/review_note/reviewed_by,時間用 `.update()` 覆寫回真正的 `reviewed_at`);刻意跳過 `reviewed_by` 為空的 `0031` grandfathered 紀錄(系統自動核准、非真人審核,本來就沒有對應審核人員可歸屬)。新增 1 項回歸測試驗證回填、跳過、冪等三種情境,461 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
