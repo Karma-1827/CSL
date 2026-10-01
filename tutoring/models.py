@@ -732,8 +732,11 @@ class ClassConfirmation(models.Model):
 class ClassReviewStatus(models.TextChoices):
     WAITING = "WAITING", "等待雙方確認 / Waiting for mutual confirmation"
     PENDING = "PENDING", "等待管理員核准 / Waiting for admin approval"
-    APPROVED = "APPROVED", "已通過 / Approved"
+    APPROVED = "APPROVED", "通過 / Approved"
     REJECTED = "REJECTED", "未通過 / Rejected"
+    # 2026-10-01(使用者要求):跟「未通過」(終局、不會再採計)區分開來——這個狀態代表
+    # 課堂紀錄還有地方需要補正,老師/學生修改後會重新進入互相確認與審核流程,不是定案。
+    REVISE = "REVISE", "待補正 / Revise"
 
 
 class ClassReview(models.Model):
@@ -747,7 +750,7 @@ class ClassReview(models.Model):
     reviewed_by = models.ForeignKey(
         User, on_delete=models.PROTECT, null=True, blank=True, related_name="reviewed_class_sessions"
     )
-    review_note = models.TextField("審核備註 / Review note", blank=True)
+    review_note = models.TextField("審核意見 / Review comments", blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

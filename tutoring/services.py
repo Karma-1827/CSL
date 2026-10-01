@@ -1202,7 +1202,7 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
         # decision (2026-09-10): applies to every session now, not just makeup ones,
         # since every session's review can be reset by a later edit either way.
         review, _ = ClassReview.objects.get_or_create(session=session)
-        if review.status in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED}:
+        if review.status in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
             review.status = ClassReviewStatus.WAITING
             review.reviewed_by = None
             review.review_note = ""
@@ -1231,7 +1231,8 @@ def _sync_class_review(session):
         status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
     ).count() == 2
     target = ClassReviewStatus.PENDING if confirmed else ClassReviewStatus.WAITING
-    if review.status not in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED} and review.status != target:
+    decided_statuses = {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}
+    if review.status not in decided_statuses and review.status != target:
         review.status = target
         review.save(update_fields=["status", "updated_at"])
 
@@ -1278,16 +1279,23 @@ def class_is_valid(session):
     return hasattr(session, "class_review") and session.class_review.status == ClassReviewStatus.APPROVED
 
 
+#: 2026-10-01(使用者要求新增「待補正 / Revise」,跟「未通過」區分開來):
+#: Admin 審核課程時可以選擇的三種終局結果。
+CLASS_REVIEW_DECISIONS = {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}
+
+
 @transaction.atomic
-def review_class_session(*, session_id, admin, approve, note=""):
+def review_class_session(*, session_id, admin, decision, note=""):
     if admin.role != Role.ADMIN:
         raise ValidationError("只有管理員可以審核課程。 / Only administrators may review classes.")
+    if decision not in CLASS_REVIEW_DECISIONS:
+        raise ValidationError("請選擇有效的審核結果。 / Select a valid review decision.")
     review = ClassReview.objects.select_for_update().select_related(
         "session__pairing__tutor", "session__pairing__tutee"
     ).get(session_id=session_id)
     if review.status != ClassReviewStatus.PENDING:
         raise ValidationError("此課程尚未進入可審核狀態。 / This class is not ready for review.")
-    review.status = ClassReviewStatus.APPROVED if approve else ClassReviewStatus.REJECTED
+    review.status = decision
     review.reviewed_by = admin
     review.review_note = note.strip()
     review.reviewed_at = timezone.now()
@@ -1320,7 +1328,7 @@ def revert_class_review(*, session_id, admin):
     review = ClassReview.objects.select_for_update().select_related(
         "session__pairing__tutor", "session__pairing__tutee"
     ).get(session_id=session_id)
-    if review.status not in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED}:
+    if review.status not in CLASS_REVIEW_DECISIONS:
         raise ValidationError("此課程尚未有審核結果,無法撤回。 / This class has no review result to revert yet.")
     review.status = ClassReviewStatus.PENDING
     review.reviewed_by = None

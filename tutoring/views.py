@@ -19,7 +19,7 @@ from .forms import (
     StandaloneIncidentReportForm,
 )
 from .models import (
-    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassSession, IncidentReport,
+    ClassAlert, ClassAlertStatus, ClassDocument, ClassRecord, ClassReviewStatus, ClassSession, IncidentReport,
     Pairing, PairingMessage, PairingStatus, Semester,
 )
 from .reporting import (
@@ -724,6 +724,9 @@ def class_detail(request, pk):
             "record_window_open": now >= session.ends_at,
             "alert_window_open": session.starts_at <= now <= session.ends_at,
             "is_valid_class": class_is_valid(session),
+            # 2026-10-01(使用者要求):管理員的審核意見原本只有 Admin 自己看得到
+            # (admin_class_detail.html),Tutor/Tutee 完全看不到審核結果或備註。
+            "class_review": getattr(session, "class_review", None),
         },
     )
 
@@ -807,6 +810,13 @@ def review_class(request, pk):
     if request.user.role != Role.ADMIN:
         raise Http404
     action = request.POST.get("action")
+    # 2026-10-01(使用者要求新增「待補正 / Revise」):三個終局結果各自對應一個按鈕
+    # value,不再是單純的 approve/reject 布林值。
+    decisions = {
+        "approve": ClassReviewStatus.APPROVED,
+        "reject": ClassReviewStatus.REJECTED,
+        "revise": ClassReviewStatus.REVISE,
+    }
     try:
         if action == "revert":
             revert_class_review(session_id=pk, admin=request.user)
@@ -815,7 +825,7 @@ def review_class(request, pk):
             review_class_session(
                 session_id=pk,
                 admin=request.user,
-                approve=action == "approve",
+                decision=decisions.get(action),
                 note=request.POST.get("note", ""),
             )
             messages.success(request, "課程審核已完成。 / Class review completed.")

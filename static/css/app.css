@@ -2152,6 +2152,15 @@ td small {
   color: var(--danger);
   background: var(--danger-soft);
 }
+.status-revise {
+  color: var(--slate-700);
+  background: var(--slate-100);
+}
+.class-review-note {
+  margin: 10px 0 0;
+  color: var(--navy);
+  font-size: 0.85rem;
+}
 .result-text {
   font-weight: 700;
 }
@@ -3334,6 +3343,10 @@ td small {
   color: #963b3b;
   background: #f8e2e2;
 }
+.class-status.revise {
+  color: var(--slate-700);
+  background: var(--slate-100);
+}
 .makeup-review-list {
   display: grid;
   gap: 11px;
@@ -3473,6 +3486,10 @@ td small {
 .status-group-rejected {
   border-left: 4px solid var(--danger);
   background: linear-gradient(100deg, var(--danger-soft), #fff 22%);
+}
+.status-group-revise {
+  border-left: 4px solid var(--slate-700);
+  background: linear-gradient(100deg, var(--slate-100), #fff 22%);
 }
 .makeup-review-row {
   display: grid;

@@ -28,8 +28,8 @@
       <section class="panel admin-review-decision">
         <div class="panel-heading"><div><span class="eyebrow">DECISION</span><h2>課程審核 <small>Class review decision</small></h2></div></div>
         <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
-          {% csrf_token %}<input type="hidden" name="next" value="detail"><label>審核備註 / Review note<textarea name="note" rows="3"></textarea></label>
-          <div class="inline-actions"><button class="button button-success" name="action" value="approve">核准 / Approve</button><button class="button button-danger" name="action" value="reject">不核准 / Reject</button></div>
+          {% csrf_token %}<input type="hidden" name="next" value="detail"><label>審核意見 / Review comments<textarea name="note" rows="3"></textarea></label>
+          <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button></div>
         </form>
       </section>
     {% elif class_review.status == 'WAITING' %}

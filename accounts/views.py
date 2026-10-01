@@ -400,7 +400,7 @@ def dashboard(request):
             if session.active_alert_count:
                 reasons.append("課堂通報待處理 / Active class alert")
             review = getattr(session, "class_review", None)
-            if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED}:
+            if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
                 reasons.append(f"課程審核：{review.get_status_display()}")
             session.anomaly_reasons = reasons
             if reasons:
@@ -893,8 +893,9 @@ def dashboard(request):
         status_definitions = (
             (ClassReviewStatus.PENDING, "等待管理員核准", "Waiting for admin approval", True),
             (ClassReviewStatus.WAITING, "等待雙方確認", "Waiting for mutual confirmation", False),
-            (ClassReviewStatus.APPROVED, "已通過", "Approved", False),
+            (ClassReviewStatus.APPROVED, "通過", "Approved", False),
             (ClassReviewStatus.REJECTED, "未通過", "Rejected", False),
+            (ClassReviewStatus.REVISE, "待補正", "Revise", False),
         )
         context["class_review_sections"] = [
             {
@@ -957,7 +958,7 @@ def admin_tutor_schedule(request, user_id):
         if any(row.status == ClassAlertStatus.ACTIVE for row in session.class_alerts.all()):
             reasons.append("課堂通報待處理 / Active class alert")
         review = getattr(session, "class_review", None)
-        if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED}:
+        if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
             reasons.append(f"補登：{review.get_status_display()}")
         session.anomaly_reasons = reasons
         exception_count += bool(reasons)

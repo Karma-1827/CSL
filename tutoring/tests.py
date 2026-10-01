@@ -1572,7 +1572,7 @@ class ClassWorkflowTests(TestCase):
         )[0]
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="REVERT-REVIEW-ADMIN", password="Admin-password-2026")
-        review_class_session(session_id=session.pk, admin=admin, approve=True, note="已確認")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
         reverted = revert_class_review(session_id=session.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
@@ -1596,7 +1596,7 @@ class ClassWorkflowTests(TestCase):
         )[0]
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="REVERT-ADMIN-OWNER", password="Admin-password-2026")
-        review_class_session(session_id=session.pk, admin=admin, approve=False, note="不通過")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="不通過")
         with self.assertRaises(ValidationError):
             revert_class_review(session_id=session.pk, admin=self.tutor)
 
@@ -1607,7 +1607,7 @@ class ClassWorkflowTests(TestCase):
         )[0]
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="REVERT-VIEW-ADMIN", password="Admin-password-2026")
-        review_class_session(session_id=session.pk, admin=admin, approve=True, note="已確認")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
         self.client.force_login(admin)
 
         response = self.client.get(reverse("accounts:dashboard"))
@@ -1620,7 +1620,7 @@ class ClassWorkflowTests(TestCase):
         session.class_review.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
 
-        review_class_session(session_id=session.pk, admin=admin, approve=False, note="再次不通過")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="再次不通過")
         response = self.client.post(
             reverse("tutoring:review_class", args=[session.pk]), {"action": "revert", "next": "detail"}
         )
@@ -1731,7 +1731,7 @@ class ClassWorkflowTests(TestCase):
         self.assertFalse(class_is_valid(session))
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="ONTIME-REVIEW-ADMIN", password="Admin-password-2026")
-        review_class_session(session_id=session.pk, admin=admin, approve=True)
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED)
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
 
@@ -1835,6 +1835,112 @@ class ClassWorkflowTests(TestCase):
         self.assertIn("確認無誤", teacher_section)
         self.assertNotIn("review-result-confirmed", student_section)
         self.assertIn("尚未確認", student_section)
+
+    def _confirmed_pending_session(self, *, class_date=None, now=None):
+        class_date = class_date or timezone.localdate()
+        now = now or self.aware(class_date, time(11, 5))
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        check_in(session_id=session.pk, participant=self.tutor, now=now)
+        check_in(session_id=session.pk, participant=self.tutee, now=now)
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=now)
+        submit_class_record(session_id=session.pk, author=self.tutee, data=self.record_data("學生紀錄"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        return session
+
+    def test_review_class_session_accepts_revise_decision(self):
+        """2026-10-01(使用者要求):新增「待補正 / Revise」,跟「未通過」區分開來——這個
+        狀態代表課堂紀錄還有地方需要補正,不是終局的未通過。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVISE-DECISION-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="教材照片請補上")
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.REVISE)
+        self.assertEqual(session.class_review.review_note, "教材照片請補上")
+        self.assertEqual(session.class_review.reviewed_by, admin)
+        self.assertFalse(class_is_valid(session))
+
+    def test_revert_class_review_from_revise_back_to_pending(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVISE-REVERT-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正")
+        reverted = revert_class_review(session_id=session.pk, admin=admin)
+        self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
+        self.assertIsNone(reverted.reviewed_by)
+        self.assertEqual(reverted.review_note, "")
+        self.assertIsNone(reverted.reviewed_at)
+
+    def test_editing_own_record_after_revise_resets_pending_review_to_waiting(self):
+        """REVISE 跟 APPROVED/REJECTED 一樣是「已決定」的終局狀態之一,任一方修改自己的
+        課堂紀錄時,一樣要重置回 WAITING 讓雙方重新互相確認——不應該只對 APPROVED/REJECTED
+        做這個重置,獨漏 REVISE。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVISE-EDIT-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正教材")
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"),
+            now=self.aware(timezone.localdate(), time(11, 5)),
+        )
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+
+    def test_admin_review_forms_show_three_decision_buttons(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="THREE-BUTTON-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, '<button class="button button-small button-success" name="action" value="approve">通過 / Approve</button>', html=True)
+        self.assertContains(dashboard, '<button class="button button-small button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
+        self.assertContains(dashboard, '<button class="button button-small button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
+
+        detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(detail, '<button class="button button-success" name="action" value="approve">通過 / Approve</button>', html=True)
+        self.assertContains(detail, '<button class="button button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
+        self.assertContains(detail, '<button class="button button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
+
+    def test_tutor_and_tutee_class_detail_shows_admin_review_result_and_note(self):
+        """2026-10-01(使用者要求):Admin 的課堂審核意見原本只有 Admin 自己的
+        `admin_class_detail.html` 看得到,Tutor/Tutee 自己的 `class_detail.html`
+        完全沒有顯示審核結果或審核意見——這次新增一個「管理員審核結果」區塊。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVIEW-VISIBLE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補上教材照片")
+
+        for user in (self.tutor, self.tutee):
+            self.client.force_login(user)
+            response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+            self.assertContains(response, "管理員審核結果")
+            self.assertContains(response, "待補正 / Revise")
+            self.assertContains(response, "請補上教材照片")
+            self.assertContains(response, 'status-badge status-revise')
+
+    def test_tutor_and_tutee_class_detail_hides_admin_review_panel_while_waiting(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        now = self.aware(class_date, time(11, 5))
+        check_in(session_id=session.pk, participant=self.tutor, now=now)
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=now)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertNotContains(response, "管理員審核結果")
+
+    def test_schedule_badge_shows_revise_status_with_gray_class(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVISE-BADGE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正")
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "待補正 / Revise")
+        self.assertContains(response, 'class-status revise')
 
     def test_class_record_materials_used_and_individual_progress_saved_and_shown_to_counterpart_and_admin(self):
         class_date = timezone.localdate()
@@ -2322,7 +2428,7 @@ class ClassWorkflowTests(TestCase):
         )[0]
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="AUDIT-REVIEW-ADMIN", password="Admin-password-2026")
-        review_class_session(session_id=session.pk, admin=admin, approve=True, note="已確認")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
         log = AuditLog.objects.get(event_type="CLASS_REVIEWED")
         self.assertEqual(log.actor, admin)
         self.assertEqual(log.target_user, self.tutee)
@@ -2371,11 +2477,11 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, "等待管理員核准")
         dashboard = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(dashboard, "等待管理員核准")
-        review_class_session(session_id=session.pk, admin=admin, approve=True)
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED)
         session.class_review.refresh_from_db()
         self.assertTrue(class_is_valid(session))
         history = self.client.get(reverse("accounts:dashboard"))
-        self.assertContains(history, "已通過")
+        self.assertContains(history, "通過")
         self.assertContains(history, "補課堂紀錄")
 
     def test_tutor_and_tutee_schedule_badge_reflects_class_review_status_not_generic_waiting(self):
@@ -2421,7 +2527,7 @@ class ClassWorkflowTests(TestCase):
         self.assertNotContains(after_tutee, "等待雙方完成 / Waiting")
 
         admin = User.objects.create_superuser(username="SCHEDULE-BADGE-ADMIN", password="Admin-password-2026")
-        review_class_session(session_id=session.pk, admin=admin, approve=False, note="資料不完整")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="資料不完整")
         session.class_review.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.REJECTED)
         self.client.force_login(self.tutor)
