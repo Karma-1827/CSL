@@ -3944,6 +3944,26 @@ td small {
   color: var(--navy);
   font-size: 0.8rem;
 }
+.class-review-history-item {
+  position: relative;
+  padding-right: 34px;
+}
+.class-review-history-item.has-revert {
+  padding-right: 112px;
+  min-height: 54px;
+}
+.class-review-history-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+}
+.class-review-history-revert {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  margin: 0;
+  transform: translateY(-50%);
+}
 .incident-report-reply-disclosure {
   margin-top: 10px;
   text-align: right;
