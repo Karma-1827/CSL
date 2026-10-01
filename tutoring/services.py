@@ -1205,9 +1205,12 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
         if review.status in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
             review.status = ClassReviewStatus.WAITING
             review.reviewed_by = None
-            review.review_note = ""
+            # 2026-10-01(使用者要求「審核意見上方也列出上一則留言，這樣比較好追蹤」):
+            # 刻意不清空 review_note——保留上一次的審核意見，讓管理員下次重新審核時
+            # 還能看到自己先前寫了什麼(例如「請補充授課照片」),下一次 review_class_session()
+            # 送出新意見時會原地覆蓋掉,不會一直累積。
             review.reviewed_at = None
-            review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+            review.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
     ClassConfirmation.objects.filter(session=session, subject=author).delete()
     # 2026-10-01(使用者回報「tutee放未確認，為什麼會放在等待管理員核准的區塊」):
     # 刪除對方針對這筆紀錄的舊確認之後,必須重新呼叫 _sync_class_review() 讓審核狀態
@@ -1332,9 +1335,10 @@ def revert_class_review(*, session_id, admin):
         raise ValidationError("此課程尚未有審核結果,無法撤回。 / This class has no review result to revert yet.")
     review.status = ClassReviewStatus.PENDING
     review.reviewed_by = None
-    review.review_note = ""
+    # 2026-10-01(使用者要求):撤回後一樣保留 review_note 不清空,道理同 submit_class_record()
+    # 的重置邏輯——管理員重新審核時還能看到自己上次寫的意見,下次送出新決定會整個覆蓋掉。
     review.reviewed_at = None
-    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    review.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
     AuditLog.record(
         actor=admin,
         target_user=review.session.pairing.tutee,

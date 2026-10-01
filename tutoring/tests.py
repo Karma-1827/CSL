@@ -1565,7 +1565,9 @@ class ClassWorkflowTests(TestCase):
 
     def test_revert_class_review_resets_approved_result_back_to_pending(self):
         """2026-09-16(使用者要求):比照口語能力審核既有的撤回機制,課程審核也要能撤回
-        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。"""
+        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。2026-10-01(使用者要求「審核
+        意見上方也列出上一則留言」)起,撤回刻意不再清空 review_note——保留上一次的意見
+        供管理員重新審核時對照,下次送出新決定會整個覆蓋掉。"""
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
@@ -1576,7 +1578,7 @@ class ClassWorkflowTests(TestCase):
         reverted = revert_class_review(session_id=session.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
-        self.assertEqual(reverted.review_note, "")
+        self.assertEqual(reverted.review_note, "已確認")
         self.assertIsNone(reverted.reviewed_at)
 
     def test_revert_class_review_rejects_pending_or_waiting_review(self):
@@ -1872,7 +1874,7 @@ class ClassWorkflowTests(TestCase):
         reverted = revert_class_review(session_id=session.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
-        self.assertEqual(reverted.review_note, "")
+        self.assertEqual(reverted.review_note, "請補正")
         self.assertIsNone(reverted.reviewed_at)
 
     def test_editing_own_record_after_revise_resets_pending_review_to_waiting(self):
@@ -1888,6 +1890,38 @@ class ClassWorkflowTests(TestCase):
         )
         session.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+
+    def test_review_note_carries_over_as_previous_comment_until_next_decision(self):
+        """2026-10-01(使用者要求「admin的審核意見上方也列出上一則留言，這樣比較好追蹤」):
+        REVISE 後學生補正、雙方重新確認、審核回到 PENDING 的這段期間,review_note 不應該
+        被清空——管理員要能在下一次做決定前看到自己上一次寫了什麼。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="PREV-NOTE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補充授課照片")
+        now = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"), now=now)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+        self.assertEqual(session.class_review.review_note, "請補充授課照片")
+
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        self.assertEqual(session.class_review.review_note, "請補充授課照片")
+
+        self.client.force_login(admin)
+        detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(detail, "上一則留言 / Previous comment")
+        self.assertContains(detail, "請補充授課照片")
+
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, "上一則留言 / Previous comment")
+        self.assertContains(dashboard, "請補充授課照片")
+
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.review_note, "已補齊")
 
     def test_admin_review_forms_show_three_decision_buttons(self):
         session = self._confirmed_pending_session()
