@@ -3947,22 +3947,22 @@ td small {
 .class-review-history-item {
   position: relative;
   padding-right: 34px;
+  min-height: 40px;
 }
 .class-review-history-item.has-revert {
-  padding-right: 112px;
-  min-height: 54px;
+  padding-right: 128px;
 }
-.class-review-history-badge {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-}
-.class-review-history-revert {
+.class-review-history-actions {
   position: absolute;
   top: 50%;
   right: 12px;
-  margin: 0;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.class-review-history-actions form {
+  margin: 0;
 }
 .incident-report-reply-disclosure {
   margin-top: 10px;

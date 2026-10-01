@@ -2075,11 +2075,13 @@ class ClassWorkflowTests(TestCase):
         self.client.force_login(admin)
         content = self.client.get(reverse("tutoring:class_detail", args=[session.pk])).content.decode()
         self.assertEqual(content.count("撤回 / Revert"), 1)
-        latest_card_start = content.index("已補齊")
-        older_card_start = content.index("第一次意見")
+        first_card_start = content.index('<li class="incident-report-reply-item')
+        second_card_start = content.index('<li class="incident-report-reply-item', first_card_start + 1)
         revert_index = content.index("撤回 / Revert")
-        self.assertLess(latest_card_start, revert_index)
-        self.assertLess(revert_index, older_card_start)
+        self.assertGreater(revert_index, first_card_start)
+        self.assertLess(revert_index, second_card_start)
+        self.assertIn("已補齊", content[first_card_start:second_card_start])
+        self.assertIn("第一次意見", content[second_card_start:])
 
     def test_admin_class_detail_pending_with_no_history_shows_no_stray_completion_box(self):
         """2026-10-01(回歸測試,部署後用正式站真實的 PENDING 課程發現的真實 bug):合併
