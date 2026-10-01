@@ -1735,6 +1735,47 @@ class ClassWorkflowTests(TestCase):
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
 
+    def test_editing_own_record_after_both_confirmed_resets_pending_review_to_waiting(self):
+        """2026-10-01(使用者回報):「9/23 唐子雯 x 朴敍亨，tutee放未確認，為什麼會放在
+        等待管理員核准的區塊」。實際原因:雙方互相確認後 ClassReview 變成 PENDING;提交
+        自己課堂紀錄時既有邏輯只會在 ClassReview 已經是 APPROVED/REJECTED 時才重置狀態
+        並刪除對方對自己的舊確認,但沒有呼叫 _sync_class_review() 依刪除後剩下的確認筆數
+        重新計算——如果原本就是 PENDING(還沒被 Admin 審過),狀態完全沒被動到,導致
+        「對方其實已經不算確認了,畫面卻還留在等待管理員核准」這個不一致。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        check_in(session_id=session.pk, participant=self.tutor, now=normal_now)
+        check_in(session_id=session.pk, participant=self.tutee, now=normal_now)
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=normal_now
+        )
+        submit_class_record(
+            session_id=session.pk, author=self.tutee, data=self.record_data("學生紀錄"), now=normal_now
+        )
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+
+        # Tutor edits their own record again — this must invalidate the tutee's
+        # confirmation *of the tutor* and drop the review back to WAITING, since only
+        # one of the two required confirmations is still valid afterward.
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師更新後的紀錄"), now=normal_now
+        )
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+        self.assertEqual(
+            ClassConfirmation.objects.filter(
+                session=session, status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
+            ).count(),
+            1,
+        )
+
     def test_admin_class_detail_shows_confirmation_result_with_status_color_class(self):
         """2026-09-15(使用者要求):Admin 的課堂審核介面(admin_record_card.html)原本的
         「確認結果」不論狀態一律套用同一個中性樣式,使用者要求跟 Tutor/Tutee 端(2026-09-15

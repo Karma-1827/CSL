@@ -1209,6 +1209,13 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
             review.reviewed_at = None
             review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
     ClassConfirmation.objects.filter(session=session, subject=author).delete()
+    # 2026-10-01(使用者回報「tutee放未確認，為什麼會放在等待管理員核准的區塊」):
+    # 刪除對方針對這筆紀錄的舊確認之後,必須重新呼叫 _sync_class_review() 讓審核狀態
+    # 跟著現在剩下的確認筆數重新計算——先前只有 confirm_counterpart() 會呼叫這個函式,
+    # 這裡原本漏呼叫,導致「審核已經是 PENDING 之後,任一方又重新送出/修改自己的課堂
+    # 紀錄」這個情境下,即使剛剛那個刪除動作已經讓確認筆數掉回 1 筆,ClassReview 仍然
+    # 卡在 PENDING,跟畫面上另一方顯示「未確認」互相矛盾。
+    _sync_class_review(session)
     return record
 
 
