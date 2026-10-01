@@ -938,6 +938,38 @@ class PrivateNoStoreMiddlewareTests(TestCase):
         self.assertNotEqual(response.get("Cache-Control"), "private, no-store")
 
 
+class FriendlyMethodNotAllowedMiddlewareTests(TestCase):
+    """2026-10-01(使用者回報「網站打不開」):session 在操作途中逾時,Django 登入頁用
+    GET 把使用者導回原本那個只接受 POST 的操作網址,得到一頁沒有任何樣式的純文字
+    「Method Not Allowed」。已登入使用者意外 GET 到這類網址時應該友善導回 dashboard,
+    而不是顯示這頁。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="METHOD-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(username="METHOD-TUTOR", password="Tutor-password-2026", role=Role.TUTOR)
+
+    def test_authenticated_get_to_a_post_only_view_redirects_to_dashboard(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:save_announcement"))
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+
+    def test_redirect_carries_a_bilingual_flash_message(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:incident_report"), follow=True)
+        self.assertContains(response, "此連結只能透過按鈕送出操作")
+        self.assertContains(response, "please go back and try the action again")
+
+    def test_unauthenticated_get_is_not_touched_by_this_middleware(self):
+        """`@login_required` catches this first and sends it to the login page —
+        this middleware must not interfere with that existing, unrelated redirect."""
+        response = self.client.get(reverse("tutoring:incident_report"))
+        self.assertRedirects(response, f"{reverse('accounts:login')}?next={reverse('tutoring:incident_report')}")
+
+    def test_unrelated_404_is_not_touched_by_this_middleware(self):
+        response = self.client.get("/this-page-does-not-exist/")
+        self.assertEqual(response.status_code, 404)
+
+
 class ContentSecurityPolicyMiddlewareTests(TestCase):
     """The enforcing CSP is present on every response without unsafe fallbacks."""
 
@@ -2831,9 +2863,11 @@ class AnnouncementTests(TestCase):
         self.assertFalse(AnnouncementReadState.objects.exists())
 
     def test_mark_announcements_read_rejects_get(self):
+        """2026-10-01 起,已登入使用者 GET 到一個只接受 POST 的網址會被
+        `FriendlyMethodNotAllowedMiddleware` 友善導回 dashboard,不再是原始的 405。"""
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:mark_announcements_read"))
-        self.assertEqual(response.status_code, 405)
+        self.assertRedirects(response, reverse("accounts:dashboard"))
 
     def test_announcement_card_shows_date_and_new_badge(self):
         Announcement.objects.create(content="卡片內容測試", display_order=1, is_active=True, created_by=self.admin)

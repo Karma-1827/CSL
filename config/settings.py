@@ -52,6 +52,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "accounts.middleware.PrivateNoStoreMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "accounts.middleware.FriendlyMethodNotAllowedMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "accounts.middleware.ContentSecurityPolicyMiddleware",
 ]

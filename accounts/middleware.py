@@ -1,4 +1,36 @@
 from django.conf import settings
+from django.contrib import messages
+from django.shortcuts import redirect
+
+
+class FriendlyMethodNotAllowedMiddleware:
+    """Turn a stray GET to a `@require_POST` dashboard action into a friendly redirect
+    instead of Django's bare, unstyled "Method Not Allowed" text response.
+
+    2026-10-01(使用者回報「網站打不開」):實際發生的情境是 session 在操作途中逾時,
+    `@login_required` 把瀏覽器導去登入頁並帶上 `?next=<原本那個只接受 POST 的網址>`;
+    重新登入後,Django `LoginView` 預設行為是用 GET 導向這個 `next` 網址,但該網址只有
+    `@require_POST` 處理,GET 到這裡只會得到一頁純文字的「Method Not Allowed」,
+    沒有任何頁面樣式,對使用者來說看起來就像「網站壞了打不開」。這個網站有 30+ 個
+    `@require_POST` 的 dashboard 操作型 view(審核、解除、標記已紀錄等),不是只有單一
+    一處,所以在這裡統一攔截比逐一修改每個 view 更不容易漏掉。只處理已登入使用者的
+    GET 請求——未登入的請求本來就會被 `@login_required` 攔在前面導去登入頁,不會真的
+    走到這裡;刻意不處理其他方法或未登入情境,避免掩蓋其他原因造成的真正 405。
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if response.status_code == 405 and request.method == "GET" and request.user.is_authenticated:
+            messages.error(
+                request,
+                "此連結只能透過按鈕送出操作，請回到頁面重新操作一次。 / "
+                "This link can only be used by submitting its form; please go back and try the action again.",
+            )
+            return redirect("accounts:dashboard")
+        return response
 
 
 class PrivateNoStoreMiddleware:

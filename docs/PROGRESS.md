@@ -141,6 +141,8 @@
 
 > **2026-10-01 異常回報卡片改成可收合(使用者要求)**:使用者指出「admin/tutor tutee的每一筆回報，卡片都要能伸縮，有些回覆只會越來越長」。比照既有 `.semester-hours-card` 的 `<details>` 收合慣例,新增共用的 `.incident-report-card` 樣式——Tutor/Tutee「我送出的回報」整張卡片、Admin「異常回報」待處理清單的每一筆都改成可收合,只有最新一筆預設展開。Admin 已紀錄表格的「細節」本來就已經是收合式,不受影響。純 template/CSS 改動,無 model/migration 變更,既有回歸測試全數通過。詳見 `CLAUDE.md` 第 4.7 節。
 
+> **2026-10-01 使用者回報「網站打不開」,查出是 session 逾時搭配 POST-only 操作網址的既有通病**:使用者回報 `https://mpts.tcsl.ntnu.edu.tw/matching/incident-reports/156/resolve/` 打不開。查正式站 `journalctl`,重建出實際發生的順序:管理員在操作「標記已紀錄」途中 session 逾時(30 分鐘閒置登出),`@login_required` 把瀏覽器導去登入頁並帶上 `?next=<原本那個網址>`;重新登入後,Django `LoginView` 預設用 **GET** 導向這個 `next` 網址,但該網址只有 `@require_POST` 處理,GET 到這裡只會得到一頁完全沒有樣式的純文字「Method Not Allowed」——這就是使用者看到「網站打不開」的畫面。查正式站資料確認報告 #156 本身沒有損壞,仍是原本的 `PENDING` 狀態,只是這次「標記已紀錄」真的沒有送出成功,需要使用者重新操作一次。**這不是單一 view 的 bug,而是全站共通的既有落差**:`accounts/views.py`、`tutoring/views.py` 兩個檔案裡有 37 處 `@require_POST` 的 dashboard 操作型 view,全部都有同樣的風險,因此選擇在 middleware 層級統一攔截,而不是逐一修改每個 view。新增 `accounts/middleware.py::FriendlyMethodNotAllowedMiddleware`(放在 `MessageMiddleware` 之後,才能正確疊加 flash message):攔截「已登入使用者的 GET 請求、回應是 405」這個組合,改成寫入一則雙語提示訊息並導回 `/dashboard/`,不處理未登入(本來就會被 `@login_required` 攔在前面)或其他原因造成的 405(避免掩蓋真正的方法錯誤)。新增 4 項回歸測試(`accounts/tests.py::FriendlyMethodNotAllowedMiddlewareTests`),並更新 1 項既有測試(`AnnouncementTests::test_mark_announcements_read_rejects_get`,原本斷言裸 405,現在應斷言友善導回 dashboard)。447 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 model/migration 變更。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
