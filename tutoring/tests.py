@@ -2058,6 +2058,23 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "撤回 / Revert")
         self.assertNotContains(response, "課程審核 <small>Class review decision")
 
+    def test_admin_class_detail_pending_with_no_history_shows_no_stray_completion_box(self):
+        """2026-10-01(回歸測試,部署後用正式站真實的 PENDING 課程發現的真實 bug):合併
+        版面時新增的「grandfathered 無歷史紀錄」fallback 區塊原本只檢查 `class_review`
+        是否存在,沒有限定在已決定狀態(APPROVED/REJECTED/REVISE)——導致一般「剛進入
+        PENDING、還沒有任何歷史紀錄」這個最常見的情況也誤判成立,多顯示一個不該出現的
+        完成框跟「撤回」按鈕(PENDING 根本沒有任何決定可以撤回)。"""
+        session = self._confirmed_pending_session()
+        self.assertEqual(session.class_review.decisions.count(), 0)
+        admin = User.objects.create_superuser(username="PENDING-NO-STRAY-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        content = response.content.decode()
+        self.assertEqual(content.count("completion-box"), 0)
+        self.assertNotContains(response, "撤回 / Revert")
+        self.assertNotIn("審核紀錄", content)
+        self.assertContains(response, "Class review decision")
+
     def test_backfill_classreviewdecision_history_migration(self):
         """2026-10-01(使用者回報「所以通過不會列出所有審核紀錄嗎？」):`ClassReviewDecision`
         是跟著 0042 新增的,在那之前就已經通過/未通過/待補正的課程完全沒有對應的歷史紀錄,

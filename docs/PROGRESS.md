@@ -161,7 +161,7 @@
 
 > **2026-10-01 回填部署前既有已決定課程的審核歷史(使用者追問「所以通過不會列出所有審核紀錄嗎？」)**:`ClassReviewDecision` 只從上一輪部署起才開始記錄,部署前就已經通過/未通過/待補正的課程完全沒有歷史紀錄,導致「審核紀錄」區塊對這些舊資料整個不顯示。新增一次性資料遷移 `tutoring/migrations/0043_backfill_classreviewdecision_history.py`,為每一筆已是終局決定、但還沒有任何 `ClassReviewDecision` 的 `ClassReview` 補一筆快照(內容即目前僅有的那組 status/review_note/reviewed_by,時間用 `.update()` 覆寫回真正的 `reviewed_at`);刻意跳過 `reviewed_by` 為空的 `0031` grandfathered 紀錄(系統自動核准、非真人審核,本來就沒有對應審核人員可歸屬)。新增 1 項回歸測試驗證回填、跳過、冪等三種情境,461 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.6 節。
 
-> **2026-10-01 合併 Admin 課程詳情頁的「目前狀態」與「審核紀錄」,決定表單移到最下方(使用者要求「有了審核紀錄，目前單一審核結果有點多餘…能不能把這兩個合併，需要管理員審核的時候，才把課程審核 Class review decision卡片放在最下方」)**:`admin_class_detail.html` 原本已決定狀態還有一個獨立完成框重複顯示跟審核紀錄清單同樣的內容,已移除,「撤回」按鈕改附加在審核紀錄區塊的標題旁;WAITING 狀態若已有歷史紀錄就直接看歷史清單,不再額外重複;PENDING 的決定表單移到頁面最下方,排在審核紀錄之後。保留一個邊界 fallback:極少數因沒有 `reviewed_by` 而被回填排除的舊資料(目前正式站 0 筆),沿用原本的單一完成框顯示。新增 2 項回歸測試、更新 1 項既有測試斷言,463 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template 調整。詳見 `CLAUDE.md` 第 4.6 節。
+> **2026-10-01 合併 Admin 課程詳情頁的「目前狀態」與「審核紀錄」,決定表單移到最下方(使用者要求「有了審核紀錄，目前單一審核結果有點多餘…能不能把這兩個合併，需要管理員審核的時候，才把課程審核 Class review decision卡片放在最下方」)**:`admin_class_detail.html` 原本已決定狀態還有一個獨立完成框重複顯示跟審核紀錄清單同樣的內容,已移除,「撤回」按鈕改附加在審核紀錄區塊的標題旁;WAITING 狀態若已有歷史紀錄就直接看歷史清單,不再額外重複;PENDING 的決定表單移到頁面最下方,排在審核紀錄之後。保留一個邊界 fallback:極少數因沒有 `reviewed_by` 而被回填排除的舊資料(目前正式站 0 筆),沿用原本的單一完成框顯示。新增 2 項回歸測試、更新 1 項既有測試斷言,463 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template 調整。**部署後用正式站唯一一筆真實 `PENDING` 課程驗證時發現一個真實 bug**:grandfathered fallback 分支的條件只檢查「`class_review` 存在」,沒有限定在已決定狀態——`PENDING` 且還沒有歷史紀錄(最常見的正常情況)也誤判成立,多顯示一個不該出現的完成框與「撤回」按鈕。已改用明確的已決定狀態條件並新增回歸測試,464 項測試全數通過。詳見 `CLAUDE.md` 第 4.6 節。
 
 ## 已完成
 
