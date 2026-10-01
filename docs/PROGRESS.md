@@ -147,6 +147,8 @@
 
 > **2026-10-01 課堂紀錄欄位文字調整(使用者要求)**:①`ClassRecord.content` 標籤「本日教學範圍與流程」改為「本日教學範圍與完整流程」(`tutoring/migrations/0040_alter_classrecord_content`,純標籤變更,無資料異動);同步更新兩處原本寫死這個標籤文字的唯讀顯示模板(`templates/tutoring/class_detail.html`、`templates/tutoring/admin_record_card.html`——表單本身的 label 直接來自 model 的 `verbose_name`,改 model 就自動套用,不需要另外改)。②Tutee 版「佐證連結」說明文字,從「例如實際授課照片、教材、作業或錄影」改為「必須上傳實際授課照片、詳細教材等，作業或錄影可選填」,純文字措辭調整,實際驗證規則(Tutee 仍是 0–5 個皆可)不變。兩處同步更新 `templates/accounts/handbook.html` 對應段落維持一致。448 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-01 佐證連結說明文字：Tutor 版也要一併調整(使用者指出「tutor也要改啊，不然很多tutor都沒有上傳授課照片」)**:上一則只改了 Tutee 版,使用者指出 Tutor(原本必填 1–5 個)也要套用同樣的「必須上傳實際授課照片、詳細教材等，作業或錄影可選填」措辭,因為許多 Tutor 送出的連結裡實際上都沒有附課堂照片。`tutoring/forms.py::ClassRecordForm.__init__` 的 Tutor 分支說明文字同步改寫;`templates/accounts/handbook.html` 裡 Tutor 版的條列式清單(原本只是單純列出四種範例,沒有必要/選填區分)也一併調整,四個項目分別標上「（必要）」「（選填）」。純文字調整,驗證規則不變(Tutor 仍是至少 1 個、Tutee 仍是 0–5 個皆可,系統都不檢查連結內容實際類型)。448 項測試全數通過,`ruff` 乾淨,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
