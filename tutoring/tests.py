@@ -1952,8 +1952,12 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
 
         self.client.force_login(admin)
+        # 2026-10-01(使用者要求「把兩個合併」):Admin 課程詳情頁不再用單獨的「上一則留言」
+        # 文字,改由合併後的「審核紀錄 / Review history」區塊直接列出(每筆紀錄本身已經
+        # 附帶時間/決定人,不需要再額外標一次「上一則留言」);「上一則留言」這個標籤只保留
+        # 給 PENDING 決定表單(見下方新測試)與 dashboard 清單/Tutor-Tutee 面板使用。
         detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertContains(detail, "上一則留言 / Previous comment")
+        self.assertContains(detail, "審核紀錄")
         self.assertContains(detail, "請補充授課照片")
 
         dashboard = self.client.get(reverse("accounts:dashboard"))
@@ -2018,6 +2022,41 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "已補齊")
         self.assertContains(response, "待補正 / Revise")
         self.assertContains(response, "通過 / Approved")
+
+    def test_admin_class_detail_moves_decision_form_below_review_history(self):
+        """2026-10-01(使用者要求):「有了審核紀錄，目前單一審核結果有點多餘…能不能把
+        這兩個合併，需要管理員審核的時候，才把課程審核 Class review decision卡片放在
+        最下方」。待補正過一次、重新確認回到 PENDING 之後,「審核紀錄」區塊要出現在
+        「課程審核 Class review decision」決定表單之前(卡片順序上更早)。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REORDER-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補照片")
+        now = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+
+        self.client.force_login(admin)
+        content = self.client.get(reverse("tutoring:class_detail", args=[session.pk])).content.decode()
+        self.assertIn("審核紀錄", content)
+        self.assertIn("Class review decision", content)
+        self.assertLess(content.index("審核紀錄"), content.index("Class review decision"))
+
+    def test_admin_class_detail_approved_review_has_no_duplicate_single_result_summary(self):
+        """合併後,已通過/未通過/待補正的課程不應該再額外有一個獨立的「目前狀態」完成框
+        重複顯示跟審核紀錄清單同樣的結果——撤回按鈕改附加在審核紀錄區塊的標題旁。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="NO-DUPLICATE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
+
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        content = response.content.decode()
+        self.assertEqual(content.count("completion-box"), 0)
+        self.assertContains(response, "撤回 / Revert")
+        self.assertNotContains(response, "課程審核 <small>Class review decision")
 
     def test_backfill_classreviewdecision_history_migration(self):
         """2026-10-01(使用者回報「所以通過不會列出所有審核紀錄嗎？」):`ClassReviewDecision`

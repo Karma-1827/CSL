@@ -24,30 +24,14 @@
       {% include "tutoring/admin_record_card.html" with heading="學生提交資料" heading_en="Student submission" attendance=tutee_attendance record=tutee_record confirmation=tutee_confirmation %}
     </div>
 
-    {% if class_review.status == 'PENDING' %}
-      <section class="panel admin-review-decision">
-        <div class="panel-heading"><div><span class="eyebrow">DECISION</span><h2>課程審核 <small>Class review decision</small></h2></div></div>
-        {% if class_review_history.0.note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|linebreaksbr }}</p>{% endif %}
-        <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
-          {% csrf_token %}<input type="hidden" name="next" value="detail"><label>審核意見 / Review comments<textarea name="note" rows="3"></textarea></label>
-          <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button></div>
-        </form>
-      </section>
-    {% elif class_review.status == 'WAITING' %}
-      <section class="panel">
-        <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong></div>
-        {% if class_review_history.0.note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|linebreaksbr }}</p>{% endif %}
-      </section>
-    {% elif class_review %}
-      <section class="panel">
-        <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_by %}<small>{{ class_review.reviewed_by.bilingual_name }} · {{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div>
-        <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
-      </section>
-    {% endif %}
-
     {% if class_review_history %}
       <section class="panel">
-        <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div></div>
+        <div class="panel-heading">
+          <div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div>
+          {% if class_review.status == 'APPROVED' or class_review.status == 'REJECTED' or class_review.status == 'REVISE' %}
+            <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
+          {% endif %}
+        </div>
         <ul class="incident-report-reply-list">
           {% for entry in class_review_history %}
             <li class="incident-report-reply-item">
@@ -57,6 +41,28 @@
             </li>
           {% endfor %}
         </ul>
+      </section>
+    {% elif class_review.status == 'WAITING' %}
+      <section class="panel"><div class="completion-box"><strong>{{ class_review.get_status_display }}</strong></div></section>
+    {% elif class_review %}
+      <!-- 2026-10-01: fallback for a decided ClassReview with no ClassReviewDecision at
+           all — only reaches here for the small number of pre-2026-09-10 "grandfathered"
+           rows (0031) that have no reviewed_by, which 0043's backfill intentionally
+           skips since ClassReviewDecision.reviewed_by can't be null. -->
+      <section class="panel">
+        <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_at %}<small>{{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div>
+        <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
+      </section>
+    {% endif %}
+
+    {% if class_review.status == 'PENDING' %}
+      <section class="panel admin-review-decision">
+        <div class="panel-heading"><div><span class="eyebrow">DECISION</span><h2>課程審核 <small>Class review decision</small></h2></div></div>
+        {% if class_review_history.0.note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|linebreaksbr }}</p>{% endif %}
+        <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
+          {% csrf_token %}<input type="hidden" name="next" value="detail"><label>審核意見 / Review comments<textarea name="note" rows="3"></textarea></label>
+          <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button></div>
+        </form>
       </section>
     {% endif %}
   </main>
