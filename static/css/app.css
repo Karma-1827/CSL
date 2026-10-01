@@ -3646,7 +3646,7 @@ td small {
   font-size: 0.68rem;
   line-height: 1.6;
 }
-.admin-review-decision {
+.class-review-block {
   margin-top: 18px;
 }
 .back-link {
@@ -3962,6 +3962,13 @@ td small {
   gap: 8px;
 }
 .class-review-history-actions form {
+  margin: 0;
+}
+.class-review-history-actions .status-badge {
+  /* .status-badge's default margin (18px 0 8px) is meant for standalone use; inside
+     this flex row it makes align-items: center visibly off-center against the revert
+     button (more margin above than below shifts the badge down) — reset to 0 so the
+     badge's own box, not its margin box, is what gets centered against the button. */
   margin: 0;
 }
 .incident-report-reply-disclosure {

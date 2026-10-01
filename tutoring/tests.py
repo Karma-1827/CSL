@@ -2099,6 +2099,28 @@ class ClassWorkflowTests(TestCase):
         self.assertNotContains(response, "撤回 / Revert")
         self.assertNotIn("審核紀錄", content)
         self.assertContains(response, "Class review decision")
+        self.assertContains(response, 'class="panel class-review-block admin-review-decision"')
+
+    def test_admin_class_detail_review_sections_have_spacing_class_regardless_of_status(self):
+        """2026-10-02(使用者回報「審核紀錄整個卡片都貼到老師提交資料的卡片了」):`.panel`
+        本身沒有 margin,`.admin-record-grid` 也沒有 margin-bottom——WAITING 與已決定(含
+        歷史清單)這兩種狀態的審核區塊原本沒有套用任何提供間距的 class,會緊貼在上方的
+        提交資料卡片上;只有 PENDING 決定表單(靠 `.admin-review-decision`)原本就有間距。
+        三種狀態現在都要套用共用的 `.class-review-block`。"""
+        # WAITING: brand-new session, nobody has confirmed yet.
+        waiting_session = self._confirmed_pending_session()
+        waiting_session.class_review.status = ClassReviewStatus.WAITING
+        waiting_session.class_review.save(update_fields=["status", "updated_at"])
+        admin = User.objects.create_superuser(username="SPACING-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        waiting_response = self.client.get(reverse("tutoring:class_detail", args=[waiting_session.pk]))
+        self.assertContains(waiting_response, 'class="panel class-review-block"')
+
+        # Decided with history: the normal post-2026-10-01 path.
+        decided_session = self._confirmed_pending_session(class_date=timezone.localdate() + timedelta(days=5))
+        review_class_session(session_id=decided_session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
+        decided_response = self.client.get(reverse("tutoring:class_detail", args=[decided_session.pk]))
+        self.assertContains(decided_response, 'class="panel class-review-block">')
 
     def test_backfill_classreviewdecision_history_migration(self):
         """2026-10-01(使用者回報「所以通過不會列出所有審核紀錄嗎？」):`ClassReviewDecision`
