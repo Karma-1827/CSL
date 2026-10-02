@@ -2337,6 +2337,17 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
         self.assertContains(response, reverse("tutoring:class_detail", args=[session.pk]))
 
+    def test_admin_class_detail_participant_summary_links_to_profiles(self):
+        """2026-10-03(使用者要求「課堂紀錄/view details裡面那一頁也要」):從課程審核清單
+        點「查看簽到與課堂紀錄 / View details」進去的 admin_class_detail.html,頁首的
+        「老師 / Teacher」「學生 / Student」卡片姓名也要能點擊查看行政檔案,跟清單頁一致。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="CLASS-DETAIL-PROFILE-LINK-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, reverse("accounts:admin_user_profile", args=[self.tutor.pk]))
+        self.assertContains(response, reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
+
     def test_tutor_and_tutee_class_detail_shows_admin_review_result_and_note(self):
         """2026-10-01(使用者要求):Admin 的課堂審核意見原本只有 Admin 自己的
         `admin_class_detail.html` 看得到,Tutor/Tutee 自己的 `class_detail.html`

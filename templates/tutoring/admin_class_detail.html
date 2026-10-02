@@ -15,8 +15,8 @@
     </header>
 
     <section class="admin-participant-summary">
-      <div><span>老師 / Teacher</span><strong>{{ session.pairing.tutor.bilingual_name }}</strong><small>{{ session.pairing.tutor.username }}</small></div>
-      <div><span>學生 / Student</span><strong>{{ session.pairing.tutee.bilingual_name }}</strong><small>{{ session.pairing.tutee.username }}</small></div>
+      <div><span>老師 / Teacher</span><a href="{% url 'accounts:admin_user_profile' session.pairing.tutor_id %}"><strong>{{ session.pairing.tutor.bilingual_name }}</strong><small>{{ session.pairing.tutor.username }}</small></a></div>
+      <div><span>學生 / Student</span><a href="{% url 'accounts:admin_user_profile' session.pairing.tutee_id %}"><strong>{{ session.pairing.tutee.bilingual_name }}</strong><small>{{ session.pairing.tutee.username }}</small></a></div>
     </section>
 
     <div class="admin-record-grid">

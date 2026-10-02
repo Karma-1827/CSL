@@ -185,6 +185,8 @@
 
 > **2026-10-02 Admin dashboard 四個常見 tutor/tutee 清單的姓名/學號改成可點擊查看行政檔案(使用者要求)**:口語能力審核、配對管理(配對列表+待回覆邀請)、解除配對審核、課程審核,這四個頁籤裡的 tutor/tutee 姓名/學號全部補上連到 `accounts:admin_user_profile` 的連結,不用再先繞去 Django Admin 名冊才找得到入口。「課程審核」清單因為姓名原本包在連到課程詳情頁的大錨點裡(HTML 不支援巢狀 `<a>`),額外做了小幅重構把姓名移出獨立成 `.review-row-participants`,課程詳情的點擊行為不受影響。Admin 審核人員(`reviewed_by`)維持純文字,因為 `admin_user_profile()` 限定只接受 Tutor/Tutee。新增回歸測試(`accounts/tests.py::AdminDashboardProfileLinkTests` 3 項、`tutoring/tests.py` 1 項),478 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template/測試調整。詳見 `CLAUDE.md` 第 2 節。
 
+> **2026-10-03 課程詳情頁(課程審核清單「查看簽到與課堂紀錄」點進去的頁面)的老師/學生姓名也補上行政檔案連結(使用者追加要求)**:`admin_class_detail.html` 頁首的老師/學生卡片原本是純文字姓名,補上連到 `accounts:admin_user_profile` 的連結。這兩張卡片本身不是連到別處的大錨點,直接包 `<a>` 即可。新增 1 項回歸測試,479 項測試全數通過(其中 1 項與本次改動無關的既有時間敏感性測試因剛好跨過午夜短暫失敗,屬已知問題),`ruff`、`makemigrations --check --dry-run` 皆乾淨。詳見 `CLAUDE.md` 第 2 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
