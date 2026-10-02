@@ -637,6 +637,26 @@ def class_detail(request, pk):
             (row for row in session.confirmations.all() if row.subject_id == session.pairing.tutee_id), None
         )
         class_review = getattr(session, "class_review", None)
+        class_review_history = list(class_review.decisions.all()) if class_review else []
+        # 2026-10-02(使用者要求「如果是待補正重新送審后，在審核中多一個標籤：已補正＋
+        # 日期時間」):`class_review_history` 依 -created_at 排序,所以第一筆就是「最近一次
+        # 真正的審核決定」——如果那筆是「待補正」,但目前的即時狀態已經不是待補正了
+        # (變成 WAITING 表示其中一方剛改完紀錄、或 PENDING 表示雙方都已重新確認完畢),
+        # 就代表課堂紀錄已經被改過並重新送審一輪,不是單純卡在「待補正」原地沒動。用兩筆
+        # 課堂紀錄裡,發生在那筆「待補正」決定之後的最新一次 updated_at 當作「已補正」時間;
+        # 如果撤回的剛好是這筆「待補正」決定本身(見 delete_class_review_decision()),該筆
+        # 會直接從歷史表裡消失,不會再被誤判成「已補正」。
+        revise_resubmitted_at = None
+        if class_review and class_review.status != ClassReviewStatus.REVISE and class_review_history:
+            latest_decision = class_review_history[0]
+            if latest_decision.status == ClassReviewStatus.REVISE:
+                resubmission_times = [
+                    record.updated_at
+                    for record in (tutor_record, tutee_record)
+                    if record and record.updated_at > latest_decision.created_at
+                ]
+                if resubmission_times:
+                    revise_resubmitted_at = max(resubmission_times)
         return render(
             request,
             "tutoring/admin_class_detail.html",
@@ -651,7 +671,8 @@ def class_detail(request, pk):
                 "class_review": class_review,
                 # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):
                 # 完整審核歷程,不受 ClassReview 本身重置/撤回影響,見 ClassReviewDecision。
-                "class_review_history": list(class_review.decisions.all()) if class_review else [],
+                "class_review_history": class_review_history,
+                "revise_resubmitted_at": revise_resubmitted_at,
                 "is_valid_class": class_is_valid(session),
             },
         )

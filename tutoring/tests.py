@@ -2121,6 +2121,48 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "Class review decision")
         self.assertContains(response, 'class="panel class-review-block admin-review-decision"')
 
+    def test_admin_class_detail_shows_resubmitted_badge_after_revise_record_edited_and_reconfirmed(self):
+        """2026-10-02(使用者要求):待補正(REVISE)後,課堂紀錄被改過並重新送審(雙方
+        重新確認完畢、回到 PENDING)時,頁首「審核中」狀態旁要多一個「已補正」標籤,
+        附上補正當下(課堂紀錄 updated_at)的日期時間,方便管理員一眼看出這堂課已經
+        處理過、不是第一次被卡在待補正原地不動。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="RESUBMIT-BADGE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正教材")
+        resubmit_time = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"), now=resubmit_time,
+        )
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "已補正 / Resubmitted")
+        self.assertContains(response, resubmit_time.strftime("%Y-%m-%d %H:%M"))
+
+    def test_admin_class_detail_no_resubmitted_badge_without_a_revise_cycle(self):
+        """「已補正」標籤只在歷史上真的出現過「待補正」決定、且目前已經不再是待補正
+        狀態時才顯示——一般從未被要求補正過的 PENDING 課程,或是目前仍卡在「待補正」
+        還沒被改過的課程,都不應該出現這個標籤。"""
+        pending_session = self._confirmed_pending_session()
+        revise_session = self._confirmed_pending_session(
+            class_date=pending_session.class_date + timedelta(days=1)
+        )
+        admin = User.objects.create_superuser(username="NO-RESUBMIT-BADGE-ADMIN", password="Admin-password-2026")
+        review_class_session(
+            session_id=revise_session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正教材"
+        )
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("tutoring:class_detail", args=[pending_session.pk]))
+        self.assertNotContains(response, "已補正 / Resubmitted")
+
+        response = self.client.get(reverse("tutoring:class_detail", args=[revise_session.pk]))
+        self.assertNotContains(response, "已補正 / Resubmitted")
+
     def test_admin_class_detail_review_sections_have_spacing_class_regardless_of_status(self):
         """2026-10-02(使用者回報「審核紀錄整個卡片都貼到老師提交資料的卡片了」):`.panel`
         本身沒有 margin,`.admin-record-grid` 也沒有 margin-bottom——WAITING 與已決定(含

@@ -181,6 +181,8 @@
 
 > **2026-10-02 使用者立刻推翻上一輪,「撤回」改成刪除單筆審核紀錄(使用者澄清「不是，每個紀錄都要放撤回按鈕。我是說審核建議送出了，撤回這一筆，就不要留紀錄」)**:撤回按鈕回到每一筆歷史卡片各自一顆(不是只有最新一筆、也不是標題旁共用一顆);更關鍵的是撤回的語意從「把 `ClassReview` 退回 `PENDING`、同時永久保留一筆『被撤回的決定』當歷史」整個改成「直接把這一筆 `ClassReviewDecision` 刪除,它就不該再出現在審核紀錄裡」。`tutoring/services.py` 移除 `revert_class_review()`,新增 `delete_class_review_decision(decision_id, admin)`——只有撤回的剛好是目前最新一筆決定時才把 `ClassReview` 退回 `PENDING`,撤回一筆已經被後面決定蓋過去的舊紀錄只影響歷史清單、不影響目前狀態;`AuditLog` 事件從 `CLASS_REVIEW_REVERTED` 改為 `CLASS_REVIEW_DECISION_DELETED`。新增 URL/view `tutoring:delete_class_review_decision`,固定導回課程詳情頁。grandfathered fallback(極少數缺 `reviewed_by` 的舊資料,目前正式站 0 筆)的撤回按鈕直接移除、不重新接上,真的需要訂正時走 Django Admin。改寫/新增 8 項測試,472 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-02 修正 Admin 課程詳情頁頭圖兩個問題(使用者回報)**:①「CLASS REVIEW DETAILS 改成白色，不然顏色有點重疊」——`.section-kicker` 預設文字色跟 `.class-detail-hero`/`.tutor-schedule-hero` 深色頭圖漸層共用同一個顏色值,文字疊在漸層上幾乎看不見,是 9/8 彩色頭圖配色 regression 當時沒修完整的同一個問題;補上跟 `.profile-hero`/`.guide-hero` 一致的淺色覆寫。②「如果是待補正重新送審后，在審核中多一個標籤：已補正＋日期時間」——新增 `revise_resubmitted_at` 判斷(最近一次決定是 REVISE、但目前狀態已經不是 REVISE,取雙方課堂紀錄裡晚於那筆決定的最新 `updated_at`),頭圖「審核中」徽章旁新增對應的「已補正 / Resubmitted」徽章。新增 2 項回歸測試,474 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 CSS/template/view 調整。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

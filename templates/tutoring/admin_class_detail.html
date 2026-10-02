@@ -11,7 +11,7 @@
 
     <header class="class-detail-hero">
       <div><span class="section-kicker">CLASS REVIEW DETAILS</span><h1>{{ session.class_date|date:"Y 年 m 月 d 日" }}</h1><p>{{ session.start_time|time:"H:i" }}–{{ session.ends_at|time:"H:i" }} · {{ session.duration }} 小時 / hours</p></div>
-      <div class="class-hero-side"><span>審核狀態 / Review status</span><strong>{% if class_review %}{{ class_review.get_status_display }}{% else %}尚未進入審核 / Not yet under review{% endif %}</strong>{% if is_valid_class %}<em class="class-status verified">有效成立 / Verified</em>{% else %}<em class="class-status pending">審核中 / Under review</em>{% endif %}</div>
+      <div class="class-hero-side"><span>審核狀態 / Review status</span><strong>{% if class_review %}{{ class_review.get_status_display }}{% else %}尚未進入審核 / Not yet under review{% endif %}</strong>{% if is_valid_class %}<em class="class-status verified">有效成立 / Verified</em>{% else %}<em class="class-status pending">審核中 / Under review</em>{% if revise_resubmitted_at %}<em class="class-status resubmitted">已補正 / Resubmitted · {{ revise_resubmitted_at|date:"Y-m-d H:i" }}</em>{% endif %}{% endif %}</div>
     </header>
 
     <section class="admin-participant-summary">

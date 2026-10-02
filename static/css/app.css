@@ -1218,7 +1218,16 @@ a {
   font-weight: 850;
 }
 .profile-hero .section-kicker,
-.guide-hero .section-kicker {
+.guide-hero .section-kicker,
+.class-detail-hero .section-kicker,
+.tutor-schedule-hero .section-kicker {
+  /* 2026-10-02(使用者回報「CLASS REVIEW DETAILS 顏色有點重疊」,檢查後同一個問題
+     也存在於另外 3 處):.section-kicker 的全站預設文字色是 var(--blue)(#8c1d40),
+     跟這幾個深色頭圖共用的 --ocean-800(同樣是 #8c1d40)完全相同——kicker 文字剛好
+     疊在漸層經過那個顏色的那一段上就會幾乎看不見。.profile-hero/.guide-hero 在
+     P1-02 那輪色彩對比修正時已經蓋過這個預設值,但同一批深色頭圖裡的
+     .class-detail-hero(課程詳情頁)/.tutor-schedule-hero(老師個人課表、Admin
+     行政檔案頁)當時沒有一併處理,補上同一種淺色覆寫。 */
   color: var(--ocean-100);
 }
 .profile-hero h1 {
@@ -3346,6 +3355,12 @@ td small {
 .class-status.revise {
   color: var(--slate-700);
   background: var(--slate-100);
+}
+.class-status.resubmitted {
+  /* 2026-10-02(使用者要求):待補正被重新送審後的提示標籤,沿用 .class-status.scheduled
+     既有的淺色配色(非成功/警告/危險語意,純粹資訊性提示),跟「審核中」的黃色警示色區隔。 */
+  color: var(--navy);
+  background: var(--ocean-100);
 }
 .makeup-review-list {
   display: grid;
