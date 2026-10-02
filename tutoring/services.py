@@ -500,6 +500,15 @@ def send_invitation(*, initiator, tutor_id, tutee_id):
     synchronize_matching_state()
     tutor = User.objects.select_for_update().get(pk=tutor_id, role=Role.TUTOR, is_active=True)
     tutee = User.objects.select_for_update().get(pk=tutee_id, role=Role.TUTEE, is_active=True)
+    # 2026-10-03(使用者回報真實學生誤邀到弱點掃描專用帳號,見
+    # docs/VULNERABILITY_SCAN_ACCOUNT_SETUP.md「不得讓掃描帳號與真實使用者配對」):候選
+    # 名單那層的排除(anonymous_tutee_candidates()/anonymous_tutor_candidates())只影響
+    # 瀏覽畫面,不能擋下繞過畫面直接呼叫這個函式送出的邀請,所以這裡也要重複檢查一次,
+    # 跟 tutor_can_serve_program() 等既有的「候選名單與送出邀請都要各自檢查一次」慣例
+    # 一致。TEST- 開頭的學號是本專案既有的測試帳號慣例(見 _is_test_account()),掃描帳號
+    # 之間既有的配對是透過 create_admin_pairing() 建立,不經過這個函式,不受影響。
+    if _is_test_account(tutor) or _is_test_account(tutee):
+        raise ValidationError("測試帳號不開放配對。 / Test accounts are not available for matching.")
     current = active_semester(program=user_program(tutee), early_days=MATCHING_EARLY_OPEN_DAYS)
     semester = Semester.objects.select_for_update().filter(pk=current.pk).first() if current else None
     _validate_matching_window(semester)
@@ -850,9 +859,16 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
     excluded_tutees = MatchingExclusion.objects.filter(
         semester=semester, tutor=tutor, is_active=True
     ).values_list("tutee_id", flat=True)
+    # 2026-10-03(使用者要求「把這些測試tutor/tutee帳號都隱藏掉」):TEST- 開頭的學號是
+    # 弱點掃描等測試專用帳號(見 docs/VULNERABILITY_SCAN_ACCOUNT_SETUP.md),原本只在候選
+    # 卡片上加一個「TEST」提示標籤(_is_test_account()),沒有排除,真實使用者仍然能看到
+    # 並邀請到這些帳號。改為直接從候選名單排除,send_invitation() 也加了對應的服務層
+    # 檢查(見下方),避免繞過畫面直接呼叫 API 建立邀請。
     queryset = TuteeProfile.objects.exclude(tutee_id__in=blocked_tutees).exclude(
         tutee_id__in=locked_by_other_tutor
-    ).exclude(tutee_id__in=excluded_tutees).select_related("tutee__roster_entry").order_by("tutee_id")
+    ).exclude(tutee_id__in=excluded_tutees).exclude(
+        tutee__roster_entry__student_id__startswith="TEST-"
+    ).select_related("tutee__roster_entry").order_by("tutee_id")
     tutor_roster_program = tutor.roster_entry.program if tutor.roster_entry_id else None
     if tutor_roster_program is None:
         queryset = queryset.filter(tutee__roster_entry__program__code="NTNU")
@@ -922,9 +938,14 @@ def anonymous_tutor_candidates(*, semester, tutee, filters=None):
     excluded_tutors = MatchingExclusion.objects.filter(
         semester=semester, tutee=tutee, is_active=True
     ).values_list("tutor_id", flat=True)
+    # 2026-10-03(使用者要求「把這些測試tutor/tutee帳號都隱藏掉」):同上
+    # anonymous_tutee_candidates() 的說明,TEST- 開頭的測試帳號不應該出現在真實使用者的
+    # 候選名單裡。
     queryset = TutorProfile.objects.filter(tutor_id__in=approved).exclude(
         Q(tutor_id__in=previous_tutors) | Q(tutor_id__in=full_tutors)
-    ).exclude(tutor_id__in=excluded_tutors).select_related("tutor__roster_entry").order_by("tutor_id")
+    ).exclude(tutor_id__in=excluded_tutors).exclude(
+        tutor__roster_entry__student_id__startswith="TEST-"
+    ).select_related("tutor__roster_entry").order_by("tutor_id")
     tutee_program = tutee.roster_entry.program if tutee.roster_entry_id else None
     if tutee_program and tutee_program.code == "MARYLAND":
         queryset = queryset.filter(

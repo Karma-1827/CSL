@@ -679,16 +679,38 @@ class MatchingTests(MatchingFixtureTestCase):
         self.assertTrue(response.context["is_maryland"])
         self.assertContains(response, "已發送的邀請")
 
-    def test_candidate_cards_flag_test_prefixed_accounts(self):
-        """TEST- prefixed student IDs (the project's established convention for QA
-        fixtures, see docs/SECURITY_CHECKLIST.md's note on seed_test_roster.py) get an
-        is_test hint on their anonymous candidate card so testers can tell them apart
-        from real students — without exposing the actual student ID itself."""
+    def test_candidate_list_excludes_test_prefixed_accounts(self):
+        """2026-10-03(使用者回報真實學生誤邀到弱點掃描專用帳號「掃描老師乙」,要求
+        「把這些測試tutor/tutee帳號都隱藏掉」):TEST- 開頭的學號(本專案既有的測試帳號
+        慣例,見 docs/VULNERABILITY_SCAN_ACCOUNT_SETUP.md/docs/SECURITY_CHECKLIST.md)
+        原本只在候選卡片加一個 is_test 提示標籤,沒有真的排除——真實使用者仍然看得到、
+        邀得到這些帳號。改為直接從候選名單排除,真實使用者的候選清單裡完全不會出現。"""
         test_tutee = self.make_tutee("TEST-CANDIDATE1", "測試學生", "Test Tutee", self.ntnu_program)
         candidates = anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)
         by_id = {c["user_id"]: c for c in candidates}
-        self.assertTrue(by_id[test_tutee.pk]["is_test"])
+        self.assertNotIn(test_tutee.pk, by_id)
+        self.assertIn(self.tutee.pk, by_id)
         self.assertFalse(by_id[self.tutee.pk]["is_test"])
+
+    def test_candidate_list_excludes_test_prefixed_tutors(self):
+        """同上一項測試,但換成 Tutee 瀏覽 Tutor 候選清單的方向。"""
+        test_tutor = self.make_tutor("TEST-CANDIDATE-TUTOR", "測試老師", "Test Tutor")
+        candidates = anonymous_tutor_candidates(semester=self.semester, tutee=self.tutee)
+        by_id = {c["user_id"]: c for c in candidates}
+        self.assertNotIn(test_tutor.pk, by_id)
+
+    def test_send_invitation_rejects_test_prefixed_tutor(self):
+        """2026-10-03(使用者回報真實學生「譚清玥」誤邀弱點掃描帳號「掃描老師乙」):候選
+        名單排除只擋得住瀏覽畫面,`send_invitation()` 本身也要重複檢查一次,避免繞過畫面
+        直接呼叫這個函式建立邀請——跟 `tutor_can_serve_program()` 等既有檢查的慣例一致。"""
+        test_tutor = self.make_tutor("TEST-CANDIDATE-TUTOR2", "測試老師", "Test Tutor")
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=test_tutor, tutor_id=test_tutor.pk, tutee_id=self.tutee.pk)
+
+    def test_send_invitation_rejects_test_prefixed_tutee(self):
+        test_tutee = self.make_tutee("TEST-CANDIDATE2", "測試學生", "Test Tutee", self.ntnu_program)
+        with self.assertRaises(ValidationError):
+            send_invitation(initiator=self.tutor, tutor_id=self.tutor.pk, tutee_id=test_tutee.pk)
 
     def test_tutee_find_teacher_heading_stays_csl_teacher(self):
         self.client.force_login(self.maryland)
