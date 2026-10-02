@@ -107,7 +107,7 @@
                 <tbody>
                   {% for document in pending_qualifications %}
                     <tr>
-                      <td><a href="{% url 'accounts:admin_user_profile' document.tutor.pk %}"><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></a>{% if document.oral_exam_pass_hint_type == 'MARYLAND_COURSE_ROSTER' %}<br><span class="result-text status-approved">系辦名冊：修課名單 <small>Dept. roster: course enrollment</small></span>{% elif document.oral_exam_pass_hint_type %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
+                      <td><a href="{% url 'accounts:admin_user_profile' document.tutor.pk %}"><strong>{{ document.tutor.bilingual_name }}</strong></a><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint_type == 'MARYLAND_COURSE_ROSTER' %}<br><span class="result-text status-approved">系辦名冊：修課名單 <small>Dept. roster: course enrollment</small></span>{% elif document.oral_exam_pass_hint_type %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
@@ -142,7 +142,7 @@
                 <tbody>
                   {% for document in qualification_review_history %}
                     <tr>
-                      <td><a href="{% url 'accounts:admin_user_profile' document.tutor.pk %}"><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></a></td>
+                      <td><a href="{% url 'accounts:admin_user_profile' document.tutor.pk %}"><strong>{{ document.tutor.bilingual_name }}</strong></a><small>{{ document.tutor.username }}</small></td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
@@ -197,7 +197,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>學期 / Semester</th><th>老師 / Teacher</th><th>學生 / Student</th><th>狀態 / Status</th><th>建立時間 / Created</th></tr></thead>
             <tbody>
-              {% for pairing in pairing_page %}<tr><td>{{ pairing.semester }}</td><td><a href="{% url 'accounts:admin_user_profile' pairing.tutor_id %}">{{ pairing.tutor.bilingual_name }}<small>{{ pairing.tutor.username }}</small></a></td><td><a href="{% url 'accounts:admin_user_profile' pairing.tutee_id %}">{{ pairing.tutee.bilingual_name }}<small>{{ pairing.tutee.username }}</small></a></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>
+              {% for pairing in pairing_page %}<tr><td>{{ pairing.semester }}</td><td><a href="{% url 'accounts:admin_user_profile' pairing.tutor_id %}">{{ pairing.tutor.bilingual_name }}</a><small>{{ pairing.tutor.username }}</small></td><td><a href="{% url 'accounts:admin_user_profile' pairing.tutee_id %}">{{ pairing.tutee.bilingual_name }}</a><small>{{ pairing.tutee.username }}</small></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>
               {% empty %}<tr><td colspan="5"><div class="empty-state">找不到符合條件的配對。 / No matches found.</div></td></tr>{% endfor %}
             </tbody>
           </table></div>
@@ -220,7 +220,7 @@
         {% if pending_invitations %}
           <div class="table-wrap"><table>
             <thead><tr><th>學期 / Semester</th><th>老師 / Teacher</th><th>學生 / Student</th><th>發起人 / Sent by</th><th>到期時間 / Expires</th></tr></thead>
-            <tbody>{% for invitation in pending_invitations %}<tr><td>{{ invitation.semester }}</td><td><a href="{% url 'accounts:admin_user_profile' invitation.tutor_id %}">{{ invitation.tutor.bilingual_name }}<small>{{ invitation.tutor.username }}</small></a></td><td><a href="{% url 'accounts:admin_user_profile' invitation.tutee_id %}">{{ invitation.tutee.bilingual_name }}<small>{{ invitation.tutee.username }}</small></a></td><td><a href="{% url 'accounts:admin_user_profile' invitation.initiated_by_id %}">{{ invitation.initiated_by.bilingual_name }}</a></td><td>{{ invitation.expires_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+            <tbody>{% for invitation in pending_invitations %}<tr><td>{{ invitation.semester }}</td><td><a href="{% url 'accounts:admin_user_profile' invitation.tutor_id %}">{{ invitation.tutor.bilingual_name }}</a><small>{{ invitation.tutor.username }}</small></td><td><a href="{% url 'accounts:admin_user_profile' invitation.tutee_id %}">{{ invitation.tutee.bilingual_name }}</a><small>{{ invitation.tutee.username }}</small></td><td><a href="{% url 'accounts:admin_user_profile' invitation.initiated_by_id %}">{{ invitation.initiated_by.bilingual_name }}</a></td><td>{{ invitation.expires_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
           </table></div>
         {% else %}<div class="empty-state">目前沒有待回覆邀請。 / No invitations are awaiting a response.</div>{% endif %}
       </section>
