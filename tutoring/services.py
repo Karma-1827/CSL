@@ -1329,35 +1329,45 @@ def review_class_session(*, session_id, admin, decision, note=""):
 
 
 @transaction.atomic
-def revert_class_review(*, session_id, admin):
-    # 2026-09-16(使用者要求):比照口語能力審核既有的撤回機制(accounts/views.py::
-    # review_qualification 的 action=revert),讓 Admin 誤按核准/不核准時能撤回重新審核。
-    # 撤回後回到 PENDING(不是 WAITING),因為雙方互相確認的狀態並未改變,只是審核結果作廢。
+def delete_class_review_decision(*, decision_id, admin):
+    # 2026-10-02(使用者要求「每個紀錄都要放撤回按鈕」「審核建議送出了，撤回這一筆，就
+    # 不要留紀錄」):撤回不再只是把 ClassReview 本身的即時狀態退回 PENDING、同時在
+    # ClassReviewDecision 留一筆「被撤回的決定」當歷史(舊版 revert_class_review() 的
+    # 行為)——使用者要的是撤回這一筆意見後,這筆意見本身就不該再出現在審核紀錄裡,所以
+    # 這裡直接把選定的 ClassReviewDecision 整筆刪除,取代原本只針對「目前這一次」的
+    # session 層級撤回。每一筆歷史紀錄都各自可以撤回,不是只有最新一筆才有撤回按鈕。
     if admin.role != Role.ADMIN:
         raise ValidationError("只有管理員可以撤回課程審核。 / Only administrators may revert a class review.")
-    review = ClassReview.objects.select_for_update().select_related(
-        "session__pairing__tutor", "session__pairing__tutee"
-    ).get(session_id=session_id)
-    if review.status not in CLASS_REVIEW_DECISIONS:
-        raise ValidationError("此課程尚未有審核結果,無法撤回。 / This class has no review result to revert yet.")
-    review.status = ClassReviewStatus.PENDING
-    review.reviewed_by = None
-    # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」後改用
-    # ClassReviewDecision 歷史表):撤回一樣清空 review_note——撤回前的決定與意見已經
-    # 在 review_class_session() 當下寫進 ClassReviewDecision,不會因為這裡清空而遺失,
-    # 畫面的「上一則留言」改讀那張歷史表,不需要靠這個欄位殘留舊值。
-    review.review_note = ""
-    review.reviewed_at = None
-    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    decision = ClassReviewDecision.objects.select_related(
+        "review__session__pairing__tutor", "review__session__pairing__tutee"
+    ).select_for_update().get(pk=decision_id)
+    review = ClassReview.objects.select_for_update().get(pk=decision.review_id)
+    latest = review.decisions.order_by("-created_at").first()
+    is_latest = latest is not None and latest.pk == decision.pk
+    session = decision.review.session
+    tutor = session.pairing.tutor
+    tutee = session.pairing.tutee
+    decision_status = decision.status
+    decision.delete()
+    # 只有「撤回的剛好是目前這筆決定(最新一筆,而且目前狀態就是它造成的)」時,才需要把
+    # ClassReview 本身退回 PENDING——撤回一筆已經被後面的決定蓋過去的舊紀錄(例如先被
+    # 要求補正、後來通過了,這時撤回那筆「補正」)純粹只是清掉歷史,不影響目前的通過狀態。
+    if is_latest and review.status in CLASS_REVIEW_DECISIONS:
+        review.status = ClassReviewStatus.PENDING
+        review.reviewed_by = None
+        review.review_note = ""
+        review.reviewed_at = None
+        review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
     AuditLog.record(
         actor=admin,
-        target_user=review.session.pairing.tutee,
-        event_type="CLASS_REVIEW_REVERTED",
-        description="課程審核結果已撤回，回到待審核 / Class review reverted to pending",
+        target_user=tutee,
+        event_type="CLASS_REVIEW_DECISION_DELETED",
+        description="課程審核紀錄已撤回刪除 / Class review decision reverted and deleted",
         metadata={
-            "session_id": review.session_id,
-            "tutor": review.session.pairing.tutor.username,
-            "tutee": review.session.pairing.tutee.username,
+            "session_id": session.pk,
+            "tutor": tutor.username,
+            "tutee": tutee.username,
+            "decision_status": decision_status,
         },
     )
     return review

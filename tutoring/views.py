@@ -42,6 +42,7 @@ from .services import (
     confirm_counterpart,
     create_admin_pairing,
     create_matching_exclusion,
+    delete_class_review_decision,
     export_users_for_program,
     respond_to_invitation,
     revoke_matching_exclusion,
@@ -51,7 +52,6 @@ from .services import (
     resolve_incident_report,
     review_pairing_release_request,
     review_class_session,
-    revert_class_review,
     schedule_classes,
     send_invitation,
     submit_incident_report,
@@ -824,22 +824,35 @@ def review_class(request, pk):
         "revise": ClassReviewStatus.REVISE,
     }
     try:
-        if action == "revert":
-            revert_class_review(session_id=pk, admin=request.user)
-            messages.success(request, "已撤回審核結果，回到待審核。 / Review result reverted to pending.")
-        else:
-            review_class_session(
-                session_id=pk,
-                admin=request.user,
-                decision=decisions.get(action),
-                note=request.POST.get("note", ""),
-            )
-            messages.success(request, "課程審核已完成。 / Class review completed.")
+        review_class_session(
+            session_id=pk,
+            admin=request.user,
+            decision=decisions.get(action),
+            note=request.POST.get("note", ""),
+        )
+        messages.success(request, "課程審核已完成。 / Class review completed.")
     except (ValidationError, ObjectDoesNotExist) as error:
         _show_validation_error(request, error)
     if request.POST.get("next") == "detail":
         return redirect("tutoring:class_detail", pk=pk)
     return redirect(f"{reverse('accounts:dashboard')}#class-review")
+
+
+@login_required
+@require_POST
+def delete_class_review_decision_view(request, decision_pk):
+    # 2026-10-02(使用者要求「每個紀錄都要放撤回按鈕」「審核建議送出了，撤回這一筆，就
+    # 不要留紀錄」):每一筆審核紀錄都能各自撤回——直接刪除該筆 ClassReviewDecision,不是
+    # 只有最新一筆才有撤回能力(舊版 action="revert" 是對整個 session 操作,已移除)。
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        review = delete_class_review_decision(decision_id=decision_pk, admin=request.user)
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+        return redirect(f"{reverse('accounts:dashboard')}#class-review")
+    messages.success(request, "已撤回這筆審核紀錄。 / This review record has been reverted.")
+    return redirect("tutoring:class_detail", pk=review.session_id)
 
 
 @login_required

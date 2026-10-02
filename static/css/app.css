@@ -3961,10 +3961,11 @@ td small {
   font-size: 0.8rem;
 }
 .class-review-history-item {
-  /* 2026-10-02(使用者要求「審核意見的撤回就不用放在紀錄裡」):撤回表單已經搬回區塊
-     標題旁,卡片裡現在只剩一顆狀態徽章,不再需要幫撤回按鈕保留額外的右側空間。 */
+  /* 2026-10-02(使用者更正「每個紀錄都要放撤回按鈕」):撤回改回每一筆歷史紀錄各自
+     一顆按鈕(不是區塊標題旁共用一顆),卡片右側要同時容納狀態徽章與撤回按鈕,留寬一
+     點的空間。 */
   position: relative;
-  padding-right: 34px;
+  padding-right: 128px;
   min-height: 40px;
 }
 .class-review-history-actions {

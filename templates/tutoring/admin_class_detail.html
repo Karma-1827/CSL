@@ -32,22 +32,21 @@
     {% endcomment %}
     {% if class_review_history %}
       <section class="panel class-review-block">
-        <div class="panel-heading">
-          <div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div>
-          {% comment %}
-            2026-10-02(使用者要求「審核意見的撤回就不用放在紀錄裡」):撤回改回放在區塊
-            標題旁,不再塞進歷史清單的卡片裡——「審核紀錄」是單純的歷史回顧,撤回是一個
-            會改變目前狀態的動作,兩者刻意分開,不要讓動作元件混進紀錄列表本身。
-          {% endcomment %}
-          {% if class_review.status == 'APPROVED' or class_review.status == 'REJECTED' or class_review.status == 'REVISE' %}
-            <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
-          {% endif %}
-        </div>
+        <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div></div>
         <ul class="incident-report-reply-list">
           {% for entry in class_review_history %}
             <li class="incident-report-reply-item class-review-history-item">
               <div class="class-review-history-actions">
                 <span class="status-badge status-{{ entry.status|lower }}">{{ entry.get_status_display }}</span>
+                {% comment %}
+                  2026-10-02(使用者要求「每個紀錄都要放撤回按鈕」「撤回這一筆，就不要留
+                  紀錄」):每一筆歷史紀錄都各自可以撤回——撤回會直接把這筆
+                  ClassReviewDecision 整筆刪除,不是只把 ClassReview 本身的狀態退回
+                  PENDING 然後把這筆決定留在歷史裡;如果撤回的剛好是目前狀態對應的最新
+                  一筆,後端(delete_class_review_decision())才會順便把 ClassReview 退回
+                  PENDING。
+                {% endcomment %}
+                <form action="{% url 'tutoring:delete_class_review_decision' entry.pk %}" method="post">{% csrf_token %}<button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
               </div>
               <time>{{ entry.created_at|date:"Y-m-d H:i" }} · {{ entry.reviewed_by.bilingual_name }}</time>
               {% if entry.note %}<p>{{ entry.note|linebreaksbr }}</p>{% endif %}
@@ -64,10 +63,14 @@
            skips since ClassReviewDecision.reviewed_by can't be null. Must check the
            specific decided statuses here, not just "class_review truthy" — PENDING with
            no history yet (the ordinary case for a brand-new review) would otherwise also
-           match and wrongly show a stray completion box + revert button. -->
+           match and wrongly show a stray completion box.
+           2026-10-02: no revert button here anymore — reverting is now per-decision
+           (delete_class_review_decision()) and there is no ClassReviewDecision row to
+           target for these grandfathered rows. Currently 0 such rows exist in
+           production; if one is ever wrongly decided it needs a manual Django Admin
+           fix, matching this app's existing stance on rare edge cases (e.g. HourAdjustment). -->
       <section class="panel class-review-block">
         <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_at %}<small>{{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div>
-        <form action="{% url 'tutoring:review_class' session.pk %}" method="post">{% csrf_token %}<input type="hidden" name="next" value="detail"><input type="hidden" name="action" value="revert"><button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
       </section>
     {% endif %}
 

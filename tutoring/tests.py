@@ -8,7 +8,7 @@ import openpyxl
 
 from django.contrib import admin as django_admin
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
@@ -22,6 +22,7 @@ from .models import (
     InvitationStatus,
     MatchingInvitation,
     ClassReview,
+    ClassReviewDecision,
     Pairing,
     PairingReleaseReason,
     PairingReleaseRequest,
@@ -75,12 +76,12 @@ from .services import (
     confirm_counterpart,
     create_admin_pairing,
     create_matching_exclusion,
+    delete_class_review_decision,
     respond_to_invitation,
     revoke_matching_exclusion,
     resolve_class_alert,
     resolve_incident_report,
     review_class_session,
-    revert_class_review,
     report_class_alert,
     process_pending_pairing_releases,
     review_pairing_release_request,
@@ -1563,12 +1564,12 @@ class ClassWorkflowTests(TestCase):
         )
         self.assertRedirects(response, reverse("accounts:dashboard") + "#class-review")
 
-    def test_revert_class_review_resets_approved_result_back_to_pending(self):
+    def test_delete_class_review_decision_resets_approved_result_to_pending(self):
         """2026-09-16(使用者要求):比照口語能力審核既有的撤回機制,課程審核也要能撤回
-        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。2026-10-01(使用者要求「如果
-        是通過/待補正也要接列出所有審核紀錄」)起,改用 ClassReviewDecision 歷史表保留
-        過去每一次的意見,撤回時 ClassReview.review_note 恢復清空(語意是「目前沒有決定
-        中的意見」),但撤回前那筆決定與意見已經永久留在歷史表裡,不會真的遺失。"""
+        已核准/未核准的結果,回到 PENDING 讓管理員重新審核。2026-10-02(使用者更正「撤回
+        這一筆，就不要留紀錄」)起,撤回=把該筆 ClassReviewDecision 整筆刪除,不是只把
+        ClassReview 本身的狀態退回 PENDING 然後把決定留在歷史裡——撤回的是「目前最新」
+        那一筆時,歷史表裡這筆紀錄會完全消失,不會留下任何痕跡。"""
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
@@ -1576,28 +1577,41 @@ class ClassWorkflowTests(TestCase):
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="REVERT-REVIEW-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
-        reverted = revert_class_review(session_id=session.pk, admin=admin)
+        decision = session.class_review.decisions.get()
+        reverted = delete_class_review_decision(decision_id=decision.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
         self.assertEqual(reverted.review_note, "")
         self.assertIsNone(reverted.reviewed_at)
-        history = list(reverted.decisions.all())
-        self.assertEqual(len(history), 1)
-        self.assertEqual(history[0].status, ClassReviewStatus.APPROVED)
-        self.assertEqual(history[0].note, "已確認")
-        self.assertEqual(history[0].reviewed_by, admin)
+        self.assertEqual(reverted.decisions.count(), 0)
+        self.assertFalse(ClassReviewDecision.objects.filter(pk=decision.pk).exists())
 
-    def test_revert_class_review_rejects_pending_or_waiting_review(self):
-        class_date = timezone.localdate() + timedelta(days=1)
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
-        )[0]
-        ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
-        admin = User.objects.create_superuser(username="REVERT-PENDING-ADMIN", password="Admin-password-2026")
-        with self.assertRaises(ValidationError):
-            revert_class_review(session_id=session.pk, admin=admin)
+    def test_delete_class_review_decision_on_superseded_entry_keeps_current_status(self):
+        """撤回的若不是「目前這一筆」(例如先被要求補正、後來又通過了,這時撤回那筆較舊的
+        「補正」紀錄),純粹只是從歷史清單移除這筆舊紀錄,不應該動到目前已經是通過的
+        ClassReview 狀態。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVERT-SUPERSEDED-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正")
+        older_decision = session.class_review.decisions.get()
+        now = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正"), now=now)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
 
-    def test_non_admin_cannot_revert_class_review(self):
+        reverted = delete_class_review_decision(decision_id=older_decision.pk, admin=admin)
+        self.assertEqual(reverted.status, ClassReviewStatus.APPROVED)
+        self.assertEqual(reverted.review_note, "已補齊")
+        self.assertEqual(reverted.decisions.count(), 1)
+        self.assertEqual(reverted.decisions.get().note, "已補齊")
+
+    def test_delete_class_review_decision_raises_for_unknown_decision_id(self):
+        admin = User.objects.create_superuser(username="REVERT-UNKNOWN-ADMIN", password="Admin-password-2026")
+        with self.assertRaises(ObjectDoesNotExist):
+            delete_class_review_decision(decision_id=999999, admin=admin)
+
+    def test_non_admin_cannot_delete_class_review_decision(self):
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
@@ -1605,10 +1619,11 @@ class ClassWorkflowTests(TestCase):
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="REVERT-ADMIN-OWNER", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="不通過")
+        decision = session.class_review.decisions.get()
         with self.assertRaises(ValidationError):
-            revert_class_review(session_id=session.pk, admin=self.tutor)
+            delete_class_review_decision(decision_id=decision.pk, admin=self.tutor)
 
-    def test_admin_can_revert_class_review_from_dashboard_and_class_detail(self):
+    def test_admin_can_delete_class_review_decision_from_class_detail(self):
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
@@ -1616,27 +1631,19 @@ class ClassWorkflowTests(TestCase):
         ClassReview.objects.create(session=session, status=ClassReviewStatus.PENDING)
         admin = User.objects.create_superuser(username="REVERT-VIEW-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已確認")
+        decision = session.class_review.decisions.get()
         self.client.force_login(admin)
 
-        # 2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片外做審核」):
-        # dashboard 課程審核清單不再提供撤回按鈕(連同審核意見輸入框、通過/待補正/未通過
-        # 三顆按鈕一起移除),撤回只能在 admin_class_detail.html 進行;這裡改成直接 POST 到
-        # review_class 這個 service-backing view(與使用者實際點擊 admin_class_detail.html
-        # 上的撤回按鈕送出的請求相同),驗證後端行為與導向仍然正確。
+        # 2026-10-02(使用者最終確認「每個紀錄都要放撤回按鈕」「撤回這一筆，就不要留紀錄」):
+        # 撤回改成對單一 ClassReviewDecision 操作,固定導回該堂課的 admin_class_detail.html
+        # (與使用者實際點擊歷史卡片裡的撤回按鈕送出的請求相同)。
         response = self.client.post(
-            reverse("tutoring:review_class", args=[session.pk]), {"action": "revert"}
-        )
-        self.assertRedirects(response, reverse("accounts:dashboard") + "#class-review")
-        session.class_review.refresh_from_db()
-        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
-
-        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="再次不通過")
-        response = self.client.post(
-            reverse("tutoring:review_class", args=[session.pk]), {"action": "revert", "next": "detail"}
+            reverse("tutoring:delete_class_review_decision", args=[decision.pk])
         )
         self.assertRedirects(response, reverse("tutoring:class_detail", args=[session.pk]))
         session.class_review.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        self.assertFalse(ClassReviewDecision.objects.filter(pk=decision.pk).exists())
 
     def test_schedule_reserves_weekly_quota_and_dashboard_shows_class(self):
         # Anchor to the Tuesday/Wednesday of a future week instead of "today + 1/+2 days":
@@ -1875,17 +1882,17 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(session.class_review.reviewed_by, admin)
         self.assertFalse(class_is_valid(session))
 
-    def test_revert_class_review_from_revise_back_to_pending(self):
+    def test_delete_class_review_decision_from_revise_back_to_pending(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="REVISE-REVERT-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正")
-        reverted = revert_class_review(session_id=session.pk, admin=admin)
+        decision = session.class_review.decisions.get()
+        reverted = delete_class_review_decision(decision_id=decision.pk, admin=admin)
         self.assertEqual(reverted.status, ClassReviewStatus.PENDING)
         self.assertIsNone(reverted.reviewed_by)
         self.assertEqual(reverted.review_note, "")
         self.assertIsNone(reverted.reviewed_at)
-        self.assertEqual(reverted.decisions.count(), 1)
-        self.assertEqual(reverted.decisions.first().note, "請補正")
+        self.assertEqual(reverted.decisions.count(), 0)
 
     def test_editing_own_record_after_revise_resets_pending_review_to_waiting(self):
         """REVISE 跟 APPROVED/REJECTED 一樣是「已決定」的終局狀態之一,任一方修改自己的
@@ -2067,12 +2074,12 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "撤回 / Revert")
         self.assertNotContains(response, "課程審核 <small>Class review decision")
 
-    def test_admin_class_detail_revert_button_in_heading_not_inside_history_cards(self):
-        """2026-10-02(先前要求「撤回功能放在每個審核意見卡片」,後來改口「審核意見的
-        撤回就不用放在紀錄裡」):撤回改回放在「審核紀錄」區塊標題旁,而不是塞進歷史清單
-        的某一張卡片裡——「紀錄」是單純的歷史回顧,撤回是會改變目前狀態的動作,兩者刻意
-        分開。同一堂課被要求補正兩次以上時,仍然只有恰好一顆「撤回」按鈕,且位置在第一張
-        歷史卡片(`<li>`)出現之前。"""
+    def test_admin_class_detail_every_history_card_has_its_own_revert_button(self):
+        """2026-10-02(使用者最終確認「不是，每個紀錄都要放撤回按鈕」,推翻先前「撤回放在
+        區塊標題旁」的版本):每一筆歷史紀錄卡片都要各自有一顆撤回按鈕,不是只有最新一筆、
+        也不是放在區塊標題旁共用一顆。同一堂課被要求補正一次、後來才通過時,應該要有
+        2 顆「撤回」按鈕,各自出現在對應的 `<li>` 卡片裡,且各自指向那一筆
+        ClassReviewDecision 自己的刪除網址。"""
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="REVERT-HEADING-ADMIN", password="Admin-password-2026")
         now = self.aware(timezone.localdate(), time(11, 5))
@@ -2081,13 +2088,19 @@ class ClassWorkflowTests(TestCase):
         confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
         confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="已補齊")
+        decisions = list(session.class_review.decisions.order_by("-created_at"))
+        self.assertEqual(len(decisions), 2)
 
         self.client.force_login(admin)
         content = self.client.get(reverse("tutoring:class_detail", args=[session.pk])).content.decode()
-        self.assertEqual(content.count("撤回 / Revert"), 1)
+        self.assertEqual(content.count("撤回 / Revert"), 2)
+        for decision in decisions:
+            self.assertIn(
+                reverse("tutoring:delete_class_review_decision", args=[decision.pk]), content
+            )
         first_card_start = content.index('<li class="incident-report-reply-item')
         revert_index = content.index("撤回 / Revert")
-        self.assertLess(revert_index, first_card_start)
+        self.assertGreater(revert_index, first_card_start)
         self.assertIn("已補齊", content[first_card_start:])
 
     def test_admin_class_detail_pending_with_no_history_shows_no_stray_completion_box(self):
@@ -2809,7 +2822,10 @@ class ClassWorkflowTests(TestCase):
         self.assertTrue(record.is_makeup)
 
     def test_class_review_actions_write_audit_log(self):
-        """2026-09-16(使用者要求):課程審核的核准/不核准/撤回原本完全沒有稽核紀錄,補上。"""
+        """2026-09-16(使用者要求):課程審核的核准/不核准/撤回原本完全沒有稽核紀錄,補上。
+        2026-10-02(撤回改為刪除單筆 ClassReviewDecision)起,撤回寫入的事件改為
+        CLASS_REVIEW_DECISION_DELETED,metadata 另外帶 decision_status 記錄被刪除的是
+        哪一種結果。"""
         class_date = timezone.localdate() + timedelta(days=1)
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration="1.0"
@@ -2823,11 +2839,13 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(log.metadata["session_id"], session.pk)
         self.assertEqual(log.metadata["result"], ClassReviewStatus.APPROVED)
 
-        revert_class_review(session_id=session.pk, admin=admin)
-        revert_log = AuditLog.objects.get(event_type="CLASS_REVIEW_REVERTED")
+        decision = session.class_review.decisions.get()
+        delete_class_review_decision(decision_id=decision.pk, admin=admin)
+        revert_log = AuditLog.objects.get(event_type="CLASS_REVIEW_DECISION_DELETED")
         self.assertEqual(revert_log.actor, admin)
         self.assertEqual(revert_log.target_user, self.tutee)
         self.assertEqual(revert_log.metadata["session_id"], session.pk)
+        self.assertEqual(revert_log.metadata["decision_status"], ClassReviewStatus.APPROVED)
 
     def test_makeup_record_requires_mutual_confirmation_and_admin_approval(self):
         class_date = timezone.localdate()

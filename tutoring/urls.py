@@ -64,4 +64,9 @@ urlpatterns = [
         name="add_incident_report_reply",
     ),
     path("classes/<int:pk>/review/", views.review_class, name="review_class"),
+    path(
+        "classes/review-decisions/<int:decision_pk>/delete/",
+        views.delete_class_review_decision_view,
+        name="delete_class_review_decision",
+    ),
 ]

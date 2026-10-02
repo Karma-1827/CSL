@@ -179,6 +179,8 @@
 
 > **2026-10-02 撤回按鈕移回「審核紀錄」區塊標題旁,不再塞進歷史卡片裡(使用者要求「審核意見的撤回就不用放在紀錄裡」)**:上一輪把撤回按鈕移進最新一筆歷史卡片,使用者認為「紀錄」應該是單純的歷史回顧,撤回這種會改變狀態的動作不該混進去——改回放在區塊標題旁,卡片簡化回只剩狀態徽章。更新 1 項既有測試,471 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 CSS/template 調整。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-02 使用者立刻推翻上一輪,「撤回」改成刪除單筆審核紀錄(使用者澄清「不是，每個紀錄都要放撤回按鈕。我是說審核建議送出了，撤回這一筆，就不要留紀錄」)**:撤回按鈕回到每一筆歷史卡片各自一顆(不是只有最新一筆、也不是標題旁共用一顆);更關鍵的是撤回的語意從「把 `ClassReview` 退回 `PENDING`、同時永久保留一筆『被撤回的決定』當歷史」整個改成「直接把這一筆 `ClassReviewDecision` 刪除,它就不該再出現在審核紀錄裡」。`tutoring/services.py` 移除 `revert_class_review()`,新增 `delete_class_review_decision(decision_id, admin)`——只有撤回的剛好是目前最新一筆決定時才把 `ClassReview` 退回 `PENDING`,撤回一筆已經被後面決定蓋過去的舊紀錄只影響歷史清單、不影響目前狀態;`AuditLog` 事件從 `CLASS_REVIEW_REVERTED` 改為 `CLASS_REVIEW_DECISION_DELETED`。新增 URL/view `tutoring:delete_class_review_decision`,固定導回課程詳情頁。grandfathered fallback(極少數缺 `reviewed_by` 的舊資料,目前正式站 0 筆)的撤回按鈕直接移除、不重新接上,真的需要訂正時走 Django Admin。改寫/新增 8 項測試,472 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
