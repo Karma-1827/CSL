@@ -107,7 +107,7 @@
                 <tbody>
                   {% for document in pending_qualifications %}
                     <tr>
-                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small>{% if document.oral_exam_pass_hint_type == 'MARYLAND_COURSE_ROSTER' %}<br><span class="result-text status-approved">系辦名冊：修課名單 <small>Dept. roster: course enrollment</small></span>{% elif document.oral_exam_pass_hint_type %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
+                      <td><a href="{% url 'accounts:admin_user_profile' document.tutor.pk %}"><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></a>{% if document.oral_exam_pass_hint_type == 'MARYLAND_COURSE_ROSTER' %}<br><span class="result-text status-approved">系辦名冊：修課名單 <small>Dept. roster: course enrollment</small></span>{% elif document.oral_exam_pass_hint_type %}<br><span class="result-text status-approved">系辦名冊：語音通過 <small>Dept. roster: oral exam passed</small></span>{% endif %}</td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
@@ -142,7 +142,7 @@
                 <tbody>
                   {% for document in qualification_review_history %}
                     <tr>
-                      <td><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></td>
+                      <td><a href="{% url 'accounts:admin_user_profile' document.tutor.pk %}"><strong>{{ document.tutor.bilingual_name }}</strong><small>{{ document.tutor.username }}</small></a></td>
                       <td>
                         <div class="qualification-file-links">
                           <a href="{% url 'accounts:download_qualification' document.pk %}?intent=preview" target="_blank" rel="noopener">{{ document.original_filename }}</a>
@@ -197,7 +197,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>學期 / Semester</th><th>老師 / Teacher</th><th>學生 / Student</th><th>狀態 / Status</th><th>建立時間 / Created</th></tr></thead>
             <tbody>
-              {% for pairing in pairing_page %}<tr><td>{{ pairing.semester }}</td><td>{{ pairing.tutor.bilingual_name }}<small>{{ pairing.tutor.username }}</small></td><td>{{ pairing.tutee.bilingual_name }}<small>{{ pairing.tutee.username }}</small></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>
+              {% for pairing in pairing_page %}<tr><td>{{ pairing.semester }}</td><td><a href="{% url 'accounts:admin_user_profile' pairing.tutor_id %}">{{ pairing.tutor.bilingual_name }}<small>{{ pairing.tutor.username }}</small></a></td><td><a href="{% url 'accounts:admin_user_profile' pairing.tutee_id %}">{{ pairing.tutee.bilingual_name }}<small>{{ pairing.tutee.username }}</small></a></td><td>{{ pairing.get_status_display }}</td><td>{{ pairing.started_at|date:"Y-m-d H:i" }}</td></tr>
               {% empty %}<tr><td colspan="5"><div class="empty-state">找不到符合條件的配對。 / No matches found.</div></td></tr>{% endfor %}
             </tbody>
           </table></div>
@@ -220,7 +220,7 @@
         {% if pending_invitations %}
           <div class="table-wrap"><table>
             <thead><tr><th>學期 / Semester</th><th>老師 / Teacher</th><th>學生 / Student</th><th>發起人 / Sent by</th><th>到期時間 / Expires</th></tr></thead>
-            <tbody>{% for invitation in pending_invitations %}<tr><td>{{ invitation.semester }}</td><td>{{ invitation.tutor.bilingual_name }}<small>{{ invitation.tutor.username }}</small></td><td>{{ invitation.tutee.bilingual_name }}<small>{{ invitation.tutee.username }}</small></td><td>{{ invitation.initiated_by.bilingual_name }}</td><td>{{ invitation.expires_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+            <tbody>{% for invitation in pending_invitations %}<tr><td>{{ invitation.semester }}</td><td><a href="{% url 'accounts:admin_user_profile' invitation.tutor_id %}">{{ invitation.tutor.bilingual_name }}<small>{{ invitation.tutor.username }}</small></a></td><td><a href="{% url 'accounts:admin_user_profile' invitation.tutee_id %}">{{ invitation.tutee.bilingual_name }}<small>{{ invitation.tutee.username }}</small></a></td><td><a href="{% url 'accounts:admin_user_profile' invitation.initiated_by_id %}">{{ invitation.initiated_by.bilingual_name }}</a></td><td>{{ invitation.expires_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
           </table></div>
         {% else %}<div class="empty-state">目前沒有待回覆邀請。 / No invitations are awaiting a response.</div>{% endif %}
       </section>
@@ -262,8 +262,8 @@
               <article class="pairing-release-admin-row">
                 <div>
                   <span class="status-badge">{{ release.get_status_display }}</span>
-                  <strong>{{ release.pairing.tutor.bilingual_name }} × {{ release.pairing.tutee.bilingual_name }}</strong>
-                  <small>{{ release.pairing.semester }} · 申請人 / Requested by：{{ release.requested_by.bilingual_name }}</small>
+                  <strong><a href="{% url 'accounts:admin_user_profile' release.pairing.tutor_id %}">{{ release.pairing.tutor.bilingual_name }}</a> × <a href="{% url 'accounts:admin_user_profile' release.pairing.tutee_id %}">{{ release.pairing.tutee.bilingual_name }}</a></strong>
+                  <small>{{ release.pairing.semester }} · 申請人 / Requested by：<a href="{% url 'accounts:admin_user_profile' release.requested_by_id %}">{{ release.requested_by.bilingual_name }}</a></small>
                   <b>{{ release.get_reason_display }}</b>
                   {% if release.reason_note %}<p>{{ release.reason_note }}</p>{% endif %}
                   {% if release.auto_resolve_at %}<em>自動解除時間 / Auto release：{{ release.auto_resolve_at|date:"Y-m-d H:i" }}</em>{% else %}<em>需人工審核 / Manual review required</em>{% endif %}
@@ -279,7 +279,7 @@
         </section>
         <section class="panel">
           <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>處理紀錄 <small>Review history</small></h2></div></div>
-          {% if pairing_release_history %}<div class="table-wrap"><table><thead><tr><th>配對 / Pairing</th><th>提出申請者 / Requester</th><th>原因 / Reason</th><th>結果 / Result</th><th>處理時間 / Reviewed</th></tr></thead><tbody>{% for release in pairing_release_history %}<tr><td><strong>{{ release.pairing.tutor.bilingual_name }} × {{ release.pairing.tutee.bilingual_name }}</strong><small>{{ release.pairing.semester }}</small></td><td class="release-requester">{{ release.requested_by.bilingual_name }}<small>{{ release.requested_by.get_role_display }}</small></td><td>{{ release.get_reason_display }}{% if release.reason_note %}<small>{{ release.reason_note }}</small>{% endif %}</td><td><span class="result-text status-{% if release.status == 'REJECTED' %}rejected{% else %}approved{% endif %}">{{ release.get_status_display }}</span>{% if release.review_note %}<small>{{ release.review_note }}</small>{% endif %}</td><td>{{ release.reviewed_at|date:"Y-m-d H:i" }}{% if release.reviewed_by %}<small>{{ release.reviewed_by.bilingual_name }}</small>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">目前沒有已處理紀錄。 / No reviewed requests yet.</div>{% endif %}
+          {% if pairing_release_history %}<div class="table-wrap"><table><thead><tr><th>配對 / Pairing</th><th>提出申請者 / Requester</th><th>原因 / Reason</th><th>結果 / Result</th><th>處理時間 / Reviewed</th></tr></thead><tbody>{% for release in pairing_release_history %}<tr><td><strong><a href="{% url 'accounts:admin_user_profile' release.pairing.tutor_id %}">{{ release.pairing.tutor.bilingual_name }}</a> × <a href="{% url 'accounts:admin_user_profile' release.pairing.tutee_id %}">{{ release.pairing.tutee.bilingual_name }}</a></strong><small>{{ release.pairing.semester }}</small></td><td class="release-requester"><a href="{% url 'accounts:admin_user_profile' release.requested_by_id %}">{{ release.requested_by.bilingual_name }}</a><small>{{ release.requested_by.get_role_display }}</small></td><td>{{ release.get_reason_display }}{% if release.reason_note %}<small>{{ release.reason_note }}</small>{% endif %}</td><td><span class="result-text status-{% if release.status == 'REJECTED' %}rejected{% else %}approved{% endif %}">{{ release.get_status_display }}</span>{% if release.review_note %}<small>{{ release.review_note }}</small>{% endif %}</td><td>{{ release.reviewed_at|date:"Y-m-d H:i" }}{% if release.reviewed_by %}<small>{{ release.reviewed_by.bilingual_name }}</small>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">目前沒有已處理紀錄。 / No reviewed requests yet.</div>{% endif %}
         </section>
       </section>
       <section class="dashboard-view" data-dashboard-panel="class-alerts">
@@ -358,7 +358,18 @@
                       詳情頁(class_detail.html / admin_class_detail.html)才能做,清單純粹
                       是導覽用途——badges 之外不再有任何表單或按鈕。
                     {% endcomment %}
-                    <a class="review-detail-link" href="{% url 'tutoring:class_detail' review.session_id %}"><strong>{{ review.session.class_date|date:"Y-m-d" }} · {{ review.session.start_time|time:"H:i" }}</strong><span>{{ review.session.pairing.tutor.bilingual_name }} × {{ review.session.pairing.tutee.bilingual_name }}</span>{% if review.reviewed_by %}<small>審核人員 / Reviewed by：{{ review.reviewed_by.bilingual_name }} · {{ review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}<em>查看簽到與課堂紀錄 / View details →</em></a>
+                    {% comment %}
+                      2026-10-02(使用者要求「點擊學號或姓名都可以查看該tutor/tutee檔案」):
+                      老師/學生姓名原本直接寫在 .review-detail-link 這顆大錨點裡面,無法再
+                      巢狀塞一個指到行政檔案的連結(HTML 不支援 <a> 裡面再放 <a>)——姓名
+                      移出大錨點,獨立成 .review-row-participants,各自連到
+                      accounts:admin_user_profile;大錨點(日期/審核人員/查看詳情)維持原本
+                      點擊即進課程詳情頁的行為不變。
+                    {% endcomment %}
+                    <div class="review-row-main">
+                      <a class="review-detail-link" href="{% url 'tutoring:class_detail' review.session_id %}"><strong>{{ review.session.class_date|date:"Y-m-d" }} · {{ review.session.start_time|time:"H:i" }}</strong>{% if review.reviewed_by %}<small>審核人員 / Reviewed by：{{ review.reviewed_by.bilingual_name }} · {{ review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}<em>查看簽到與課堂紀錄 / View details →</em></a>
+                      <span class="review-row-participants"><a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutor_id %}">{{ review.session.pairing.tutor.bilingual_name }}</a> × <a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutee_id %}">{{ review.session.pairing.tutee.bilingual_name }}</a></span>
+                    </div>
                     <div class="review-row-badges">
                       <i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>
                       <b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b>

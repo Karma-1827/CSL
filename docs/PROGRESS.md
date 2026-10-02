@@ -183,6 +183,8 @@
 
 > **2026-10-02 修正 Admin 課程詳情頁頭圖兩個問題(使用者回報)**:①「CLASS REVIEW DETAILS 改成白色，不然顏色有點重疊」——`.section-kicker` 預設文字色跟 `.class-detail-hero`/`.tutor-schedule-hero` 深色頭圖漸層共用同一個顏色值,文字疊在漸層上幾乎看不見,是 9/8 彩色頭圖配色 regression 當時沒修完整的同一個問題;補上跟 `.profile-hero`/`.guide-hero` 一致的淺色覆寫。②「如果是待補正重新送審后，在審核中多一個標籤：已補正＋日期時間」——新增 `revise_resubmitted_at` 判斷(最近一次決定是 REVISE、但目前狀態已經不是 REVISE,取雙方課堂紀錄裡晚於那筆決定的最新 `updated_at`),頭圖「審核中」徽章旁新增對應的「已補正 / Resubmitted」徽章。新增 2 項回歸測試,474 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 CSS/template/view 調整。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-02 Admin dashboard 四個常見 tutor/tutee 清單的姓名/學號改成可點擊查看行政檔案(使用者要求)**:口語能力審核、配對管理(配對列表+待回覆邀請)、解除配對審核、課程審核,這四個頁籤裡的 tutor/tutee 姓名/學號全部補上連到 `accounts:admin_user_profile` 的連結,不用再先繞去 Django Admin 名冊才找得到入口。「課程審核」清單因為姓名原本包在連到課程詳情頁的大錨點裡(HTML 不支援巢狀 `<a>`),額外做了小幅重構把姓名移出獨立成 `.review-row-participants`,課程詳情的點擊行為不受影響。Admin 審核人員(`reviewed_by`)維持純文字,因為 `admin_user_profile()` 限定只接受 Tutor/Tutee。新增回歸測試(`accounts/tests.py::AdminDashboardProfileLinkTests` 3 項、`tutoring/tests.py` 1 項),478 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 template/測試調整。詳見 `CLAUDE.md` 第 2 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

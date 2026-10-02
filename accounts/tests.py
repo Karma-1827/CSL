@@ -15,7 +15,19 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from tutoring.models import Pairing, QualificationDocument, QualificationStatus, Semester, TuteeProfile, TutorProfile
+from tutoring.models import (
+    InvitationStatus,
+    MatchingInvitation,
+    Pairing,
+    PairingReleaseReason,
+    PairingReleaseRequest,
+    PairingReleaseStatus,
+    QualificationDocument,
+    QualificationStatus,
+    Semester,
+    TuteeProfile,
+    TutorProfile,
+)
 
 from .forms import client_ip
 from .services import import_department_oral_exam_pass_list
@@ -1678,6 +1690,86 @@ class AdminDashboardNavigationTests(TestCase):
         )
         status_ids = {pairing.pk for pairing in by_status.context["pairing_page"]}
         self.assertNotIn(target_pairing.pk, status_ids)
+
+
+class AdminDashboardProfileLinkTests(TestCase):
+    """2026-10-02(使用者要求):Admin 介面裡 tutor/tutee 比較常出現的地方(口語能力審核、
+    配對管理、解除配對、課程審核)點擊學號或姓名都要能直接查看該 tutor/tutee 的行政檔案
+    (`accounts:admin_user_profile`),不需要先繞去 Django Admin 的學生名冊才能找到入口。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="PROFILE-LINK-ADMIN", password="Admin-password-2026")
+        self.semester = Semester.objects.create(
+            name_zh="PROFILE-LINK 測試學期", name_en="Profile link test semester",
+            starts_on=timezone.localdate() - timedelta(days=7), ends_on=timezone.localdate() + timedelta(days=90),
+            is_active=True,
+        )
+        tutor_roster = RosterEntry.objects.create(
+            student_id="PROFILE-LINK-TUTOR", name_zh="連結老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        tutee_roster = RosterEntry.objects.create(
+            student_id="PROFILE-LINK-TUTEE", name_zh="連結學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=PartnerProgram.objects.get(code="NTNU"),
+        )
+        self.tutor = User.objects.create_user(
+            username="PROFILE-LINK-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=tutor_roster
+        )
+        self.tutee = User.objects.create_user(
+            username="PROFILE-LINK-TUTEE", password="Tutee-password-2026", role=Role.TUTEE, roster_entry=tutee_roster
+        )
+        self.client.force_login(self.admin)
+
+    def _profile_url(self, user):
+        return reverse("accounts:admin_user_profile", args=[user.pk])
+
+    def test_qualification_review_pending_and_history_link_to_tutor_profile(self):
+        document = QualificationDocument.objects.create(
+            tutor=self.tutor, file="qualifications/profile-link-test.pdf", original_filename="test.pdf",
+            status=QualificationStatus.PENDING,
+        )
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self._profile_url(self.tutor))
+
+        document.status = QualificationStatus.APPROVED
+        document.reviewed_by = self.admin
+        document.reviewed_at = timezone.now()
+        document.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self._profile_url(self.tutor))
+
+    def test_matching_management_links_pairing_and_invitation_participants(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self._profile_url(self.tutor))
+        self.assertContains(response, self._profile_url(self.tutee))
+
+        pairing.delete()
+        MatchingInvitation.objects.create(
+            semester=self.semester, tutor=self.tutor, tutee=self.tutee, initiated_by=self.tutor,
+            status=InvitationStatus.PENDING, expires_at=timezone.now() + timedelta(days=5),
+        )
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self._profile_url(self.tutor))
+        self.assertContains(response, self._profile_url(self.tutee))
+
+    def test_pairing_release_pending_and_history_link_participants(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release = PairingReleaseRequest.objects.create(
+            pairing=pairing, requested_by=self.tutor, reason=PairingReleaseReason.SCHEDULE_CONFLICT,
+        )
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self._profile_url(self.tutor))
+        self.assertContains(response, self._profile_url(self.tutee))
+
+        release.status = PairingReleaseStatus.APPROVED
+        release.reviewed_by = self.admin
+        release.reviewed_at = timezone.now()
+        release.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self._profile_url(self.tutor))
+        self.assertContains(response, self._profile_url(self.tutee))
 
 
 class TutorDashboardPairingVisibilityTests(TestCase):

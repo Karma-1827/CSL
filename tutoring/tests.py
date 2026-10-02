@@ -2323,6 +2323,20 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(page2, "上一頁 / Previous")
         self.assertNotContains(page2, "下一頁 / Next")
 
+    def test_admin_dashboard_class_review_names_link_to_participant_profiles(self):
+        """2026-10-02(使用者要求):Admin dashboard「課程審核」清單的老師/學生姓名要能各自
+        點擊查看該人的行政檔案(`accounts:admin_user_profile`)——這一列原本整列包在
+        `.review-detail-link` 這顆連到課程詳情頁的大錨點裡,姓名已經移出該錨點、獨立成
+        `.review-row-participants` 底下的兩個連結,這裡驗證兩者(連到課程詳情的大錨點、
+        連到雙方檔案的姓名連結)同時存在、互不衝突,且課程詳情的連結沒有被姓名連結誤蓋掉。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="CLASS-REVIEW-PROFILE-LINK-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, reverse("accounts:admin_user_profile", args=[self.tutor.pk]))
+        self.assertContains(response, reverse("accounts:admin_user_profile", args=[self.tutee.pk]))
+        self.assertContains(response, reverse("tutoring:class_detail", args=[session.pk]))
+
     def test_tutor_and_tutee_class_detail_shows_admin_review_result_and_note(self):
         """2026-10-01(使用者要求):Admin 的課堂審核意見原本只有 Admin 自己的
         `admin_class_detail.html` 看得到,Tutor/Tutee 自己的 `class_detail.html`
