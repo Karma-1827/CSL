@@ -2067,13 +2067,14 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "撤回 / Revert")
         self.assertNotContains(response, "課程審核 <small>Class review decision")
 
-    def test_admin_class_detail_revert_button_attaches_only_to_latest_history_card(self):
-        """2026-10-02(使用者要求「撤回功能放在每個審核意見卡片，就是可以針對單一建議
-        撤回」):撤回對「目前這一筆決定」才有意義(ClassReview 本身只有單一一組現在狀態),
-        所以只應該出現在歷史清單最新一筆卡片裡,不是區塊共用一顆按鈕;同一堂課被要求補正
-        兩次以上時,只有恰好一顆「撤回」按鈕存在,且位置落在第一張卡片(最新一筆)裡面。"""
+    def test_admin_class_detail_revert_button_in_heading_not_inside_history_cards(self):
+        """2026-10-02(先前要求「撤回功能放在每個審核意見卡片」,後來改口「審核意見的
+        撤回就不用放在紀錄裡」):撤回改回放在「審核紀錄」區塊標題旁,而不是塞進歷史清單
+        的某一張卡片裡——「紀錄」是單純的歷史回顧,撤回是會改變目前狀態的動作,兩者刻意
+        分開。同一堂課被要求補正兩次以上時,仍然只有恰好一顆「撤回」按鈕,且位置在第一張
+        歷史卡片(`<li>`)出現之前。"""
         session = self._confirmed_pending_session()
-        admin = User.objects.create_superuser(username="REVERT-CARD-ADMIN", password="Admin-password-2026")
+        admin = User.objects.create_superuser(username="REVERT-HEADING-ADMIN", password="Admin-password-2026")
         now = self.aware(timezone.localdate(), time(11, 5))
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="第一次意見")
         submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正"), now=now)
@@ -2085,12 +2086,9 @@ class ClassWorkflowTests(TestCase):
         content = self.client.get(reverse("tutoring:class_detail", args=[session.pk])).content.decode()
         self.assertEqual(content.count("撤回 / Revert"), 1)
         first_card_start = content.index('<li class="incident-report-reply-item')
-        second_card_start = content.index('<li class="incident-report-reply-item', first_card_start + 1)
         revert_index = content.index("撤回 / Revert")
-        self.assertGreater(revert_index, first_card_start)
-        self.assertLess(revert_index, second_card_start)
-        self.assertIn("已補齊", content[first_card_start:second_card_start])
-        self.assertIn("第一次意見", content[second_card_start:])
+        self.assertLess(revert_index, first_card_start)
+        self.assertIn("已補齊", content[first_card_start:])
 
     def test_admin_class_detail_pending_with_no_history_shows_no_stray_completion_box(self):
         """2026-10-01(回歸測試,部署後用正式站真實的 PENDING 課程發現的真實 bug):合併
