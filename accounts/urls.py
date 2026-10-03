@@ -32,6 +32,11 @@ urlpatterns = [
     path("announcements/<int:pk>/save/", views.save_announcement, name="update_announcement"),
     path("announcements/<int:pk>/delete/", views.delete_announcement, name="delete_announcement"),
     path("announcements/mark-read/", views.mark_announcements_read, name="mark_announcements_read"),
+    path(
+        "dashboard/mark-read/<str:section>/",
+        views.mark_dashboard_section_read,
+        name="mark_dashboard_section_read",
+    ),
     path("recover/", views.recover_account, name="recover"),
     path("recover/new-password/", views.set_recovered_password, name="set_recovered_password"),
 ]

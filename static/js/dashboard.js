@@ -8,14 +8,18 @@
 
   const available = new Set(panels.map((panel) => panel.dataset.dashboardPanel));
 
-  // 2026-09-25(使用者要求「使用者要點進來看過這個提示才會不見」):切到「公告欄」分頁時
-  // 通知後端記錄已讀時間,並立刻移除側邊欄上的未讀數字徽章,不用等下次整頁重新載入。
-  let announcementsMarkedRead = false;
-  function markAnnouncementsRead() {
-    if (announcementsMarkedRead) return;
-    const link = links.find((item) => item.dataset.dashboardTarget === "announcements" && item.dataset.markReadUrl);
+  // 2026-09-25(使用者要求「使用者要點進來看過這個提示才會不見」):切到某個分頁時通知
+  // 後端記錄已讀時間,並立刻移除側邊欄上的未讀數字徽章,不用等下次整頁重新載入。
+  // 2026-10-03(使用者要求口語能力證明/輔導時數/異常回報也要有同樣的未讀提示)起,原本
+  // 寫死只認「公告欄」的 markAnnouncementsRead() 已經改成通用版本——任何側邊欄連結只要
+  // 帶 data-mark-read-url 屬性,切到該分頁時都會觸發同樣的「通知後端＋移除徽章」流程,
+  // 不用再對每個新分類各寫一份幾乎相同的函式。
+  const markedReadTargets = new Set();
+  function markSectionRead(target) {
+    if (markedReadTargets.has(target)) return;
+    const link = links.find((item) => item.dataset.dashboardTarget === target && item.dataset.markReadUrl);
     if (!link) return;
-    announcementsMarkedRead = true;
+    markedReadTargets.add(target);
     const prefix = "csrftoken=";
     const cookie = document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith(prefix));
     const csrfToken = cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
@@ -30,7 +34,7 @@
 
   function activate(target, options = {}) {
     const selected = available.has(target) ? target : "overview";
-    if (selected === "announcements") markAnnouncementsRead();
+    markSectionRead(selected);
     panels.forEach((panel) => {
       const isSelected = panel.dataset.dashboardPanel === selected;
       panel.hidden = !isSelected;

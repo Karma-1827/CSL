@@ -37,6 +37,7 @@ from tutoring.models import (
     ClassAlert,
     ClassAlertStatus,
     ClassReview,
+    ClassReviewDecision,
     ClassReviewStatus,
     HourAdjustment,
     IncidentReport,
@@ -102,6 +103,8 @@ from .models import (
     Announcement,
     AnnouncementReadState,
     AuditLog,
+    DashboardReadState,
+    DashboardSection,
     DepartmentOralExamPass,
     PartnerProgram,
     RegistrationDraft,
@@ -345,11 +348,50 @@ def dashboard(request):
         announcement.is_new = (
             last_viewed_announcements_at is None or announcement.created_at > last_viewed_announcements_at
         )
+    # 2026-10-03(使用者要求):口語能力證明審核結果、課程審核結果、課堂通報/異常回報
+    # 被標記已紀錄之後,Tutor/Tutee 的側邊欄原本完全不會冒出任何提示——比照公告欄既有的
+    # 「記錄上次查看時間、比對這段期間有沒有新變動」做法,但一個使用者要分別追蹤三個
+    # 分類,所以用 DashboardReadState(section 區分)而不是沿用 AnnouncementReadState
+    # 那種「每人一筆」的寫法。只對 Tutor/Tutee 計算,Admin 不需要這幾個提示。
+    qualification_unread_count = 0
+    hours_unread_count = 0
+    incident_reports_unread_count = 0
+    if request.user.role in (Role.TUTOR, Role.TUTEE):
+        dashboard_last_viewed = {
+            row.section: row.last_viewed_at
+            for row in DashboardReadState.objects.filter(user=request.user)
+        }
+        hours_last_viewed = dashboard_last_viewed.get(DashboardSection.HOURS)
+        decision_qs = ClassReviewDecision.objects.filter(
+            Q(review__session__pairing__tutor=request.user) | Q(review__session__pairing__tutee=request.user)
+        )
+        alert_qs = ClassAlert.objects.filter(reporter=request.user, status=ClassAlertStatus.RESOLVED)
+        if hours_last_viewed:
+            decision_qs = decision_qs.filter(created_at__gt=hours_last_viewed)
+            alert_qs = alert_qs.filter(resolved_at__gt=hours_last_viewed)
+        hours_unread_count = decision_qs.count() + alert_qs.count()
+
+        incident_last_viewed = dashboard_last_viewed.get(DashboardSection.INCIDENT_REPORTS)
+        incident_qs = IncidentReport.objects.filter(reporter=request.user, status=IncidentReportStatus.RESOLVED)
+        if incident_last_viewed:
+            incident_qs = incident_qs.filter(resolved_at__gt=incident_last_viewed)
+        incident_reports_unread_count = incident_qs.count()
+
+        if request.user.role == Role.TUTOR:
+            qualification_last_viewed = dashboard_last_viewed.get(DashboardSection.QUALIFICATION)
+            qualification = QualificationDocument.objects.filter(tutor=request.user).first()
+            if qualification and qualification.reviewed_at and (
+                qualification_last_viewed is None or qualification.reviewed_at > qualification_last_viewed
+            ):
+                qualification_unread_count = 1
     context = {
         "current_semester": current_semester,
         "matching_open": matching_open,
         "active_announcements": active_announcements,
         "unread_announcement_count": sum(1 for item in active_announcements if item.is_new),
+        "qualification_unread_count": qualification_unread_count,
+        "hours_unread_count": hours_unread_count,
+        "incident_reports_unread_count": incident_reports_unread_count,
     }
     if request.user.role == Role.ADMIN:
         semester_rows = list(Semester.objects.order_by("-starts_on"))
@@ -1532,6 +1574,20 @@ def mark_announcements_read(request):
     不是需要稽核的行政操作,比照私訊「開啟對話即標記已讀」的既有慣例(不記錄稽核)。"""
     AnnouncementReadState.objects.update_or_create(
         user=request.user, defaults={"last_viewed_at": timezone.now()}
+    )
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def mark_dashboard_section_read(request, section):
+    """2026-10-03(使用者要求):跟 `mark_announcements_read()` 同樣的機制,但一個使用者
+    要分別追蹤多個分類(口語能力證明/輔導時數/異常回報),所以用 `section` 這個路徑參數
+    區分要更新哪一筆 `DashboardReadState`,而不是像公告欄那樣每人固定一筆。"""
+    if section not in DashboardSection.values:
+        raise Http404
+    DashboardReadState.objects.update_or_create(
+        user=request.user, section=section, defaults={"last_viewed_at": timezone.now()}
     )
     return JsonResponse({"ok": True})
 

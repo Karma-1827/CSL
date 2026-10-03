@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import time, timedelta
+from decimal import Decimal
 import io
 import os
 from unittest.mock import patch
@@ -16,6 +17,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from tutoring.models import (
+    ClassAlert,
+    ClassAlertReason,
+    ClassAlertStatus,
+    ClassReview,
+    ClassReviewDecision,
+    ClassReviewStatus,
+    ClassSession,
+    IncidentReport,
+    IncidentReportCategory,
+    IncidentReportStatus,
     InvitationStatus,
     MatchingInvitation,
     Pairing,
@@ -37,6 +48,7 @@ from .models import (
     Announcement,
     AnnouncementReadState,
     AuditLog,
+    DashboardReadState,
     DepartmentOralExamPass,
     DepartmentOralExamPassListType,
     EducationLevel,
@@ -2990,3 +3002,132 @@ class AnnouncementTests(TestCase):
         content = response.content.decode()
         self.assertIn("中文內容", content)
         self.assertIn("English content", content)
+
+
+class DashboardSectionNotificationTests(TestCase):
+    """2026-10-03(使用者要求「admin審核/紀錄的資料，tutor/tutee左側欄位對應的功能會有
+    提示嗎？」):口語能力證明審核、課程審核、課堂通報/異常回報被標記已紀錄之後,
+    Tutor/Tutee 的側邊欄原本完全不會冒出任何提示。比照公告欄既有的「記錄上次查看時間、
+    比對這段期間有沒有新變動」做法,新增 `DashboardReadState`(用 `section` 區分口語能力
+    證明/輔導時數/異常回報三個分類,而不是像公告欄那樣每人只有一筆)。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="DASHNOTIFY-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(
+            username="DASHNOTIFY-TUTOR", password="Tutor-password-2026", role=Role.TUTOR
+        )
+        self.tutee = User.objects.create_user(
+            username="DASHNOTIFY-TUTEE", password="Tutee-password-2026", role=Role.TUTEE
+        )
+        self.semester = Semester.objects.create(
+            name_zh="DASHNOTIFY 測試學期", name_en="dashnotify test semester",
+            starts_on=timezone.localdate() - timedelta(days=7), ends_on=timezone.localdate() + timedelta(days=90),
+            is_active=False,
+        )
+        self.pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+
+    def test_qualification_badge_appears_after_decision_and_clears_after_viewing(self):
+        QualificationDocument.objects.create(
+            tutor=self.tutor, file="q.pdf", original_filename="q.pdf",
+            status=QualificationStatus.APPROVED, reviewed_by=self.admin, reviewed_at=timezone.now(),
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["qualification_unread_count"], 1)
+        self.assertContains(response, 'data-dashboard-target="qualification" data-mark-read-url')
+
+        self.client.post(reverse("accounts:mark_dashboard_section_read", args=["QUALIFICATION"]))
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["qualification_unread_count"], 0)
+
+    def test_qualification_badge_absent_when_never_reviewed(self):
+        QualificationDocument.objects.create(
+            tutor=self.tutor, file="q.pdf", original_filename="q.pdf", status=QualificationStatus.PENDING,
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["qualification_unread_count"], 0)
+
+    def test_hours_badge_counts_new_class_review_decisions_for_both_roles(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=timezone.localdate(), start_time=time(10), duration=Decimal("1.0"),
+            created_by=self.tutor,
+        )
+        review = ClassReview.objects.create(session=session, status=ClassReviewStatus.APPROVED)
+        ClassReviewDecision.objects.create(
+            review=review, status=ClassReviewStatus.APPROVED, note="", reviewed_by=self.admin
+        )
+        for user in (self.tutor, self.tutee):
+            self.client.force_login(user)
+            response = self.client.get(reverse("accounts:dashboard"))
+            self.assertEqual(response.context["hours_unread_count"], 1)
+            self.client.post(reverse("accounts:mark_dashboard_section_read", args=["HOURS"]))
+            response = self.client.get(reverse("accounts:dashboard"))
+            self.assertEqual(response.context["hours_unread_count"], 0)
+
+    def test_hours_badge_counts_resolved_class_alerts(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=timezone.localdate(), start_time=time(10), duration=Decimal("1.0"),
+            created_by=self.tutor,
+        )
+        ClassAlert.objects.create(
+            session=session, reporter=self.tutor, subject=self.tutee, reason=ClassAlertReason.ABSENT,
+            status=ClassAlertStatus.RESOLVED, resolved_by=self.admin, resolved_at=timezone.now(),
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["hours_unread_count"], 1)
+
+    def test_hours_badge_ignores_decisions_already_seen(self):
+        session = ClassSession.objects.create(
+            pairing=self.pairing, class_date=timezone.localdate(), start_time=time(10), duration=Decimal("1.0"),
+            created_by=self.tutor,
+        )
+        review = ClassReview.objects.create(session=session, status=ClassReviewStatus.APPROVED)
+        ClassReviewDecision.objects.create(
+            review=review, status=ClassReviewStatus.APPROVED, note="", reviewed_by=self.admin
+        )
+        # 已讀時間設在未來,代表「剛剛才看過」,這筆決定不該被算成新的。
+        self.client.force_login(self.tutor)
+        self.client.post(reverse("accounts:mark_dashboard_section_read", args=["HOURS"]))
+        DashboardReadState.objects.filter(user=self.tutor, section="HOURS").update(
+            last_viewed_at=timezone.now() + timedelta(minutes=5)
+        )
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["hours_unread_count"], 0)
+
+    def test_incident_reports_badge_counts_resolved_reports_and_clears_after_viewing(self):
+        IncidentReport.objects.create(
+            reporter=self.tutee, category=IncidentReportCategory.OTHER, content="測試異常回報",
+            status=IncidentReportStatus.RESOLVED, resolved_by=self.admin, resolved_at=timezone.now(),
+        )
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["incident_reports_unread_count"], 1)
+
+        self.client.post(reverse("accounts:mark_dashboard_section_read", args=["INCIDENT_REPORTS"]))
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["incident_reports_unread_count"], 0)
+
+    def test_pending_incident_report_does_not_count_as_unread(self):
+        IncidentReport.objects.create(
+            reporter=self.tutee, category=IncidentReportCategory.OTHER, content="尚未處理",
+            status=IncidentReportStatus.PENDING,
+        )
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertEqual(response.context["incident_reports_unread_count"], 0)
+
+    def test_mark_dashboard_section_read_rejects_unknown_section(self):
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("accounts:mark_dashboard_section_read", args=["NOT-A-SECTION"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_sidebar_badges_render_with_correct_numbers(self):
+        QualificationDocument.objects.create(
+            tutor=self.tutor, file="q.pdf", original_filename="q.pdf",
+            status=QualificationStatus.APPROVED, reviewed_by=self.admin, reviewed_at=timezone.now(),
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "口語能力證明<small>Oral proficiency</small></b><em>1</em>")

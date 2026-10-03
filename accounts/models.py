@@ -435,3 +435,34 @@ class AnnouncementReadState(models.Model):
 
     def __str__(self):
         return f"{self.user.username} @ {self.last_viewed_at}"
+
+
+class DashboardSection(models.TextChoices):
+    """2026-10-03 新增(使用者要求「admin審核/紀錄的資料，tutor/tutee左側欄位對應的功能
+    會有提示嗎？」):目前只有公告欄、邀請管理、私訊這三個側邊欄項目會顯示未讀數字,
+    Admin 審核口語能力證明、課程、課堂通報、異常回報之後,對應的側邊欄項目完全不會
+    冒出提示。這裡只先涵蓋使用者這次明確點名的三類,其餘(例如解除配對結果,已經有
+    `release_notices.html` 這個首頁橫幅提示)不在這次範圍內。"""
+
+    QUALIFICATION = "QUALIFICATION", "口語能力證明 / Qualification"
+    HOURS = "HOURS", "輔導時數／課表 / Hours and schedule"
+    INCIDENT_REPORTS = "INCIDENT_REPORTS", "異常回報 / Incident reports"
+
+
+class DashboardReadState(models.Model):
+    """記錄每位使用者上一次查看某個 dashboard 分頁的時間,比照 `AnnouncementReadState`
+    的既有慣例,但一個使用者需要分別追蹤多個分類(口語能力證明/輔導時數/異常回報),
+    所以用 `section` 欄位區分,而不是像公告欄那樣每人只有一筆。`last_viewed_at` 為
+    `None` 代表這位使用者從未點開過這個分頁,此時應視為全部現有變動都是新的。"""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="dashboard_read_states")
+    section = models.CharField(max_length=20, choices=DashboardSection.choices)
+    last_viewed_at = models.DateTimeField("上次查看時間 / Last viewed at", null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "section"], name="unique_dashboard_read_state_per_section")
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} · {self.section} @ {self.last_viewed_at}"
