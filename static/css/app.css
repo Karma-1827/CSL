@@ -1877,6 +1877,51 @@ a {
   color: var(--ink-muted);
   font-size: 0.5em;
 }
+/* 2026-10-03(使用者要求「我的首頁」目前配對/配對概況下方新增審核進度卡片):只顯示
+   還沒通過/還沒處理完的項目,刻意沿用 .matching-summary-panel 同一組底色,視覺上跟
+   旁邊的配對概況卡片是同一家族,不是突然冒出全新風格。 */
+.progress-overview-panel {
+  background: linear-gradient(145deg, #fff, var(--mist));
+}
+.progress-overview-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+.progress-overview-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(63, 114, 175, 0.16);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.progress-overview-row > span {
+  font-size: 0.72rem;
+  font-weight: 750;
+  color: var(--navy);
+}
+.progress-overview-row > span small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+.progress-overview-row > strong {
+  flex-shrink: 0;
+  color: var(--ocean-800);
+  font-size: 1.1rem;
+  text-align: right;
+}
+.progress-overview-row > strong small {
+  margin-left: 4px;
+  color: var(--ink-muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
 @keyframes dashboard-view-in {
   from {
     opacity: 0;

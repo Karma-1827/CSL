@@ -1,4 +1,4 @@
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 import io
 import os
@@ -24,6 +24,7 @@ from tutoring.models import (
     ClassReviewDecision,
     ClassReviewStatus,
     ClassSession,
+    ConfirmationStatus,
     IncidentReport,
     IncidentReportCategory,
     IncidentReportStatus,
@@ -38,6 +39,14 @@ from tutoring.models import (
     Semester,
     TuteeProfile,
     TutorProfile,
+)
+from tutoring.services import (
+    cancel_class,
+    check_in,
+    confirm_counterpart,
+    review_class_session,
+    schedule_classes,
+    submit_class_record,
 )
 
 from .forms import client_ip
@@ -3131,3 +3140,138 @@ class DashboardSectionNotificationTests(TestCase):
         self.client.force_login(self.tutor)
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "口語能力證明<small>Oral proficiency</small></b><em>1</em>")
+
+
+class ProgressOverviewPanelTests(TestCase):
+    """2026-10-03(使用者要求「我的首頁，目前配對和配對概況下方，我想放一個欄位呈現進度」):
+    只顯示「還在進行中、尚未完成」的項目——口語能力證明一旦通過就整行隱藏;課程審核計入
+    已結束但還不是有效成立的課程(含「課堂結束但還沒簽到＋填寫課程資料」這種最早期的
+    卡住狀態),尚未結束的課堂不列入;課堂通報/異常回報只算還沒被標記已紀錄的筆數。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="PROGRESS-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(
+            username="PROGRESS-TUTOR", password="Tutor-password-2026", role=Role.TUTOR
+        )
+        self.tutee = User.objects.create_user(
+            username="PROGRESS-TUTEE", password="Tutee-password-2026", role=Role.TUTEE
+        )
+        self.semester = Semester.objects.create(
+            name_zh="PROGRESS 測試學期", name_en="progress test semester",
+            starts_on=timezone.localdate() - timedelta(days=60), ends_on=timezone.localdate() + timedelta(days=90),
+            is_active=False,
+        )
+        self.pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+
+    def _record_data(self):
+        return {
+            "location": "教室", "topic": "測試", "content": "測試內容", "materials_used": "教材",
+            "individual_progress": "情況良好", "remarks": "", "evidence_links": ["https://example.com/photo.jpg"],
+        }
+
+    def _schedule(self, class_date, now=None):
+        return schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date, start_time=time(10), duration=Decimal("1.0"),
+            now=now or timezone.make_aware(datetime.combine(class_date - timedelta(days=1), time(9))),
+        )[0]
+
+    def _fully_approve(self, session, at):
+        check_in(session_id=session.pk, participant=self.tutor, now=at)
+        check_in(session_id=session.pk, participant=self.tutee, now=at)
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self._record_data(), now=at)
+        submit_class_record(session_id=session.pk, author=self.tutee, data=self._record_data(), now=at)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        review_class_session(session_id=session.pk, admin=self.admin, decision=ClassReviewStatus.APPROVED, note="")
+
+    def test_pending_class_review_count_counts_ended_session_with_nothing_submitted_yet(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        self._schedule(past_date)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "課程審核<small>Class review</small></span><strong>1")
+
+    def test_pending_class_review_count_excludes_sessions_that_have_not_ended_yet(self):
+        future_date = timezone.localdate() + timedelta(days=10)
+        self._schedule(future_date, now=timezone.now())
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotIn("課程審核<small>Class review</small>", response.content.decode())
+
+    def test_pending_class_review_count_excludes_fully_approved_sessions(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        session = self._schedule(past_date)
+        self._fully_approve(session, at=timezone.make_aware(datetime.combine(past_date, time(11, 5))))
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotIn("課程審核<small>Class review</small>", response.content.decode())
+
+    def test_pending_class_review_count_excludes_cancelled_sessions(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        session = self._schedule(past_date)
+        cancel_class(session_id=session.pk, actor=self.tutor, reason="測試取消")
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotIn("課程審核<small>Class review</small>", response.content.decode())
+
+    def test_qualification_progress_hidden_once_approved(self):
+        QualificationDocument.objects.create(
+            tutor=self.tutor, file="q.pdf", original_filename="q.pdf", status=QualificationStatus.APPROVED,
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotIn("口語能力證明<small>Qualification</small>", response.content.decode())
+
+    def test_qualification_progress_shown_when_missing_pending_or_rejected(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "尚未上傳<small>Not yet uploaded</small>")
+
+        doc = QualificationDocument.objects.create(
+            tutor=self.tutor, file="q.pdf", original_filename="q.pdf", status=QualificationStatus.PENDING,
+        )
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "審核中<small>Under review</small>")
+
+        doc.status = QualificationStatus.REJECTED
+        doc.save(update_fields=["status"])
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "未通過<small>Not approved</small>")
+
+    def test_unresolved_report_count_combines_active_alerts_and_pending_incident_reports(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        session = self._schedule(past_date)
+        self._fully_approve(session, at=timezone.make_aware(datetime.combine(past_date, time(11, 5))))
+        ClassAlert.objects.create(
+            session=session, reporter=self.tutor, subject=self.tutee, reason=ClassAlertReason.ABSENT,
+            status=ClassAlertStatus.ACTIVE,
+        )
+        IncidentReport.objects.create(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="測試",
+            status=IncidentReportStatus.PENDING,
+        )
+        # 已紀錄/已取消的不該被算進來。
+        ClassAlert.objects.create(
+            session=session, reporter=self.tutee, subject=self.tutor, reason=ClassAlertReason.OTHER,
+            status=ClassAlertStatus.RESOLVED, resolved_by=self.admin, resolved_at=timezone.now(),
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "課堂通報／異常回報<small>Alerts &amp; reports</small></span><strong>2")
+
+    def test_progress_overview_panel_shows_empty_state_when_nothing_pending(self):
+        QualificationDocument.objects.create(
+            tutor=self.tutor, file="q.pdf", original_filename="q.pdf", status=QualificationStatus.APPROVED,
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "目前沒有進行中的審核項目。 / Nothing pending right now.")
+
+    def test_progress_overview_panel_renders_for_tutee_without_qualification_row(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        self._schedule(past_date)
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("課程審核<small>Class review</small></span><strong>1", content)
+        self.assertNotIn("口語能力證明<small>Qualification</small>", content)

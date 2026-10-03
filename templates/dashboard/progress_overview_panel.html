@@ -1,0 +1,19 @@
+<section class="panel progress-overview-panel">
+  <span class="eyebrow">PROGRESS</span>
+  <h2>審核進度 <small>Review progress</small></h2>
+  {% if qualification_progress_status or pending_class_review_count or unresolved_report_count %}
+    <div class="progress-overview-list">
+      {% if qualification_progress_status %}
+        <div class="progress-overview-row"><span>口語能力證明<small>Qualification</small></span><strong>{{ qualification_progress_status.label }}<small>{{ qualification_progress_status.label_en }}</small></strong></div>
+      {% endif %}
+      {% if pending_class_review_count %}
+        <div class="progress-overview-row"><span>課程審核<small>Class review</small></span><strong>{{ pending_class_review_count }}<small>堂待處理 / pending</small></strong></div>
+      {% endif %}
+      {% if unresolved_report_count %}
+        <div class="progress-overview-row"><span>課堂通報／異常回報<small>Alerts &amp; reports</small></span><strong>{{ unresolved_report_count }}<small>筆尚未紀錄 / not logged</small></strong></div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="empty-state">目前沒有進行中的審核項目。 / Nothing pending right now.</div>
+  {% endif %}
+</section>

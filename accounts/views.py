@@ -706,9 +706,19 @@ def dashboard(request):
         pending_tutee_ids = {row["profile"]["user_id"] for row in sent_rows + received_rows}
         for candidate in candidates:
             candidate["pending"] = candidate["user_id"] in pending_tutee_ids
+        # 2026-10-03(使用者要求「我的首頁」新增審核進度卡片「如果通過的就不用顯示了」):
+        # 只有「還不是通過」才顯示這一行,通過之後整行從卡片上消失,不是顯示「已通過」。
+        qualification_progress_status = None
+        if qualification is None:
+            qualification_progress_status = {"label": "尚未上傳", "label_en": "Not yet uploaded"}
+        elif qualification.status == QualificationStatus.PENDING:
+            qualification_progress_status = {"label": "審核中", "label_en": "Under review"}
+        elif qualification.status == QualificationStatus.REJECTED:
+            qualification_progress_status = {"label": "未通過", "label_en": "Not approved"}
         context.update(
             {
                 "qualification": qualification,
+                "qualification_progress_status": qualification_progress_status,
                 "qualification_form": QualificationUploadForm(),
                 "active_pairings": pairings,
                 "active_pairing_count": pairings.count(),
@@ -846,6 +856,24 @@ def dashboard(request):
             start=0,
         )
         now = timezone.now()
+        # 2026-10-03(使用者要求「我的首頁」目前配對/配對概況下方新增審核進度卡片):只算
+        # 「已經結束但還不是有效成立」的課程(未結束的課堂不列入,is_official 已經涵蓋
+        # 簽到/紀錄未完成、等待雙方確認、等待管理員審核、待補正、未通過全部這幾種情況,
+        # 一旦通過就不會再被算進來)。範圍是這個人所有配對(含已結束的配對),不只目前這組,
+        # 因為剛結束配對前最後一堂課還沒走完流程時一樣需要被看見。重用上面已經算好的
+        # all_rows/is_official,不用再查一次。
+        pending_class_review_count = sum(
+            1 for session in all_rows
+            if session.status != ClassSessionStatus.CANCELLED and session.ends_at < now and not session.is_official
+        )
+        # 課堂通報(自己通報且還是 ACTIVE)直接重用 all_rows 已經 prefetch 好的
+        # class_alerts,不用再查一次;異常回報沒有對應的 session 可以重用,另外查一次。
+        unresolved_report_count = sum(
+            1
+            for session in all_rows
+            for alert in session.class_alerts.all()
+            if alert.reporter_id == request.user.pk and alert.status == ClassAlertStatus.ACTIVE
+        ) + IncidentReport.objects.filter(reporter=request.user, status=IncidentReportStatus.PENDING).count()
         upcoming_cutoff = now + timedelta(days=7)
         upcoming_sessions = [session for session in rows if session.ends_at >= now and session.starts_at <= upcoming_cutoff]
         future_sessions = [session for session in rows if session.starts_at > upcoming_cutoff]
@@ -909,6 +937,8 @@ def dashboard(request):
                 "incident_report_form": StandaloneIncidentReportForm(),
                 "own_incident_reports": IncidentReport.objects.filter(reporter=request.user).prefetch_related("replies").order_by("-created_at"),
                 "release_notices": release_notices,
+                "pending_class_review_count": pending_class_review_count,
+                "unresolved_report_count": unresolved_report_count,
             }
         )
     elif request.user.role == Role.ADMIN:
