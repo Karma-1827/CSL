@@ -51,6 +51,7 @@ from .services import (
     resolve_class_alert,
     resolve_incident_report,
     review_pairing_release_request,
+    revert_pairing_release_decision,
     review_class_session,
     schedule_classes,
     send_invitation,
@@ -545,6 +546,20 @@ def review_pairing_release(request, pk):
         _show_validation_error(request, error)
     else:
         messages.success(request, "解除申請已完成處理。 / Pairing release request reviewed.")
+    return redirect(f"{reverse('accounts:dashboard')}#pairing-releases")
+
+
+@login_required
+@require_POST
+def revert_pairing_release(request, pk):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        revert_pairing_release_decision(request_id=pk, admin=request.user)
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        messages.success(request, "已撤回這筆解除配對審核。 / This pairing release decision has been reverted.")
     return redirect(f"{reverse('accounts:dashboard')}#pairing-releases")
 
 

@@ -394,6 +394,84 @@ def review_pairing_release_request(*, request_id, admin, approve, note="", now=N
 
 
 @transaction.atomic
+def revert_pairing_release_decision(*, request_id, admin):
+    """2026-10-03(使用者誤按核准、其實要拒絕,要求補上跟口語能力審核/課程審核一致的
+    撤回功能):跟那兩個撤回不同,解除配對的「核准」本身會連動修改 `Pairing.status`
+    (改 `ENDED`)並取消配對底下尚未發生的課程,所以撤回除了把 `PairingReleaseRequest`
+    退回 `PENDING` 以外,核准的情況還要把這兩個連動效果還原——否則光是退回審核狀態,
+    配對實際上仍然維持已結束、課程仍然維持已取消,管理員重新審核時看到的畫面會跟
+    真實狀態互相矛盾。拒絕(REJECTED)則完全沒有連動效果,撤回只需要退回審核狀態。"""
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以撤回解除配對審核。 / Only administrators may revert a pairing release decision.")
+    release_request = PairingReleaseRequest.objects.select_for_update().select_related(
+        "pairing__tutor", "pairing__tutee", "requested_by"
+    ).get(pk=request_id)
+    if release_request.status not in {PairingReleaseStatus.APPROVED, PairingReleaseStatus.REJECTED}:
+        raise ValidationError(
+            "此解除申請沒有可撤回的審核結果。 / This release request has no reviewed decision to revert."
+        )
+    previous_status = release_request.status
+    reason = release_request.reason
+    if previous_status == PairingReleaseStatus.APPROVED:
+        pairing = Pairing.objects.select_for_update().get(pk=release_request.pairing_id)
+        if pairing.status != PairingStatus.ENDED:
+            raise ValidationError(
+                "此配對狀態已變更，無法撤回。 / This pairing's status has changed and can no longer be reverted."
+            )
+        # 只還原「因為這次核准」才被取消的課程(比對取消原因與取消時間點,避免誤還原
+        # 配對結束前本來就已經因為別的理由被取消的課程)。
+        restored_sessions = ClassSession.objects.select_for_update().filter(
+            pairing=pairing,
+            status=ClassSessionStatus.CANCELLED,
+            cancellation_reason="配對已解除 / Pairing released",
+            cancelled_at=release_request.reviewed_at,
+        )
+        for session in restored_sessions:
+            session.status = ClassSessionStatus.SCHEDULED
+            session.cancellation_reason = ""
+            session.cancelled_by = None
+            session.cancelled_at = None
+            session.save(
+                update_fields=["status", "cancellation_reason", "cancelled_by", "cancelled_at", "updated_at"]
+            )
+        pairing.status = PairingStatus.ACTIVE
+        pairing.ended_at = None
+        pairing.end_reason = ""
+        pairing.save(update_fields=["status", "ended_at", "end_reason"])
+    release_request.status = PairingReleaseStatus.PENDING
+    release_request.reviewed_by = None
+    release_request.reviewed_at = None
+    release_request.review_note = ""
+    # 比照 submit_pairing_release_request() 原本的計算方式重新算一次,讓「等待處理」的
+    # 48 小時自動解除計時從現在重新起算(而不是維持撤回前的舊時間點,舊時間點很可能
+    # 早就已經過去)。
+    release_request.auto_resolve_at = (
+        timezone.now() + timedelta(hours=PAIRING_AUTO_RELEASE_HOURS)
+        if reason in {
+            PairingReleaseReason.NO_SHOW,
+            PairingReleaseReason.UNREACHABLE,
+            PairingReleaseReason.SCHEDULE_CONFLICT,
+        }
+        else None
+    )
+    release_request.save(
+        update_fields=["status", "reviewed_by", "reviewed_at", "review_note", "auto_resolve_at", "updated_at"]
+    )
+    AuditLog.record(
+        actor=admin,
+        target_user=release_request.requested_by,
+        event_type="PAIRING_RELEASE_REVERTED",
+        description="解除配對審核已撤回 / Pairing release decision reverted",
+        metadata={
+            "pairing_id": release_request.pairing_id,
+            "request_id": release_request.pk,
+            "previous_status": previous_status,
+        },
+    )
+    return release_request
+
+
+@transaction.atomic
 def acknowledge_pairing_release_notice(*, request_id, user):
     """Mark a resolved release request's outcome as seen by the counterpart (2026-09-10,
     user-requested): only the counterpart (not the requester, not an unrelated user) may

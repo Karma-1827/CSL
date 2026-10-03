@@ -85,6 +85,7 @@ from .services import (
     report_class_alert,
     process_pending_pairing_releases,
     review_pairing_release_request,
+    revert_pairing_release_decision,
     reschedule_class,
     schedule_classes,
     send_invitation,
@@ -1103,6 +1104,115 @@ class MatchingTests(MatchingFixtureTestCase):
         release_request.refresh_from_db()
         self.assertEqual(pairing.status, PairingStatus.ACTIVE)
         self.assertEqual(release_request.status, PairingReleaseStatus.REJECTED)
+
+    def test_revert_approved_release_restores_pairing_and_cancelled_classes(self):
+        """2026-10-03(使用者誤按核准、其實要拒絕,要求補上跟口語能力審核/課程審核一致的
+        撤回功能):核准解除配對除了把 PairingReleaseRequest 標記為 APPROVED,還會連動把
+        Pairing 結束並取消尚未發生的課程——撤回必須把這兩個連動效果一併還原,不是只把
+        審核狀態退回 PENDING。"""
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        future_session = ClassSession.objects.create(
+            pairing=pairing, class_date=timezone.localdate() + timedelta(days=7),
+            start_time=time(15, 0), duration=1, created_by=self.tutor,
+        )
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutee, reason=PairingReleaseReason.UNREACHABLE,
+        )
+        admin = User.objects.create_superuser(username="REVERT-RELEASE-ADMIN", password="Admin-password-2026")
+        review_pairing_release_request(
+            request_id=release_request.pk, admin=admin, approve=True, note="誤按核准，其實要拒絕",
+        )
+        pairing.refresh_from_db()
+        future_session.refresh_from_db()
+        self.assertEqual(pairing.status, PairingStatus.ENDED)
+        self.assertEqual(future_session.status, "CANCELLED")
+
+        reverted = revert_pairing_release_decision(request_id=release_request.pk, admin=admin)
+        self.assertEqual(reverted.status, PairingReleaseStatus.PENDING)
+        self.assertIsNone(reverted.reviewed_by)
+        self.assertIsNone(reverted.reviewed_at)
+        self.assertEqual(reverted.review_note, "")
+        pairing.refresh_from_db()
+        future_session.refresh_from_db()
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+        self.assertIsNone(pairing.ended_at)
+        self.assertEqual(pairing.end_reason, "")
+        self.assertEqual(future_session.status, "SCHEDULED")
+        self.assertEqual(future_session.cancellation_reason, "")
+        log = AuditLog.objects.get(event_type="PAIRING_RELEASE_REVERTED")
+        self.assertEqual(log.actor, admin)
+        self.assertEqual(log.metadata["previous_status"], PairingReleaseStatus.APPROVED)
+
+        # 撤回之後應該能重新審核一次,這次正確選「拒絕」。
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=False, note="請用中文書寫")
+        release_request.refresh_from_db()
+        pairing.refresh_from_db()
+        self.assertEqual(release_request.status, PairingReleaseStatus.REJECTED)
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+
+    def test_revert_rejected_release_does_not_touch_pairing(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutee, reason=PairingReleaseReason.UNREACHABLE,
+        )
+        admin = User.objects.create_superuser(username="REVERT-REJECT-ADMIN", password="Admin-password-2026")
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=False)
+        reverted = revert_pairing_release_decision(request_id=release_request.pk, admin=admin)
+        self.assertEqual(reverted.status, PairingReleaseStatus.PENDING)
+        pairing.refresh_from_db()
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+
+    def test_revert_pairing_release_rejects_pending_request(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutee, reason=PairingReleaseReason.UNREACHABLE,
+        )
+        admin = User.objects.create_superuser(username="REVERT-PENDING-ADMIN", password="Admin-password-2026")
+        with self.assertRaises(ValidationError):
+            revert_pairing_release_decision(request_id=release_request.pk, admin=admin)
+
+    def test_non_admin_cannot_revert_pairing_release(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutee, reason=PairingReleaseReason.UNREACHABLE,
+        )
+        admin = User.objects.create_superuser(username="REVERT-OWNER-ADMIN", password="Admin-password-2026")
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=False)
+        with self.assertRaises(ValidationError):
+            revert_pairing_release_decision(request_id=release_request.pk, admin=self.tutor)
+
+    def test_admin_can_revert_pairing_release_from_dashboard(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutee, reason=PairingReleaseReason.UNREACHABLE,
+        )
+        admin = User.objects.create_superuser(username="REVERT-VIEW-ADMIN", password="Admin-password-2026")
+        review_pairing_release_request(request_id=release_request.pk, admin=admin, approve=True)
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, reverse("tutoring:revert_pairing_release", args=[release_request.pk]))
+
+        response = self.client.post(reverse("tutoring:revert_pairing_release", args=[release_request.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#pairing-releases")
+        release_request.refresh_from_db()
+        pairing.refresh_from_db()
+        self.assertEqual(release_request.status, PairingReleaseStatus.PENDING)
+        self.assertEqual(pairing.status, PairingStatus.ACTIVE)
+
+    def test_revert_button_hidden_for_auto_approved_release(self):
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        requested_at = timezone.now()
+        release_request = submit_pairing_release_request(
+            pairing_id=pairing.pk, requester=self.tutee, reason=PairingReleaseReason.SCHEDULE_CONFLICT,
+            now=requested_at,
+        )
+        self.assertEqual(process_pending_pairing_releases(now=requested_at + timedelta(hours=48, seconds=1)), 1)
+        admin = User.objects.create_superuser(username="AUTO-APPROVED-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotContains(response, reverse("tutoring:revert_pairing_release", args=[release_request.pk]))
+        with self.assertRaises(ValidationError):
+            revert_pairing_release_decision(request_id=release_request.pk, admin=admin)
 
     def test_release_request_appears_for_participant_and_admin(self):
         pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
