@@ -201,6 +201,8 @@
 
 > **2026-10-03「審核進度」卡片新增就地展開細節(使用者要求「可以點擊卡片然後顯示細節嗎」)**:「課程審核」與「課堂通報／異常回報」改成 `<details>`,點擊整行就地展開清單(不跳頁),列出每一筆的日期、對方姓名/分類、狀態,並連到對應的課程詳情頁或「異常回報」分頁。「口語能力證明」因為只有一筆文件,維持不可展開。異常回報的連結直接重用側邊欄連結已經在用的 `data-dashboard-target` 屬性,沿用既有 SPA 分頁切換 JS,不需要新寫前端程式碼。新增回歸測試 3 項,503 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 view/template/CSS 調整。詳見 `CLAUDE.md` 第 4.7 節。
 
+> **2026-10-03「審核進度」卡片與上方卡片留出間距(使用者回報「審核進度跟上方兩個卡片貼到了」)**:`.panel` 本身沒有 margin、上方的 `.overview-grid`/「我的配對」卡片也沒有 margin-bottom,`.progress-overview-panel` 緊接在後面會直接貼住。補上 `margin-top: 22px`(與 `.dashboard-grid` 自己欄位間的 `gap` 同一個數值,維持一致的垂直節奏)。純 CSS 調整,`ProgressOverviewPanelTests` 12 項、全專案 509 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

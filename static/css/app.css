@@ -1881,6 +1881,11 @@ a {
    還沒通過/還沒處理完的項目,刻意沿用 .matching-summary-panel 同一組底色,視覺上跟
    旁邊的配對概況卡片是同一家族,不是突然冒出全新風格。 */
 .progress-overview-panel {
+  /* 2026-10-03(使用者回報「審核進度跟上方兩個卡片貼到了」):.panel 本身沒有 margin,
+     上方的 .dashboard-grid/.overview-grid 也沒有 margin-bottom,這張卡片緊接在後面
+     會直接貼住——補上跟 .dashboard-grid 自己欄位間距同一個數值(22px),維持一致的
+     垂直節奏。 */
+  margin-top: 22px;
   background: linear-gradient(145deg, #fff, var(--mist));
 }
 .progress-overview-list {
