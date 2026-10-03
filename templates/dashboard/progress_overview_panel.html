@@ -1,16 +1,30 @@
 <section class="panel progress-overview-panel">
   <span class="eyebrow">PROGRESS</span>
   <h2>審核進度 <small>Review progress</small></h2>
-  {% if qualification_progress_status or pending_class_review_count or unresolved_report_count %}
+  {% if qualification_progress_status or pending_class_review_sessions or unresolved_report_items %}
     <div class="progress-overview-list">
       {% if qualification_progress_status %}
         <div class="progress-overview-row"><span>口語能力證明<small>Qualification</small></span><strong>{{ qualification_progress_status.label }}<small>{{ qualification_progress_status.label_en }}</small></strong></div>
       {% endif %}
-      {% if pending_class_review_count %}
-        <div class="progress-overview-row"><span>課程審核<small>Class review</small></span><strong>{{ pending_class_review_count }}<small>堂待處理 / pending</small></strong></div>
+      {% if pending_class_review_sessions %}
+        <details class="progress-overview-row progress-overview-expandable">
+          <summary><span>課程審核<small>Class review</small></span><strong>{{ pending_class_review_sessions|length }}<small>堂待處理 / pending</small></strong><i aria-hidden="true"></i></summary>
+          <div class="progress-overview-detail-list">
+            {% for session in pending_class_review_sessions %}
+              <a href="{% url 'tutoring:class_detail' session.pk %}"><time>{{ session.class_date|date:"m/d" }}</time><span>與 {{ session.progress_counterpart.bilingual_name }}</span><b>{{ session.progress_status_label }}</b></a>
+            {% endfor %}
+          </div>
+        </details>
       {% endif %}
-      {% if unresolved_report_count %}
-        <div class="progress-overview-row"><span>課堂通報／異常回報<small>Alerts &amp; reports</small></span><strong>{{ unresolved_report_count }}<small>筆尚未紀錄 / not logged</small></strong></div>
+      {% if unresolved_report_items %}
+        <details class="progress-overview-row progress-overview-expandable">
+          <summary><span>課堂通報／異常回報<small>Alerts &amp; reports</small></span><strong>{{ unresolved_report_items|length }}<small>筆尚未紀錄 / not logged</small></strong><i aria-hidden="true"></i></summary>
+          <div class="progress-overview-detail-list">
+            {% for item in unresolved_report_items %}
+              <a href="{{ item.url }}"{% if item.is_tab_link %} data-dashboard-target="incident-reports"{% endif %}><time>{{ item.date|date:"m/d" }}</time><span>{{ item.label }}</span></a>
+            {% endfor %}
+          </div>
+        </details>
       {% endif %}
     </div>
   {% else %}

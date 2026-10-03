@@ -1889,38 +1889,121 @@ a {
   margin-top: 16px;
 }
 .progress-overview-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 14px;
   border: 1px solid rgba(63, 114, 175, 0.16);
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.72);
 }
-.progress-overview-row > span {
+.progress-overview-row,
+.progress-overview-row > summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+}
+.progress-overview-row > span,
+.progress-overview-row > summary > span {
+  flex: 1;
+  min-width: 0;
   font-size: 0.72rem;
   font-weight: 750;
   color: var(--navy);
 }
-.progress-overview-row > span small {
+.progress-overview-row > span small,
+.progress-overview-row > summary > span small {
   display: block;
   margin-top: 2px;
   color: var(--ink-muted);
   font-size: 0.62rem;
   font-weight: 500;
 }
-.progress-overview-row > strong {
+.progress-overview-row > strong,
+.progress-overview-row > summary > strong {
   flex-shrink: 0;
   color: var(--ocean-800);
   font-size: 1.1rem;
   text-align: right;
 }
-.progress-overview-row > strong small {
+.progress-overview-row > strong small,
+.progress-overview-row > summary > strong small {
   margin-left: 4px;
   color: var(--ink-muted);
   font-size: 0.62rem;
   font-weight: 500;
+}
+/* 2026-10-03(使用者要求「可以點擊卡片然後顯示細節嗎」):課程審核/課堂通報＋異常回報
+   這兩行改用 <details> 就地展開,summary 保留跟上面一般 <div> 列完全一樣的版面
+   (靠上面共用的選擇器),這裡只額外處理展開箭頭圖示跟展開後的清單樣式。 */
+details.progress-overview-row {
+  padding: 0;
+  overflow: hidden;
+}
+details.progress-overview-row > summary {
+  cursor: pointer;
+  list-style: none;
+}
+details.progress-overview-row > summary::-webkit-details-marker {
+  display: none;
+}
+details.progress-overview-row > summary > i {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  align-self: center;
+  place-items: center;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ocean-800);
+  font-style: normal;
+  transition: transform 0.18s ease;
+}
+details.progress-overview-row > summary > i::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+details.progress-overview-row[open] > summary > i {
+  transform: rotate(180deg);
+}
+details.progress-overview-row[open] > summary {
+  border-bottom: 1px solid rgba(63, 114, 175, 0.16);
+}
+.progress-overview-detail-list {
+  display: grid;
+}
+.progress-overview-detail-list > a {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 14px;
+  color: var(--navy);
+  font-size: 0.7rem;
+  text-decoration: none;
+}
+.progress-overview-detail-list > a + a {
+  border-top: 1px solid rgba(63, 114, 175, 0.1);
+}
+.progress-overview-detail-list > a:hover {
+  background: var(--paper);
+}
+.progress-overview-detail-list > a > time {
+  flex-shrink: 0;
+  color: var(--ink-muted);
+  font-weight: 750;
+}
+.progress-overview-detail-list > a > span {
+  flex: 1;
+  min-width: 0;
+}
+.progress-overview-detail-list > a > b {
+  flex-shrink: 0;
+  color: var(--ocean-800);
+  font-size: 0.65rem;
+  font-weight: 750;
 }
 @keyframes dashboard-view-in {
   from {

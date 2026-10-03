@@ -856,24 +856,57 @@ def dashboard(request):
             start=0,
         )
         now = timezone.now()
-        # 2026-10-03(使用者要求「我的首頁」目前配對/配對概況下方新增審核進度卡片):只算
-        # 「已經結束但還不是有效成立」的課程(未結束的課堂不列入,is_official 已經涵蓋
-        # 簽到/紀錄未完成、等待雙方確認、等待管理員審核、待補正、未通過全部這幾種情況,
-        # 一旦通過就不會再被算進來)。範圍是這個人所有配對(含已結束的配對),不只目前這組,
-        # 因為剛結束配對前最後一堂課還沒走完流程時一樣需要被看見。重用上面已經算好的
-        # all_rows/is_official,不用再查一次。
-        pending_class_review_count = sum(
-            1 for session in all_rows
-            if session.status != ClassSessionStatus.CANCELLED and session.ends_at < now and not session.is_official
-        )
+        # 2026-10-03(使用者要求「我的首頁」目前配對/配對概況下方新增審核進度卡片,
+        # 隨後再要求「可以點擊卡片然後顯示細節嗎」):只算「已經結束但還不是有效成立」的
+        # 課程(未結束的課堂不列入,is_official 已經涵蓋簽到/紀錄未完成、等待雙方確認、
+        # 等待管理員審核、待補正、未通過全部這幾種情況,一旦通過就不會再被算進來)。範圍是
+        # 這個人所有配對(含已結束的配對),不只目前這組,因為剛結束配對前最後一堂課還沒
+        # 走完流程時一樣需要被看見。重用上面已經算好的 all_rows/is_official,不用再查
+        # 一次,並順便幫每一筆標上展開列表要顯示的狀態文字與對方姓名。
+        pending_class_review_sessions = []
+        for session in all_rows:
+            if session.status == ClassSessionStatus.CANCELLED or session.ends_at >= now or session.is_official:
+                continue
+            if (
+                session.my_record and session.my_attendance
+                and hasattr(session, "class_review") and session.class_review.status != ClassReviewStatus.WAITING
+            ):
+                status_label = session.class_review.get_status_display()
+            elif session.my_record and session.my_attendance:
+                status_label = "等待雙方完成 / Waiting for mutual confirmation"
+            elif session.my_attendance:
+                status_label = "待填紀錄 / Record due"
+            else:
+                status_label = "待簽到 / Check-in due"
+            session.progress_status_label = status_label
+            session.progress_counterpart = (
+                session.pairing.tutee if request.user.role == Role.TUTOR else session.pairing.tutor
+            )
+            pending_class_review_sessions.append(session)
+        pending_class_review_sessions.sort(key=lambda item: (item.class_date, item.start_time), reverse=True)
         # 課堂通報(自己通報且還是 ACTIVE)直接重用 all_rows 已經 prefetch 好的
-        # class_alerts,不用再查一次;異常回報沒有對應的 session 可以重用,另外查一次。
-        unresolved_report_count = sum(
-            1
-            for session in all_rows
-            for alert in session.class_alerts.all()
-            if alert.reporter_id == request.user.pk and alert.status == ClassAlertStatus.ACTIVE
-        ) + IncidentReport.objects.filter(reporter=request.user, status=IncidentReportStatus.PENDING).count()
+        # class_alerts,不用再查一次,點擊項目連去該堂課的詳情頁(通報本身就是在那裡
+        # 顯示/處理);異常回報沒有對應的 session 可以重用,另外查一次,點擊項目連去
+        # 「異常回報」這個既有分頁(data-dashboard-target,跟側邊欄連結同一套 SPA 切換
+        # 機制,不需要額外寫 JS)。
+        unresolved_report_items = []
+        for session in all_rows:
+            for alert in session.class_alerts.all():
+                if alert.reporter_id == request.user.pk and alert.status == ClassAlertStatus.ACTIVE:
+                    unresolved_report_items.append({
+                        "date": session.class_date,
+                        "label": f"課堂通報 · {alert.get_reason_display()}",
+                        "url": reverse("tutoring:class_detail", args=[session.pk]),
+                        "is_tab_link": False,
+                    })
+        for report in IncidentReport.objects.filter(reporter=request.user, status=IncidentReportStatus.PENDING):
+            unresolved_report_items.append({
+                "date": timezone.localtime(report.created_at).date(),
+                "label": f"異常回報 · {report.get_category_display()}",
+                "url": "#incident-reports",
+                "is_tab_link": True,
+            })
+        unresolved_report_items.sort(key=lambda item: item["date"], reverse=True)
         upcoming_cutoff = now + timedelta(days=7)
         upcoming_sessions = [session for session in rows if session.ends_at >= now and session.starts_at <= upcoming_cutoff]
         future_sessions = [session for session in rows if session.starts_at > upcoming_cutoff]
@@ -937,8 +970,8 @@ def dashboard(request):
                 "incident_report_form": StandaloneIncidentReportForm(),
                 "own_incident_reports": IncidentReport.objects.filter(reporter=request.user).prefetch_related("replies").order_by("-created_at"),
                 "release_notices": release_notices,
-                "pending_class_review_count": pending_class_review_count,
-                "unresolved_report_count": unresolved_report_count,
+                "pending_class_review_sessions": pending_class_review_sessions,
+                "unresolved_report_items": unresolved_report_items,
             }
         )
     elif request.user.role == Role.ADMIN:

@@ -3259,6 +3259,60 @@ class ProgressOverviewPanelTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, "課堂通報／異常回報<small>Alerts &amp; reports</small></span><strong>2")
 
+    def test_pending_class_review_row_expands_to_list_date_counterpart_and_status(self):
+        """2026-10-03(使用者要求「可以點擊卡片然後顯示細節嗎」):課程審核那一行改成
+        <details> 就地展開,列出每一筆待處理課程的日期、對方姓名與目前卡在哪個狀態,
+        並連到該堂課的詳情頁。"""
+        past_date = timezone.localdate() - timedelta(days=1)
+        session = self._schedule(past_date)
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn('<details class="progress-overview-row progress-overview-expandable">', content)
+        detail_url = reverse("tutoring:class_detail", args=[session.pk])
+        self.assertIn(f'<a href="{detail_url}">', content)
+        self.assertIn(f"<time>{past_date.strftime('%m/%d')}</time>", content)
+        self.assertIn(f"與 {self.tutee.bilingual_name}", content)
+        self.assertIn("待簽到 / Check-in due", content)
+
+    def test_pending_class_review_detail_shows_review_status_once_both_sides_submitted(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        session = self._schedule(past_date)
+        at = timezone.make_aware(datetime.combine(past_date, time(11, 5)))
+        check_in(session_id=session.pk, participant=self.tutor, now=at)
+        check_in(session_id=session.pk, participant=self.tutee, now=at)
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self._record_data(), now=at)
+        submit_class_record(session_id=session.pk, author=self.tutee, data=self._record_data(), now=at)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        review_class_session(session_id=session.pk, admin=self.admin, decision=ClassReviewStatus.REVISE, note="請補正")
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertIn("待補正", response.content.decode())
+
+    def test_unresolved_report_row_expands_to_list_class_alert_and_incident_report_items(self):
+        """課堂通報連去該堂課的詳情頁(純 <a href>);異常回報連去既有的「異常回報」分頁
+        (`data-dashboard-target`,跟側邊欄連結共用同一套 SPA 切換 JS,不另外寫新的)。"""
+        past_date = timezone.localdate() - timedelta(days=1)
+        session = self._schedule(past_date)
+        self._fully_approve(session, at=timezone.make_aware(datetime.combine(past_date, time(11, 5))))
+        ClassAlert.objects.create(
+            session=session, reporter=self.tutor, subject=self.tutee, reason=ClassAlertReason.ABSENT,
+            status=ClassAlertStatus.ACTIVE,
+        )
+        IncidentReport.objects.create(
+            reporter=self.tutor, category=IncidentReportCategory.OTHER, content="測試",
+            status=IncidentReportStatus.PENDING,
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        detail_url = reverse("tutoring:class_detail", args=[session.pk])
+        self.assertIn(f'<a href="{detail_url}"><time>', content)
+        self.assertIn("課堂通報 · 對方未出席", content)
+        self.assertIn('<a href="#incident-reports" data-dashboard-target="incident-reports">', content)
+        self.assertIn("異常回報 · 其他", content)
+
     def test_progress_overview_panel_shows_empty_state_when_nothing_pending(self):
         QualificationDocument.objects.create(
             tutor=self.tutor, file="q.pdf", original_filename="q.pdf", status=QualificationStatus.APPROVED,
