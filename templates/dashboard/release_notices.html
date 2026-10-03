@@ -16,6 +16,7 @@
           <p>此配對已解除，原因：{{ notice.counterpart_reason_display }}。<br>This pairing has been released (reason: {{ notice.counterpart_reason_display }}).</p>
         {% endif %}
         {% if not notice.is_sensitive_reason and notice.reason_note %}<p class="release-notice-note">{{ notice.reason_note }}</p>{% endif %}
+        {% if notice.review_note %}<p class="release-notice-note release-notice-admin-note"><strong>管理員回覆 / Admin note：</strong>{{ notice.review_note }}</p>{% endif %}
       </div>
       {% if notice.status != 'PENDING' %}
         <form action="{% url 'tutoring:acknowledge_pairing_release' notice.pk %}" method="post">{% csrf_token %}<button class="button button-secondary button-small" type="submit">我知道了 / Got it</button></form>

@@ -18,6 +18,46 @@
   </section>
 </section>
 
+<section class="dashboard-view" data-dashboard-panel="pairing-release-history">
+  <div class="view-heading"><span>RELEASE RESULTS</span><h2>解除配對結果 <small>Release results</small></h2><p>這個人涉及過的每一筆解除配對申請,不論最後是管理員人工處理還是系統自動解除,都會列在這裡。<br>Every pairing release request you've been part of — whether an administrator decided it or the system released it automatically — is listed here.</p></div>
+  <section class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>所有紀錄 <small>All records</small></h2></div></div>
+    {% if pairing_release_history_full %}
+      <div class="incident-report-list">
+        {% for item in pairing_release_history_full %}
+          <details class="incident-report-card"{% if forloop.first %} open{% endif %}>
+            <summary>
+              <span><strong>{{ item.other_party.bilingual_name }}</strong><small>{{ item.pairing.semester }} · {{ item.created_at|date:"Y-m-d H:i" }}</small></span>
+              <span class="status-badge {% if item.status == 'APPROVED' or item.status == 'AUTO_APPROVED' %}status-approved{% elif item.status == 'REJECTED' %}status-rejected{% endif %}">{{ item.get_status_display }}</span>
+              <i aria-hidden="true"></i>
+            </summary>
+            <div class="incident-report-card-body">
+              {% if item.viewer_is_requester %}
+                <p><strong>申請原因 / Reason：</strong>{{ item.get_reason_display }}</p>
+                {% if item.reason_note %}<p>{{ item.reason_note }}</p>{% endif %}
+              {% else %}
+                <p><strong>申請原因 / Reason：</strong>{{ item.counterpart_reason_display }}</p>
+                {% if not item.is_sensitive_reason and item.reason_note %}<p>{{ item.reason_note }}</p>{% endif %}
+              {% endif %}
+              {% if item.review_note %}
+                <div class="incident-report-admin-note">
+                  <span class="incident-report-admin-note-label">管理員回覆 / Admin note</span>
+                  <p>{{ item.review_note }}</p>
+                </div>
+              {% endif %}
+              {% if item.status == 'PENDING' %}
+                {% if item.auto_resolve_at %}<p><small>若管理員未處理，預計於 {{ item.auto_resolve_at|date:"Y-m-d H:i" }} 自動解除。<br>Automatic release if not reviewed by this time.</small></p>{% else %}<p><small>此原因必須由管理員完成審核。<br>This reason requires administrator review.</small></p>{% endif %}
+              {% elif item.reviewed_at %}
+                <p><small>處理時間 / Reviewed at：{{ item.reviewed_at|date:"Y-m-d H:i" }}</small></p>
+              {% endif %}
+            </div>
+          </details>
+        {% endfor %}
+      </div>
+    {% else %}<div class="empty-state">目前沒有解除配對申請紀錄。 / No pairing release requests yet.</div>{% endif %}
+  </section>
+</section>
+
 <section class="dashboard-view" data-dashboard-panel="hours">
   <div class="view-heading"><span>{% if hours_download_allowed %}TUTORING HOURS{% else %}TUTORING HISTORY{% endif %}</span><h2>{% if hours_download_allowed %}輔導時數 <small>Tutoring hours</small>{% else %}輔導紀錄 <small>Tutoring history</small>{% endif %}</h2></div>
 

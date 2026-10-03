@@ -3329,3 +3329,110 @@ class ProgressOverviewPanelTests(TestCase):
         content = response.content.decode()
         self.assertIn("課程審核<small>Class review</small></span><strong>1", content)
         self.assertNotIn("口語能力證明<small>Qualification</small>", content)
+
+
+class PairingReleaseHistoryPageTests(TestCase):
+    """2026-10-03(使用者要求「解除審核如果是人工審核，有留言也要顯示給tutor/tutee看，左側
+    欄位多一個解除配對結果，顯示所有紀錄，不管人工或自動，以及管理員給的留言」):
+    `release_notices` 只是「未讀通知」,看過一次就消失,不是完整歷史;這裡新增一個不會
+    消失的完整清單頁面,涵蓋這個人涉及的每一筆解除配對申請,不分目前狀態(PENDING/
+    APPROVED/AUTO_APPROVED/REJECTED),並顯示管理員的審核備註。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="RELHIST-ADMIN", password="Admin-password-2026")
+        self.tutor = User.objects.create_user(
+            username="RELHIST-TUTOR", password="Tutor-password-2026", role=Role.TUTOR
+        )
+        self.tutee = User.objects.create_user(
+            username="RELHIST-TUTEE", password="Tutee-password-2026", role=Role.TUTEE
+        )
+        self.semester = Semester.objects.create(
+            name_zh="RELHIST 測試學期", name_en="relhist test semester",
+            starts_on=timezone.localdate() - timedelta(days=60), ends_on=timezone.localdate() + timedelta(days=90),
+            is_active=False,
+        )
+        self.pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+
+    def test_sidebar_link_shown_for_tutor_and_tutee(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'data-dashboard-target="pairing-release-history"')
+        self.assertContains(response, "解除配對結果<small>Release results</small>")
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'data-dashboard-target="pairing-release-history"')
+
+    def test_history_lists_every_status_regardless_of_manual_or_automatic(self):
+        PairingReleaseRequest.objects.create(
+            pairing=self.pairing, requested_by=self.tutor, reason=PairingReleaseReason.SCHEDULE_CONFLICT,
+            status=PairingReleaseStatus.PENDING,
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "等待管理員處理 / Pending admin review")
+
+    def test_manual_review_note_is_shown_to_both_requester_and_counterpart(self):
+        """人工審核(APPROVED/REJECTED)留下的 review_note,不論申請人還是對方都看得到——
+        跟 reason_note 不同,review_note 是管理員自己的審核說明,不適用敏感原因遮蔽規則。"""
+        PairingReleaseRequest.objects.create(
+            pairing=self.pairing, requested_by=self.tutor, reason=PairingReleaseReason.CONDUCT,
+            reason_note="學生態度很差", status=PairingReleaseStatus.REJECTED,
+            reviewed_by=self.admin, reviewed_at=timezone.now(),
+            review_note="同學好：請用中文書寫，謝謝。",
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "同學好：請用中文書寫，謝謝。")
+        self.assertContains(response, "學生態度很差")
+
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("同學好：請用中文書寫，謝謝。", content)
+        # Counterpart still gets the sensitive-reason masking on the requester's own note.
+        self.assertNotIn("學生態度很差", content)
+
+    def test_counterpart_sees_non_sensitive_reason_note_but_not_reviewer_identity(self):
+        release = PairingReleaseRequest.objects.create(
+            pairing=self.pairing, requested_by=self.tutor, reason=PairingReleaseReason.SCHEDULE_CONFLICT,
+            reason_note="雙方時間真的對不上", status=PairingReleaseStatus.APPROVED,
+            reviewed_by=self.admin, reviewed_at=timezone.now(), review_note="已核准解除。",
+        )
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("雙方時間真的對不上", content)
+        self.assertIn("已核准解除。", content)
+        self.assertNotIn(self.admin.bilingual_name, content)
+        self.assertIn(release.reviewed_at.strftime("%Y-%m-%d"), content)
+
+    def test_auto_approved_entry_has_no_review_note_but_still_listed(self):
+        PairingReleaseRequest.objects.create(
+            pairing=self.pairing, requested_by=self.tutee, reason=PairingReleaseReason.NO_SHOW,
+            status=PairingReleaseStatus.AUTO_APPROVED, reviewed_at=timezone.now(),
+        )
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "系統自動解除 / Automatically released")
+        self.assertNotContains(response, "incident-report-admin-note-label")
+
+    def test_empty_state_when_no_release_requests_exist(self):
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "目前沒有解除配對申請紀錄。 / No pairing release requests yet.")
+
+    def test_release_notice_banner_shows_admin_review_note_to_counterpart(self):
+        """2026-09-10 就有的「配對異動通知」橫幅(只給對方看、按過一次就消失),原本完全不
+        顯示管理員的審核備註——這次一併補上,讓對方第一時間收到通知時就能看到管理員留的話,
+        不用再多點一次「解除配對結果」頁面。"""
+        PairingReleaseRequest.objects.create(
+            pairing=self.pairing, requested_by=self.tutor, reason=PairingReleaseReason.OTHER,
+            reason_note="其他敏感細節", status=PairingReleaseStatus.REJECTED,
+            reviewed_by=self.admin, reviewed_at=timezone.now(), review_note="請補充更多細節再提出申請。",
+        )
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("請補充更多細節再提出申請。", content)
+        self.assertNotIn("其他敏感細節", content)

@@ -3195,6 +3195,13 @@ td small {
 .release-notice-note {
   color: var(--ink-muted);
 }
+.release-notice-note.release-notice-admin-note {
+  color: var(--navy);
+}
+.release-notice-note.release-notice-admin-note strong {
+  color: var(--ink-muted);
+  font-weight: 700;
+}
 .release-notice-row form {
   flex-shrink: 0;
 }

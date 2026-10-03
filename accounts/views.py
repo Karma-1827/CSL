@@ -830,6 +830,21 @@ def dashboard(request):
                 )
             ).select_related("pairing__tutor", "pairing__tutee", "requested_by").order_by("-created_at")
         )
+        # 2026-10-03(使用者要求「解除審核如果是人工審核,有留言也要顯示給tutor/tutee看,
+        # 左側欄位多一個解除配對結果,顯示所有紀錄,不管人工或自動,以及管理員給的留言」):
+        # release_notices 只是「未讀通知」,只給對方看、看過一次(按「我知道了」)就消失,
+        # 不是完整歷史。這裡另外提供一份不會消失的完整清單,涵蓋這個人(不論是申請人或對方)
+        # 涉及的每一筆解除配對申請,不分目前狀態。審核備註(`review_note`)只有人工審核
+        # (APPROVED/REJECTED)才會有內容,AUTO_APPROVED 本來就是空字串,不需要額外判斷
+        # 「是否為人工審核」才顯示——有內容就顯示。
+        pairing_release_history_full = list(
+            PairingReleaseRequest.objects.filter(
+                Q(pairing__tutor=request.user) | Q(pairing__tutee=request.user)
+            ).select_related("pairing__tutor", "pairing__tutee", "pairing__semester", "requested_by").order_by("-created_at")
+        )
+        for item in pairing_release_history_full:
+            item.viewer_is_requester = item.requested_by_id == request.user.pk
+            item.other_party = item.pairing.tutee if item.pairing.tutor_id == request.user.pk else item.pairing.tutor
         participant_filter = Q(pairing__tutor=request.user) if request.user.role == Role.TUTOR else Q(pairing__tutee=request.user)
         class_sessions = ClassSession.objects.filter(participant_filter).select_related(
             "pairing__semester", "pairing__tutor", "pairing__tutee"
@@ -970,6 +985,7 @@ def dashboard(request):
                 "incident_report_form": StandaloneIncidentReportForm(),
                 "own_incident_reports": IncidentReport.objects.filter(reporter=request.user).prefetch_related("replies").order_by("-created_at"),
                 "release_notices": release_notices,
+                "pairing_release_history_full": pairing_release_history_full,
                 "pending_class_review_sessions": pending_class_review_sessions,
                 "unresolved_report_items": unresolved_report_items,
             }
