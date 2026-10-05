@@ -2153,6 +2153,62 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(session.class_review.reviewed_by, admin)
         self.assertFalse(class_is_valid(session))
 
+    def test_submit_class_record_rejects_edit_once_review_is_approved(self):
+        """2026-10-05(使用者要求「如果審核通過的課堂時數，就不能再更新，不然會有人一直
+        送」):一旦管理員審核通過,課堂紀錄不應該再能編輯——舊規則允許無限次編輯,每次都
+        會把 ClassReview 打回 WAITING 要求重新走一次互相確認+審核,等於沒有上限地重送。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="LOCK-AFTER-APPROVE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="通過")
+        now = self.aware(timezone.localdate(), time(11, 5))
+        with self.assertRaises(ValidationError):
+            submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("想偷改"), now=now)
+        # The rejected edit must not have taken effect.
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.APPROVED)
+        tutor_record = session.class_records.get(author=self.tutor)
+        self.assertEqual(tutor_record.topic, "老師紀錄")
+
+    def test_submit_class_record_still_allows_edit_after_revise_or_reject(self):
+        """只鎖 APPROVED——REJECTED/REVISE 本來就需要(或至少允許)重新編輯補正,範圍不該
+        跟著一起被鎖住。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="STILL-EDITABLE-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補照片")
+        now = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正後"), now=now)
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="未通過")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("未通過後仍可編輯"), now=now)
+
+    def test_submit_class_record_allows_edit_again_after_approval_is_reverted(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVERT-UNLOCKS-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="通過")
+        decision = session.class_review.decisions.first()
+        delete_class_review_decision(decision_id=decision.pk, admin=admin)
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        now = self.aware(timezone.localdate(), time(11, 5))
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("撤回後可以再改"), now=now)
+        tutor_record = session.class_records.get(author=self.tutor)
+        self.assertEqual(tutor_record.topic, "撤回後可以再改")
+
+    def test_class_detail_hides_record_form_once_approved(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="LOCK-UI-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="通過")
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, "課堂時數已審核通過，紀錄無法再修改")
+        self.assertNotContains(response, "更新紀錄 / Update record")
+
     def test_delete_class_review_decision_from_revise_back_to_pending(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="REVISE-REVERT-ADMIN", password="Admin-password-2026")

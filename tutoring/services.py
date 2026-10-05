@@ -1277,6 +1277,19 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
     if now < session.ends_at:
         raise ValidationError("課堂結束後才可提交課堂紀錄。 / Class records open after class ends.")
     existing = ClassRecord.objects.filter(session=session, author=author).first()
+    # 2026-10-05(使用者要求「如果審核通過的課堂時數，就不能再更新，不然會有人一直送」):
+    # 一旦管理員審核通過,課堂時數已經算入有效時數,編輯自己的紀錄不應該再把審核打回重審
+    # (舊規則允許無限次編輯,每次都會把 ClassReview 退回 WAITING 要求重新走一次互相確認
+    # +管理員審核,等於開放無上限重送)。只鎖 APPROVED——REJECTED/REVISE 本來就需要
+    # (或至少允許)重新編輯補正,不受影響。管理員若透過「撤回」把這筆決定刪除,狀態會退回
+    # PENDING,鎖定自然解除,不需要另外處理。
+    if existing:
+        review = getattr(session, "class_review", None)
+        if review and review.status == ClassReviewStatus.APPROVED:
+            raise ValidationError(
+                "審核通過的課堂紀錄無法再修改,如需更正請聯絡系辦撤回審核結果。 / "
+                "An approved class record can no longer be edited — contact the department office to revert the decision first."
+            )
     # 2026-09-16(使用者要求):很多學生在課堂還沒結束前就先填寫課堂紀錄,開放時間點從「上課
     # 後」改成「下課後」。同時把「是否算補登」的界線,從下課後 24 小時的浮動視窗,改成「上課
     # 當天 23:59:59 前」都算準時,超過當天才算補登——避免傍晚或深夜下課的課,因為 24 小時

@@ -57,7 +57,16 @@
 
         <section class="panel class-action-panel">
           <div class="panel-heading"><div><span class="eyebrow">MY RECORD</span><h2>我的課堂紀錄 <small>My class record</small></h2></div></div>
-          {% if own_record or record_window_open %}
+          {% if own_record and class_review.status == 'APPROVED' %}
+            {% comment %}
+              2026-10-05(使用者要求「如果審核通過的課堂時數，就不能再更新，不然會有人
+              一直送」):一旦管理員審核通過,課堂時數已經算入有效時數,編輯自己的紀錄會
+              把審核打回重審——改成直接不顯示表單,改顯示鎖定提示。伺服器端
+              (submit_class_record())本來就有同一道擋,這裡只是讓畫面提早反映,不需要
+              等送出才看到錯誤訊息。
+            {% endcomment %}
+            <div class="empty-state">課堂時數已審核通過，紀錄無法再修改；如需更正請聯絡系辦撤回審核結果。<br>Hours for this class have been approved — the record can no longer be edited. Contact the department office to revert the decision first.</div>
+          {% elif own_record or record_window_open %}
             <form method="post" class="stack-form" enctype="multipart/form-data">
               {% csrf_token %}
               {{ record_form.as_p }}

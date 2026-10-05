@@ -211,6 +211,8 @@
 
 > **2026-10-05 兩張歷史卡片改名並對調順序(使用者要求「編輯歷程 Edit history -> 老師/學生編輯紀錄，審核紀錄 Review history -> 管理員審核紀錄，然後老師/學生編輯紀錄在管理員審核紀錄前面」)**:`admin_class_detail.html` 的兩個標題分別改成「老師/學生編輯紀錄 <small>Teacher/student edit history</small>」與「管理員審核紀錄 <small>Admin review history</small>」,明確區分這是誰的紀錄;並把編輯紀錄卡片移到審核紀錄前面(含 WAITING 提示框與 grandfathered 完成框),理由跟因果關係一致——先看老師/學生改了什麼,才能理解管理員為什麼做出那個決定。純 template 文字與順序調整,無 model/migration/service 變更,524 項測試全數通過(其中 4 項既有測試斷言的文字已同步更新)。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-05 新規則:課堂紀錄一旦審核通過即鎖定,不可再編輯(使用者要求「如果審核通過的課堂時數，就不能再更新，不然會有人一直送」)**:原本允許無限次編輯,每次都把審核打回重審,等於沒有編輯次數上限。`submit_class_record()` 在編輯(非初次提交)且 `ClassReview.status == APPROVED` 時直接擋下,只鎖 `APPROVED`,`REVISE`(待補正)/`REJECTED`(未通過)仍可正常編輯補正,不受影響。管理員若撤回核准決定,鎖定自然解除。Tutor/Tutee 頁面提早顯示鎖定提示,不等送出才被伺服器端擋下。新增回歸測試 4 項,528 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 service/template 調整,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）
