@@ -1410,6 +1410,16 @@ def _sync_class_review(session):
 def confirm_counterpart(*, session_id, reviewer, status, note=""):
     session = ClassSession.objects.select_for_update().select_related("pairing__tutor", "pairing__tutee").get(pk=session_id)
     subject = _counterpart(session, reviewer)
+    # 2026-10-05(使用者要求「確認對方的簽到與課堂紀錄的三個按鈕也可以隱藏，只要留確認
+    # 紀錄結果就好，以防有人手癢去點」):比照 submit_class_record() 同一道鎖
+    # (ClassReview.status == APPROVED 後不可再變更),理由相同——課堂時數已經算入有效
+    # 時數,不該再被重新確認觸發任何變動。伺服器端這道擋同時也是畫面上隱藏按鈕背後真正
+    # 的把關,不只是前端不顯示而已。
+    review = getattr(session, "class_review", None)
+    if review and review.status == ClassReviewStatus.APPROVED:
+        raise ValidationError(
+            "審核通過的課堂時數無法再變更確認結果。 / Hours already approved can no longer be re-confirmed."
+        )
     if status not in ConfirmationStatus.values:
         raise ValidationError("確認狀態不正確。 / Invalid confirmation status.")
     if not Attendance.objects.filter(session=session, participant=subject).exists() or not ClassRecord.objects.filter(session=session, author=subject).exists():

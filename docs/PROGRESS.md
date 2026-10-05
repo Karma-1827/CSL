@@ -213,6 +213,8 @@
 
 > **2026-10-05 新規則:課堂紀錄一旦審核通過即鎖定,不可再編輯(使用者要求「如果審核通過的課堂時數，就不能再更新，不然會有人一直送」)**:原本允許無限次編輯,每次都把審核打回重審,等於沒有編輯次數上限。`submit_class_record()` 在編輯(非初次提交)且 `ClassReview.status == APPROVED` 時直接擋下,只鎖 `APPROVED`,`REVISE`(待補正)/`REJECTED`(未通過)仍可正常編輯補正,不受影響。管理員若撤回核准決定,鎖定自然解除。Tutor/Tutee 頁面提早顯示鎖定提示,不等送出才被伺服器端擋下。新增回歸測試 4 項,528 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 service/template 調整,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
 
+> **2026-10-05 審核通過後,「確認對方的簽到與課堂紀錄」三顆按鈕也一併鎖定(使用者要求「還有確認對方的簽到與課堂紀錄的三個按鈕也可以隱藏，只要留確認紀錄結果就好，以防有人手癢去點」)**:比照課堂紀錄的鎖定邏輯,`confirm_counterpart()` 在 `ClassReview.status == APPROVED` 時直接擋下,`templates/tutoring/class_detail.html` 整段三按鈕表單隱藏,只留「目前確認結果」唯讀顯示。管理員撤回核准後表單自動恢復。新增回歸測試 3 項,531 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,純 service/template 調整,無 model/migration 變更。詳見 `CLAUDE.md` 第 4.6 節。
+
 ## 已完成
 
 ### 2026-08-10 最新需求調整（取代下方歷史開發紀錄中的舊規則）

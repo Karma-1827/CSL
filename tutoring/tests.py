@@ -2209,6 +2209,41 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "課堂時數已審核通過，紀錄無法再修改")
         self.assertNotContains(response, "更新紀錄 / Update record")
 
+    def test_confirm_counterpart_rejects_after_approval(self):
+        """2026-10-05(使用者要求「確認對方的簽到與課堂紀錄的三個按鈕也可以隱藏，只要留
+        確認紀錄結果就好，以防有人手癢去點」):審核通過後,連「確認」動作本身也要被伺服器端
+        擋下,不只是前端不顯示按鈕。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="LOCK-CONFIRM-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="通過")
+        with self.assertRaises(ValidationError):
+            confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+
+    def test_confirm_counterpart_allowed_again_after_approval_is_reverted(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVERT-CONFIRM-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="通過")
+        decision = session.class_review.decisions.first()
+        delete_class_review_decision(decision_id=decision.pk, admin=admin)
+        session.class_review.refresh_from_db()
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
+
+    def test_class_detail_hides_confirm_buttons_but_keeps_result_once_approved(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="LOCK-CONFIRM-UI-ADMIN", password="Admin-password-2026")
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.APPROVED, note="通過")
+        self.client.force_login(self.tutor)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        content = response.content.decode()
+        # "確認無誤 / Confirm" is a prefix of own_confirmation's own display text
+        # ("確認無誤 / Confirmed"), so assert on the button markup itself rather than
+        # that label text to avoid a false positive against the kept result line below.
+        self.assertNotIn('name="status" value="CONFIRMED"', content)
+        self.assertNotIn('name="status" value="REVISION"', content)
+        self.assertNotIn('name="status" value="ISSUE"', content)
+        self.assertIn("目前確認結果", content)
+
     def test_delete_class_review_decision_from_revise_back_to_pending(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="REVISE-REVERT-ADMIN", password="Admin-password-2026")
