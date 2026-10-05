@@ -1925,6 +1925,76 @@ class ClassWorkflowTests(TestCase):
             1,
         )
 
+    def test_submit_class_record_creates_revision_snapshot_on_first_save(self):
+        """2026-10-05(使用者要求「重新送審時列出 tutor/tutee 所有編輯/更新內容,前後都要,
+        這樣比較好對比」):每次成功儲存課堂紀錄,連第一次建立也要留一筆快照,否則第一筆
+        沒有「前一版」可比對時,畫面上反而完全看不到最初版本是什麼。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        record = submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("第一版紀錄"), now=normal_now
+        )
+        self.assertEqual(record.revisions.count(), 1)
+        self.assertEqual(record.revisions.first().topic, "第一版紀錄")
+
+    def test_submit_class_record_appends_revision_on_edit_without_deleting_old_one(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("第一版紀錄"), now=normal_now
+        )
+        record = submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("第二版紀錄"), now=normal_now
+        )
+        self.assertEqual(record.revisions.count(), 2)
+        topics = [rev.topic for rev in record.revisions.all()]
+        self.assertEqual(topics, ["第二版紀錄", "第一版紀錄"])  # ordered newest first
+
+    def test_admin_class_detail_shows_edit_history_card_with_both_versions_for_comparison(self):
+        """核心場景(使用者實際回報):助教審了兩次通過,學生每次通過後又偷偷改了課堂紀錄,
+        助教完全看不出改了什麼。編輯歷程卡片要能同時列出改之前跟改之後的完整內容。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        submit_class_record(
+            session_id=session.pk, author=self.tutee, data=self.record_data("學生初次送出的內容"), now=normal_now
+        )
+        submit_class_record(
+            session_id=session.pk, author=self.tutee, data=self.record_data("學生偷偷改過的內容"), now=normal_now
+        )
+        admin = User.objects.create_superuser(username="REVISION-CARD-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        content = response.content.decode()
+        self.assertIn("編輯歷程 <small>Edit history</small>", content)
+        self.assertIn("學生初次送出的內容", content)
+        self.assertIn("學生偷偷改過的內容", content)
+        self.assertIn("學生 <small>Student</small>", content)
+        # Only the tutee submitted a record — the teacher's column has nothing to show.
+        self.assertNotIn("老師 <small>Teacher</small>", content)
+
+    def test_admin_class_detail_omits_edit_history_card_when_nobody_has_submitted_a_record(self):
+        class_date = timezone.localdate() + timedelta(days=1)
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(timezone.localdate(), time(9)),
+        )[0]
+        admin = User.objects.create_superuser(username="NO-RECORD-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertNotContains(response, "編輯歷程 <small>Edit history</small>")
+
     def test_admin_class_detail_shows_confirmation_result_with_status_color_class(self):
         """2026-09-15(使用者要求):Admin 的課堂審核介面(admin_record_card.html)原本的
         「確認結果」不論狀態一律套用同一個中性樣式,使用者要求跟 Tutor/Tutee 端(2026-09-15

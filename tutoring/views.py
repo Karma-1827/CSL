@@ -651,6 +651,11 @@ def class_detail(request, pk):
         tutee_confirmation = next(
             (row for row in session.confirmations.all() if row.subject_id == session.pairing.tutee_id), None
         )
+        # 2026-10-05(使用者要求「重新送審時列出 tutor/tutee 所有編輯/更新內容,前後都要,
+        # 這樣比較好對比」):ClassRecordRevision 的 Meta.ordering 已經是 -created_at,
+        # 所以這裡直接照順序取出即可,最新一筆會是清單第一筆。
+        tutor_record_revisions = list(tutor_record.revisions.all()) if tutor_record else []
+        tutee_record_revisions = list(tutee_record.revisions.all()) if tutee_record else []
         class_review = getattr(session, "class_review", None)
         class_review_history = list(class_review.decisions.all()) if class_review else []
         # 2026-10-02(使用者要求「如果是待補正重新送審后，在審核中多一個標籤：已補正＋
@@ -687,6 +692,8 @@ def class_detail(request, pk):
                 # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):
                 # 完整審核歷程,不受 ClassReview 本身重置/撤回影響,見 ClassReviewDecision。
                 "class_review_history": class_review_history,
+                "tutor_record_revisions": tutor_record_revisions,
+                "tutee_record_revisions": tutee_record_revisions,
                 "revise_resubmitted_at": revise_resubmitted_at,
                 "is_valid_class": class_is_valid(session),
             },

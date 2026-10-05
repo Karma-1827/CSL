@@ -3820,6 +3820,26 @@ td small {
 .class-review-block {
   margin-top: 18px;
 }
+.class-record-revision-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .class-record-revision-columns {
+    grid-template-columns: 1fr;
+  }
+}
+.class-record-revision-column h3 {
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 0.78rem;
+}
+.class-record-revision-list {
+  display: grid;
+  gap: 10px;
+}
 .back-link {
   display: inline-flex;
   margin-bottom: 15px;

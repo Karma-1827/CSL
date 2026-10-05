@@ -1,0 +1,25 @@
+<div class="class-record-revision-column">
+  <h3>{{ heading }} <small>{{ heading_en }}</small></h3>
+  <div class="class-record-revision-list">
+    {% for rev in revisions %}
+      <details class="incident-report-card"{% if forloop.first %} open{% endif %}>
+        <summary>
+          <span><strong>{{ rev.created_at|date:"Y-m-d H:i" }}</strong></span>
+          {% if forloop.first %}<span class="status-badge status-approved">最新 / Latest</span>{% endif %}
+          <i aria-hidden="true"></i>
+        </summary>
+        <div class="incident-report-card-body admin-record-section">
+          <dl>
+            <div><dt>上課地點 / Location</dt><dd>{{ rev.location }}</dd></div>
+            <div><dt>本次教學目標 / Teaching goal</dt><dd>{{ rev.topic }}</dd></div>
+            <div class="wide"><dt>本日教學範圍與完整流程 / Teaching scope and complete process</dt><dd>{{ rev.content|linebreaksbr }}</dd></div>
+            <div class="wide"><dt>使用之教材、教具及設備 / Materials and equipment used</dt><dd>{{ rev.materials_used|linebreaksbr }}</dd></div>
+            <div class="wide"><dt>個別學習情形 / Individual learning progress</dt><dd>{{ rev.individual_progress|linebreaksbr }}</dd></div>
+            {% if rev.remarks %}<div class="wide"><dt>心得回饋或改善方法 / Reflections and improvement methods</dt><dd>{{ rev.remarks|linebreaksbr }}</dd></div>{% endif %}
+            {% if rev.evidence_links %}<div class="wide"><dt>佐證連結 / Evidence links</dt><dd><div class="evidence-link-view-list">{% for link in rev.evidence_links %}<a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a>{% endfor %}</div></dd></div>{% endif %}
+          </dl>
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+</div>

@@ -30,6 +30,7 @@ from .models import (
     ClassAlertStatus,
     ClassDocument,
     ClassRecord,
+    ClassRecordRevision,
     ClassReview,
     ClassReviewDecision,
     ClassReviewStatus,
@@ -1296,6 +1297,21 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
         session=session,
         author=author,
         defaults={**data, "is_makeup": existing.is_makeup if existing else is_makeup, "makeup_reason": existing.makeup_reason if existing else reason.strip()},
+    )
+    # 2026-10-05(使用者要求「重新送審時列出 tutor/tutee 所有編輯/更新內容,前後都要,這樣
+    # 比較好對比」):每次成功儲存(含第一次建立)都留一筆快照,而不是只在「編輯」時才存——
+    # 這樣畫面上把連續兩筆快照放在一起比對,就能看出最初版本跟後來改了什麼,不需要額外的
+    # diff 邏輯或另外處理「第一筆沒有前一版可比」的特殊情況。
+    ClassRecordRevision.objects.create(
+        record=record,
+        author=author,
+        location=record.location,
+        topic=record.topic,
+        content=record.content,
+        materials_used=record.materials_used,
+        individual_progress=record.individual_progress,
+        remarks=record.remarks,
+        evidence_links=record.evidence_links,
     )
     if existing:
         # Editing a record after it already has a review decision invalidates that

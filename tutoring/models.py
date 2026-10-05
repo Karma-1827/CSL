@@ -709,6 +709,30 @@ class ClassRecord(models.Model):
         return self.original_attachment_filename or Path(self.attachment.name).name
 
 
+class ClassRecordRevision(models.Model):
+    """2026-10-05(使用者回報助教困惑:同一堂課被要求重新審核兩次,不知道學生到底改了什麼):
+    append-only 的課堂紀錄編輯快照,比照 `ClassReviewDecision` 同一種「目前欄位會被覆蓋,
+    需要另一張表才能回溯歷程」的做法——`ClassRecord` 本身每次編輯都是 `update_or_create()`
+    直接覆寫,`submit_class_record()` 每次成功儲存(含第一次建立)都會在這裡多留一筆當時
+    的完整內容快照,畫面上把連續兩筆快照放在一起就能看出「編輯前/編輯後」差在哪裡,不需要
+    額外的 diff 邏輯。只從部署後開始累積,部署前已經發生的編輯歷程無法回溯(跟
+    `ClassReviewDecision` 的既有限制一致)。"""
+
+    record = models.ForeignKey(ClassRecord, on_delete=models.CASCADE, related_name="revisions")
+    author = models.ForeignKey(User, on_delete=models.PROTECT, related_name="class_record_revisions")
+    location = models.CharField(max_length=150)
+    topic = models.CharField(max_length=200)
+    content = models.TextField(max_length=500)
+    materials_used = models.TextField(max_length=200, blank=True, default="")
+    individual_progress = models.TextField(max_length=500, blank=True, default="")
+    remarks = models.TextField(max_length=500, blank=True)
+    evidence_links = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class ConfirmationStatus(models.TextChoices):
     CONFIRMED = "CONFIRMED", "確認無誤 / Confirmed"
     REVISION = "REVISION", "請對方修改 / Revision requested"

@@ -8,6 +8,7 @@ from .models import (
     ClassAlert,
     ClassDocument,
     ClassRecord,
+    ClassRecordRevision,
     ClassReview,
     ClassReviewDecision,
     ClassSession,
@@ -138,6 +139,12 @@ class ClassReviewAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
 class ClassReviewDecisionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ("review", "status", "reviewed_by", "created_at")
     list_filter = ("status",)
+
+
+@admin.register(ClassRecordRevision)
+class ClassRecordRevisionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ("record", "author", "created_at")
+    list_filter = ("author__role",)
 
 
 @admin.register(ClassAlert)
