@@ -25,6 +25,29 @@
     </div>
 
     {% comment %}
+      2026-10-05(使用者回報助教困惑「助教審了兩次通過，他今天還在等待管理員審核」,查明
+      是學生在兩次通過之間又編輯了課堂紀錄,但畫面上完全看不出改了什麼):新增編輯歷程卡片,
+      放在審核決定表單正上方。原本列出每一次儲存的完整內容快照,使用者隨後要求「只要顯示
+      更新的個欄位，第一次填寫就不用顯示，這樣看起來才不會亂亂的」——改用
+      class_record_revision_diffs() 算好的差異清單(見 tutoring/views.py),只列出相鄰兩版
+      之間真的變動的欄位,且天然排除第一次填寫(沒有更早版本可以比較)。只從這個功能上線
+      後才開始累積,上線前已發生的編輯歷程無法回溯。**2026-10-05 當天使用者接著要求把
+      標題改成明確區分「這是老師/學生改的」跟下方「管理員審核紀錄」,並把這張卡片移到
+      審核紀錄前面**——放在前面的理由很直覺:要先看老師/學生改了什麼,才能理解下面管理員
+      為什麼做出那個審核決定,順序跟因果關係一致。
+    {% endcomment %}
+    {% if tutor_record_diffs or tutee_record_diffs %}
+      <section class="panel class-review-block">
+        <div class="panel-heading"><div><span class="eyebrow">EDITS</span><h2>老師/學生編輯紀錄 <small>Teacher/student edit history</small></h2></div></div>
+        <p class="help-text">只列出老師／學生重新編輯課堂紀錄時真的變動過的欄位,第一次填寫不會出現在這裡。<br>Only fields a teacher or student actually changed on a later edit are listed — the first-time submission isn't shown.</p>
+        <div class="class-record-revision-columns">
+          {% if tutor_record_diffs %}{% include "tutoring/class_record_revision_column.html" with heading="老師" heading_en="Teacher" diffs=tutor_record_diffs %}{% endif %}
+          {% if tutee_record_diffs %}{% include "tutoring/class_record_revision_column.html" with heading="學生" heading_en="Student" diffs=tutee_record_diffs %}{% endif %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% comment %}
       2026-10-02(使用者回報卡片緊貼在一起):.panel 本身沒有 margin,.admin-record-grid 也
       沒有 margin-bottom,下面四個審核相關區塊原本只有 PENDING 決定表單那一個(靠
       .admin-review-decision)有 margin-top,其餘三種狀態都會緊貼在上方的提交資料卡片上。
@@ -32,7 +55,7 @@
     {% endcomment %}
     {% if class_review_history %}
       <section class="panel class-review-block">
-        <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>審核紀錄 <small>Review history</small></h2></div></div>
+        <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>管理員審核紀錄 <small>Admin review history</small></h2></div></div>
         <ul class="incident-report-reply-list">
           {% for entry in class_review_history %}
             <li class="incident-report-reply-item class-review-history-item">
@@ -71,26 +94,6 @@
            fix, matching this app's existing stance on rare edge cases (e.g. HourAdjustment). -->
       <section class="panel class-review-block">
         <div class="completion-box"><strong>{{ class_review.get_status_display }}</strong>{% if class_review.review_note %}<span>{{ class_review.review_note }}</span>{% endif %}{% if class_review.reviewed_at %}<small>{{ class_review.reviewed_at|date:"Y-m-d H:i" }}</small>{% endif %}</div>
-      </section>
-    {% endif %}
-
-    {% comment %}
-      2026-10-05(使用者回報助教困惑「助教審了兩次通過，他今天還在等待管理員審核」,查明
-      是學生在兩次通過之間又編輯了課堂紀錄,但畫面上完全看不出改了什麼):新增編輯歷程卡片,
-      放在審核決定表單正上方。原本列出每一次儲存的完整內容快照,使用者隨後要求「只要顯示
-      更新的個欄位，第一次填寫就不用顯示，這樣看起來才不會亂亂的」——改用
-      class_record_revision_diffs() 算好的差異清單(見 tutoring/views.py),只列出相鄰兩版
-      之間真的變動的欄位,且天然排除第一次填寫(沒有更早版本可以比較)。只從這個功能上線
-      後才開始累積,上線前已發生的編輯歷程無法回溯。
-    {% endcomment %}
-    {% if tutor_record_diffs or tutee_record_diffs %}
-      <section class="panel class-review-block">
-        <div class="panel-heading"><div><span class="eyebrow">EDITS</span><h2>編輯歷程 <small>Edit history</small></h2></div></div>
-        <p class="help-text">只列出老師／學生重新編輯課堂紀錄時真的變動過的欄位,第一次填寫不會出現在這裡。<br>Only fields a teacher or student actually changed on a later edit are listed — the first-time submission isn't shown.</p>
-        <div class="class-record-revision-columns">
-          {% if tutor_record_diffs %}{% include "tutoring/class_record_revision_column.html" with heading="老師" heading_en="Teacher" diffs=tutor_record_diffs %}{% endif %}
-          {% if tutee_record_diffs %}{% include "tutoring/class_record_revision_column.html" with heading="學生" heading_en="Student" diffs=tutee_record_diffs %}{% endif %}
-        </div>
       </section>
     {% endif %}
 

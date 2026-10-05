@@ -2025,13 +2025,13 @@ class ClassWorkflowTests(TestCase):
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         content = response.content.decode()
-        self.assertIn("編輯歷程 <small>Edit history</small>", content)
+        self.assertIn("老師/學生編輯紀錄 <small>Teacher/student edit history</small>", content)
         self.assertIn("學生初次送出的教學目標", content)
         self.assertIn("學生偷偷改過的教學目標", content)
         self.assertIn("學生 <small>Student</small>", content)
         # Only the tutee submitted a record — the teacher's column has nothing to show.
         self.assertNotIn("老師 <small>Teacher</small>", content)
-        edit_history_section = content[content.index("編輯歷程 <small>Edit history</small>"):]
+        edit_history_section = content[content.index("老師/學生編輯紀錄 <small>Teacher/student edit history</small>"):]
         self.assertIn("本次教學目標 / Teaching goal", edit_history_section)
         # location/content/etc. weren't touched between the two saves, so they must not
         # show up as a changed field inside the edit history card specifically (the raw
@@ -2051,7 +2051,7 @@ class ClassWorkflowTests(TestCase):
         admin = User.objects.create_superuser(username="FIRST-SUBMIT-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertNotContains(response, "編輯歷程 <small>Edit history</small>")
+        self.assertNotContains(response, "老師/學生編輯紀錄 <small>Teacher/student edit history</small>")
 
     def test_admin_class_detail_omits_edit_history_card_when_nobody_has_submitted_a_record(self):
         class_date = timezone.localdate() + timedelta(days=1)
@@ -2062,7 +2062,7 @@ class ClassWorkflowTests(TestCase):
         admin = User.objects.create_superuser(username="NO-RECORD-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertNotContains(response, "編輯歷程 <small>Edit history</small>")
+        self.assertNotContains(response, "老師/學生編輯紀錄 <small>Teacher/student edit history</small>")
 
     def test_admin_class_detail_shows_confirmation_result_with_status_color_class(self):
         """2026-09-15(使用者要求):Admin 的課堂審核介面(admin_record_card.html)原本的
