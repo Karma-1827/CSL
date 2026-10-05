@@ -73,6 +73,7 @@ from .services import (
     cancel_class_alert,
     cancel_invitation,
     class_is_valid,
+    class_record_revision_diffs,
     confirm_counterpart,
     create_admin_pairing,
     create_matching_exclusion,
@@ -1958,9 +1959,56 @@ class ClassWorkflowTests(TestCase):
         topics = [rev.topic for rev in record.revisions.all()]
         self.assertEqual(topics, ["第二版紀錄", "第一版紀錄"])  # ordered newest first
 
-    def test_admin_class_detail_shows_edit_history_card_with_both_versions_for_comparison(self):
+    def test_class_record_revision_diffs_excludes_the_initial_submission(self):
+        """2026-10-05(使用者要求「只要顯示更新的個欄位，第一次填寫就不用顯示，這樣看起來
+        才不會亂亂的」):初次填寫沒有更早的版本可以比較,不算「更新」,不應該出現在
+        diff 清單裡。"""
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        record = submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("第一版紀錄"), now=normal_now
+        )
+        self.assertEqual(class_record_revision_diffs(record), [])
+
+    def test_class_record_revision_diffs_only_lists_the_fields_that_actually_changed(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        data = self.record_data("原始教學目標")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=data, now=normal_now)
+        edited = dict(data)
+        edited["topic"] = "修改後教學目標"
+        record = submit_class_record(session_id=session.pk, author=self.tutor, data=edited, now=normal_now)
+        diffs = class_record_revision_diffs(record)
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(
+            diffs[0]["changes"],
+            [{"label": "本次教學目標 / Teaching goal", "old": "原始教學目標", "new": "修改後教學目標"}],
+        )
+
+    def test_class_record_revision_diffs_skips_a_resave_with_no_actual_change(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        data = self.record_data("不變的教學目標")
+        submit_class_record(session_id=session.pk, author=self.tutor, data=data, now=normal_now)
+        record = submit_class_record(session_id=session.pk, author=self.tutor, data=dict(data), now=normal_now)
+        self.assertEqual(class_record_revision_diffs(record), [])
+
+    def test_admin_class_detail_edit_history_card_shows_only_the_changed_field(self):
         """核心場景(使用者實際回報):助教審了兩次通過,學生每次通過後又偷偷改了課堂紀錄,
-        助教完全看不出改了什麼。編輯歷程卡片要能同時列出改之前跟改之後的完整內容。"""
+        助教完全看不出改了什麼。編輯歷程卡片要同時列出改之前跟改之後的值,但只限真的
+        變動過的欄位——這個案例裡只有「本次教學目標」不同,其餘欄位不應該重複列出。"""
         class_date = timezone.localdate()
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
@@ -1968,21 +2016,42 @@ class ClassWorkflowTests(TestCase):
         )[0]
         normal_now = self.aware(class_date, time(11, 5))
         submit_class_record(
-            session_id=session.pk, author=self.tutee, data=self.record_data("學生初次送出的內容"), now=normal_now
+            session_id=session.pk, author=self.tutee, data=self.record_data("學生初次送出的教學目標"), now=normal_now
         )
         submit_class_record(
-            session_id=session.pk, author=self.tutee, data=self.record_data("學生偷偷改過的內容"), now=normal_now
+            session_id=session.pk, author=self.tutee, data=self.record_data("學生偷偷改過的教學目標"), now=normal_now
         )
         admin = User.objects.create_superuser(username="REVISION-CARD-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         content = response.content.decode()
         self.assertIn("編輯歷程 <small>Edit history</small>", content)
-        self.assertIn("學生初次送出的內容", content)
-        self.assertIn("學生偷偷改過的內容", content)
+        self.assertIn("學生初次送出的教學目標", content)
+        self.assertIn("學生偷偷改過的教學目標", content)
         self.assertIn("學生 <small>Student</small>", content)
         # Only the tutee submitted a record — the teacher's column has nothing to show.
         self.assertNotIn("老師 <small>Teacher</small>", content)
+        edit_history_section = content[content.index("編輯歷程 <small>Edit history</small>"):]
+        self.assertIn("本次教學目標 / Teaching goal", edit_history_section)
+        # location/content/etc. weren't touched between the two saves, so they must not
+        # show up as a changed field inside the edit history card specifically (the raw
+        # "老師/學生提交資料" cards above it still show every field, unrelated to this).
+        self.assertNotIn("上課地點 / Location", edit_history_section)
+
+    def test_admin_class_detail_omits_edit_history_card_when_record_was_only_submitted_once(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        normal_now = self.aware(class_date, time(11, 5))
+        submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("唯一一版"), now=normal_now
+        )
+        admin = User.objects.create_superuser(username="FIRST-SUBMIT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertNotContains(response, "編輯歷程 <small>Edit history</small>")
 
     def test_admin_class_detail_omits_edit_history_card_when_nobody_has_submitted_a_record(self):
         class_date = timezone.localdate() + timedelta(days=1)

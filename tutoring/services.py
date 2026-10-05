@@ -1340,6 +1340,41 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
     return record
 
 
+CLASS_RECORD_DIFF_FIELDS = [
+    ("location", "上課地點 / Location"),
+    ("topic", "本次教學目標 / Teaching goal"),
+    ("content", "本日教學範圍與完整流程 / Teaching scope and complete process"),
+    ("materials_used", "使用之教材、教具及設備 / Materials and equipment used"),
+    ("individual_progress", "個別學習情形 / Individual learning progress"),
+    ("remarks", "心得回饋或改善方法 / Reflections and improvement methods"),
+    ("evidence_links", "佐證連結 / Evidence links"),
+]
+
+
+def class_record_revision_diffs(record):
+    """2026-10-05(使用者要求「只要顯示更新的欄位，第一次填寫就不用顯示，這樣看起來才
+    不會亂亂的」):`ClassRecordRevision.objects.all()`(見 `submit_class_record()`)是
+    每次儲存的完整內容快照,不是 diff——這裡把連續兩筆快照相減,只留下真的有變動的欄位,
+    且**跳過最早那一筆**(沒有更早的版本可以比較,不算「更新」,是初次填寫)。相鄰兩筆
+    內容完全相同(極少見,例如重新送出但什麼都沒改)時這筆也不會出現在結果裡,因為沒有
+    任何欄位真的變動。回傳依時間新到舊排序(與 `.revisions.all()` 既有排序一致)。"""
+    revisions = list(record.revisions.all())
+    diffs = []
+    for newer, older in zip(revisions, revisions[1:]):
+        changes = []
+        for field, label in CLASS_RECORD_DIFF_FIELDS:
+            old_value = getattr(older, field)
+            new_value = getattr(newer, field)
+            if field == "evidence_links":
+                old_value = "\n".join(old_value)
+                new_value = "\n".join(new_value)
+            if old_value != new_value:
+                changes.append({"label": label, "old": old_value, "new": new_value})
+        if changes:
+            diffs.append({"created_at": newer.created_at, "changes": changes})
+    return diffs
+
+
 def _sync_class_review(session):
     """Keep the session's ClassReview status in step with mutual confirmation.
 

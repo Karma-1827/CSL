@@ -3840,6 +3840,50 @@ td small {
   display: grid;
   gap: 10px;
 }
+.class-record-diff-field {
+  margin-bottom: 14px;
+}
+.class-record-diff-field:last-child {
+  margin-bottom: 0;
+}
+.class-record-diff-field > strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--navy);
+  font-size: 0.72rem;
+}
+.class-record-diff-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.class-record-diff-before,
+.class-record-diff-after {
+  padding: 8px 10px;
+  border-radius: 9px;
+}
+.class-record-diff-before {
+  background: var(--danger-soft);
+}
+.class-record-diff-after {
+  background: var(--success-soft);
+}
+.class-record-diff-before > span,
+.class-record-diff-after > span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink-muted);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+.class-record-diff-before > p,
+.class-record-diff-after > p {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.68rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 .back-link {
   display: inline-flex;
   margin-bottom: 15px;

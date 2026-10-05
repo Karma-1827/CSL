@@ -77,17 +77,19 @@
     {% comment %}
       2026-10-05(使用者回報助教困惑「助教審了兩次通過，他今天還在等待管理員審核」,查明
       是學生在兩次通過之間又編輯了課堂紀錄,但畫面上完全看不出改了什麼):新增編輯歷程卡片,
-      放在審核決定表單正上方,列出老師/學生每一次儲存課堂紀錄時的完整內容快照(見
-      ClassRecordRevision),相鄰兩筆放在一起就能比對出改了什麼,不需要額外的 diff 邏輯。
-      只從這個功能上線後才開始累積,上線前已發生的編輯歷程無法回溯。
+      放在審核決定表單正上方。原本列出每一次儲存的完整內容快照,使用者隨後要求「只要顯示
+      更新的個欄位，第一次填寫就不用顯示，這樣看起來才不會亂亂的」——改用
+      class_record_revision_diffs() 算好的差異清單(見 tutoring/views.py),只列出相鄰兩版
+      之間真的變動的欄位,且天然排除第一次填寫(沒有更早版本可以比較)。只從這個功能上線
+      後才開始累積,上線前已發生的編輯歷程無法回溯。
     {% endcomment %}
-    {% if tutor_record_revisions or tutee_record_revisions %}
+    {% if tutor_record_diffs or tutee_record_diffs %}
       <section class="panel class-review-block">
         <div class="panel-heading"><div><span class="eyebrow">EDITS</span><h2>編輯歷程 <small>Edit history</small></h2></div></div>
-        <p class="help-text">依時間列出老師／學生每一次儲存課堂紀錄時的完整內容,相鄰兩筆可用來比對變動。<br>Every save a teacher or student made to their class record, in order — compare two adjacent entries to see what changed.</p>
+        <p class="help-text">只列出老師／學生重新編輯課堂紀錄時真的變動過的欄位,第一次填寫不會出現在這裡。<br>Only fields a teacher or student actually changed on a later edit are listed — the first-time submission isn't shown.</p>
         <div class="class-record-revision-columns">
-          {% if tutor_record_revisions %}{% include "tutoring/class_record_revision_column.html" with heading="老師" heading_en="Teacher" revisions=tutor_record_revisions %}{% endif %}
-          {% if tutee_record_revisions %}{% include "tutoring/class_record_revision_column.html" with heading="學生" heading_en="Student" revisions=tutee_record_revisions %}{% endif %}
+          {% if tutor_record_diffs %}{% include "tutoring/class_record_revision_column.html" with heading="老師" heading_en="Teacher" diffs=tutor_record_diffs %}{% endif %}
+          {% if tutee_record_diffs %}{% include "tutoring/class_record_revision_column.html" with heading="學生" heading_en="Student" diffs=tutee_record_diffs %}{% endif %}
         </div>
       </section>
     {% endif %}
