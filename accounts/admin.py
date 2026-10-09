@@ -11,6 +11,8 @@ from .models import (
     Announcement,
     AuditLog,
     DepartmentOralExamPass,
+    OralExamAnnouncement,
+    OralExamRegistration,
     PartnerProgram,
     Role,
     RosterEntry,
@@ -184,6 +186,24 @@ class AnnouncementAdmin(admin.ModelAdmin):
     list_display = ("__str__", "display_order", "is_active", "created_by", "updated_at")
     list_filter = ("is_active",)
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(OralExamAnnouncement)
+class OralExamAnnouncementAdmin(admin.ModelAdmin):
+    """2026-10-06:與前台「線上口語考試」頁籤並存(比照 4.10/4.11 節既有慣例),供
+    superuser 例外訂正用。全站只會有一筆資料。"""
+
+    list_display = ("__str__", "exam_date", "registration_deadline", "is_published", "updated_by", "updated_at")
+    readonly_fields = ("updated_at",)
+
+
+@admin.register(OralExamRegistration)
+class OralExamRegistrationAdmin(admin.ModelAdmin):
+    """2026-10-06:與前台「線上口語考試」頁籤裡的報名清單並存,供 superuser 例外查詢用。"""
+
+    list_display = ("tutor", "exam_date", "time_slot_1", "time_slot_2", "time_slot_3", "submitted_at", "review_status")
+    list_filter = ("exam_date", "review_status")
+    readonly_fields = ("submitted_at", "updated_at")
 
 
 @admin.register(SecurityQuestionAnswer)

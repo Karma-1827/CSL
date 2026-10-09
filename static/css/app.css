@@ -283,6 +283,55 @@ a {
   font-size: 0.75rem;
   white-space: pre-line;
 }
+.oral-exam-text {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 0.92rem;
+  line-height: 1.8;
+}
+.oral-exam-highlight {
+  color: var(--danger);
+  font-weight: 800;
+}
+.oral-exam-attachment-years {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.oral-exam-time-select-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.oral-exam-time-select-group > select {
+  width: auto;
+  min-width: 0;
+  flex: 0 1 72px;
+}
+.oral-exam-capacity-badge {
+  margin: 0;
+  flex-shrink: 0;
+}
+.oral-exam-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.oral-exam-attachment-list a,
+.oral-exam-attachment-list span {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+.oral-exam-attachment-list span {
+  color: var(--ink-muted);
+}
 .field-error {
   display: flex;
   align-items: flex-start;
@@ -2190,6 +2239,33 @@ details.progress-overview-row[open] > summary {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  margin-bottom: 20px;
+}
+.collapsible-panel > summary.panel-heading {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+.collapsible-panel > summary.panel-heading::-webkit-details-marker {
+  display: none;
+}
+.collapsible-panel > summary.panel-heading::after {
+  content: "▾";
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--ocean-800);
+  background: var(--ocean-100);
+  font-size: 0.9rem;
+  font-weight: 850;
+  flex-shrink: 0;
+}
+.collapsible-panel[open] > summary.panel-heading::after {
+  content: "▴";
+}
+.collapsible-panel[open] > summary.panel-heading {
   margin-bottom: 20px;
 }
 .panel h2 {

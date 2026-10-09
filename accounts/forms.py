@@ -1,5 +1,5 @@
 from django import forms
-from datetime import timedelta
+from datetime import time, timedelta
 
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth import password_validation
@@ -24,6 +24,8 @@ from .models import (
     DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
+    OralExamAnnouncement,
+    OralExamRegistration,
     RegistrationDraft,
     Role,
     RosterEntry,
@@ -964,3 +966,127 @@ class AnnouncementForm(forms.ModelForm):
         # 系辦公告,比照全站雙語 UI 的既有慣例,中英文皆為必填(不同於 4.9/4.6 節列出的
         # 其餘「使用者自由填寫的備註類」欄位刻意維持單一語言)。
         self.fields["content_en"].required = True
+
+
+class OralExamAnnouncementForm(forms.ModelForm):
+    class Meta:
+        model = OralExamAnnouncement
+        fields = [
+            "exam_date", "registration_deadline",
+            "attachment_year_1", "attachment_year_2", "attachment_year_3",
+        ]
+        widgets = {
+            "exam_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "registration_deadline": forms.DateTimeInput(
+                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
+            ),
+            "attachment_year_1": forms.NumberInput(attrs={"placeholder": "2024"}),
+            "attachment_year_2": forms.NumberInput(attrs={"placeholder": "2025"}),
+            "attachment_year_3": forms.NumberInput(attrs={"placeholder": "2026"}),
+        }
+        labels = {
+            "exam_date": "考試日期 / Exam date",
+            "registration_deadline": "報名截止時間 / Registration deadline",
+            "attachment_year_1": "附件年份 1 / Attachment year 1",
+            "attachment_year_2": "附件年份 2 / Attachment year 2",
+            "attachment_year_3": "附件年份 3 / Attachment year 3",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+        # 2026-10-06:比照 SemesterSettingsForm 既有的教訓,HTML5 datetime-local 的值要
+        # 明確設定 input_formats 才認得瀏覽器送回來的 "%Y-%m-%dT%H:%M" 字串,否則編輯
+        # 既有紀錄時這欄會顯示空白(瀏覽器認不出 Django 預設 locale 格式)。
+        self.fields["registration_deadline"].input_formats = ["%Y-%m-%dT%H:%M"]
+        # 2026-10-06(使用者要求「附件年份，可以輸入三個年份」):三組年份各自選填,不是
+        # 「有填第一組才能填第二組」這種連續性要求——Admin 可能只有 1 或 2 年的歷年
+        # 考題,不強迫三格都填。
+        for field_name in ["attachment_year_1", "attachment_year_2", "attachment_year_3"]:
+            self.fields[field_name].required = False
+
+
+class OralExamTimeSlotWidget(forms.MultiWidget):
+    """2026-10-06(使用者先要求「時段選擇限制在8-17點」,接著要求「選時段的分鐘，能不能
+    只列0、5、10、15、20...55」):比照既有 `tutoring/forms.py::FiveMinuteTimeWidget`
+    的小時+分鐘兩個 `<select>` 做法(不是原生 `<input type="time">`,那個只能靠
+    min/max/step 這幾個瀏覽器行為不一致的屬性做,不如下拉選單直接把合法選項列出來
+    直覺),但小時只列 8–16(口試時間限 8:00–17:00,最後一個時段最晚從 16:30 開始,
+    17 點整不可能是合法的開始時間,所以不放進下拉選單)。**這仍然只是前端操作上的
+    限制**:小時=16 時,分鐘下拉選單還是會列出 35/40/.../55 這些會讓時段超過 17:00
+    的選項(兩個 `<select>` 彼此獨立,沒辦法依小時動態篩選分鐘選項),真正的邊界把關
+    在 `OralExamRegistrationForm.clean()`。"""
+
+    def __init__(self, attrs=None):
+        widgets = (
+            forms.Select(choices=[(f"{hour:02d}", f"{hour:02d}") for hour in range(8, 17)], attrs={"aria-label": "小時 / Hour"}),
+            forms.Select(choices=[(f"{minute:02d}", f"{minute:02d}") for minute in range(0, 60, 5)], attrs={"aria-label": "分鐘 / Minute"}),
+        )
+        super().__init__(widgets, attrs)
+
+    def decompress(self, value):
+        if isinstance(value, time):
+            return [f"{value.hour:02d}", f"{value.minute:02d}"]
+        if isinstance(value, str) and ":" in value:
+            hour, minute = value.split(":", 1)
+            return [hour.zfill(2), minute[:2].zfill(2)]
+        return ["08", "00"]
+
+
+class OralExamTimeSlotField(forms.MultiValueField):
+    widget = OralExamTimeSlotWidget
+
+    def __init__(self, *args, **kwargs):
+        fields = (forms.IntegerField(min_value=8, max_value=16), forms.IntegerField(min_value=0, max_value=55))
+        super().__init__(fields=fields, require_all_fields=True, *args, **kwargs)
+
+    def compress(self, values):
+        if not values or len(values) != 2:
+            raise ValidationError("請選擇可口試時段。 / Select an available time slot.")
+        hour, minute = values
+        if minute % 5:
+            raise ValidationError("分鐘須為 5 分鐘的倍數。 / Minutes must use five-minute increments.")
+        return time(hour, minute)
+
+
+class OralExamRegistrationForm(forms.ModelForm):
+    """Tutor 報名線上口語考試用的表單(2026-10-06 新增,使用者要求「選3個時間段」+
+    「上傳檔案(繳費紀錄)」)。三個時段改用 `OralExamTimeSlotField`(小時+分鐘兩個
+    `<select>`,見上方),不是原生 `<input type="time">`;小時下拉已經限制在 8–16,
+    分鐘已經限制在 0/5/10/.../55,但這些都只是前端操作上的限制,`clean()` 仍會在
+    伺服器端重新檢查範圍(最後一個時段最晚從 16:30 開始)與三個時段是否互不相同,
+    不能只靠前端限制。"""
+
+    time_slot_1 = OralExamTimeSlotField(label="可口試時段 1 / Available time slot 1")
+    time_slot_2 = OralExamTimeSlotField(label="可口試時段 2 / Available time slot 2")
+    time_slot_3 = OralExamTimeSlotField(label="可口試時段 3 / Available time slot 3")
+
+    class Meta:
+        model = OralExamRegistration
+        fields = ["time_slot_1", "time_slot_2", "time_slot_3", "payment_proof"]
+        labels = {
+            "payment_proof": "繳費紀錄 / Payment proof",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        add_form_classes(self)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        slots = [cleaned_data.get(f"time_slot_{i}") for i in (1, 2, 3)]
+        if not all(slots):
+            return cleaned_data
+        # 2026-10-06(公告原文「口試時間限8-17時之間，請至少告知3個30分鐘時段」):小時
+        # 範圍(8–16)跟分鐘的 5 分鐘間隔已經由 OralExamTimeSlotField 自己擋下,這裡只
+        # 剩「小時=16 時,分鐘超過 30 會讓這 30 分鐘的時段跨過 17:00」這個下拉選單
+        # 擋不住的邊界情況需要另外檢查。
+        for slot in slots:
+            if slot > time(16, 30):
+                raise ValidationError(
+                    "時段須在 8:00–17:00 之間（最後一個時段最晚從 16:30 開始）。 / "
+                    "Time slots must fall between 8:00 and 17:00 (the last slot must start by 16:30)."
+                )
+        if len(set(slots)) != 3:
+            raise ValidationError("請選擇三個不同的時段。 / Please choose three distinct time slots.")
+        return cleaned_data

@@ -32,6 +32,38 @@ urlpatterns = [
     path("announcements/<int:pk>/save/", views.save_announcement, name="update_announcement"),
     path("announcements/<int:pk>/delete/", views.delete_announcement, name="delete_announcement"),
     path("announcements/mark-read/", views.mark_announcements_read, name="mark_announcements_read"),
+    path("oral-exam-announcement/save/", views.save_oral_exam_announcement, name="save_oral_exam_announcement"),
+    path(
+        "oral-exam-announcement/attachment/download/",
+        views.download_oral_exam_attachment,
+        name="download_oral_exam_attachment",
+    ),
+    path(
+        "oral-exam-registration/submit/",
+        views.submit_oral_exam_registration,
+        name="submit_oral_exam_registration",
+    ),
+    path(
+        "oral-exam-registration/<int:pk>/payment-proof/download/",
+        views.download_oral_exam_payment_proof,
+        name="download_oral_exam_payment_proof",
+    ),
+    path(
+        "oral-exam-registration/<int:pk>/review/",
+        views.review_oral_exam_registration,
+        name="review_oral_exam_registration",
+    ),
+    path(
+        "oral-exam-registration/<int:pk>/revert/",
+        views.revert_oral_exam_registration,
+        name="revert_oral_exam_registration",
+    ),
+    path("oral-exam-registration/schedule/", views.schedule_oral_exam, name="schedule_oral_exam"),
+    path(
+        "oral-exam-registration/<int:pk>/meet-link/save/",
+        views.save_oral_exam_meet_link,
+        name="save_oral_exam_meet_link",
+    ),
     path(
         "dashboard/mark-read/<str:section>/",
         views.mark_dashboard_section_read,

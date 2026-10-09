@@ -305,3 +305,151 @@
     <div class="empty-state">目前沒有任何公告。 / No announcements yet.</div>
   {% endif %}
 </section>
+
+<section class="dashboard-view" data-dashboard-panel="oral-exam">
+  <div class="view-heading"><span>ORAL EXAM</span><h2>線上口語考試 <small>Online oral exam</small></h2><p>師大外籍生計畫(NTNU)專用；填好考試日期與報名截止時間後按「發佈完整內容」，Tutor 側就會看到完整公告。只保留目前這一次設定，下次填寫會直接覆蓋舊的。<br>NTNU-program only — fill in the exam date and registration deadline, then publish to show the full announcement to teachers. Only the current round is kept; saving again overwrites it.</p></div>
+  <details class="panel collapsible-panel" open>
+    <summary class="panel-heading"><div><span class="eyebrow">SETUP</span><h2>設定線上口試時間 <small>Set exam schedule</small></h2></div></summary>
+    <form action="{% url 'accounts:save_oral_exam_announcement' %}" method="post" enctype="multipart/form-data" class="stack-form">
+      {% csrf_token %}
+      <label>{{ oral_exam_form.exam_date.label }}{{ oral_exam_form.exam_date }}</label>
+      <label>{{ oral_exam_form.registration_deadline.label }}{{ oral_exam_form.registration_deadline }}</label>
+      <div class="oral-exam-attachment-years">
+        <label>{{ oral_exam_form.attachment_year_1.label }}{{ oral_exam_form.attachment_year_1 }}</label>
+        <label>{{ oral_exam_form.attachment_year_2.label }}{{ oral_exam_form.attachment_year_2 }}</label>
+        <label>{{ oral_exam_form.attachment_year_3.label }}{{ oral_exam_form.attachment_year_3 }}</label>
+      </div>
+      <label>歷年試題檔案（三個年份合併成一份檔案，只是列在公告文字裡的說明） / Attachment file (one combined file covering all the years above, listed in the announcement text)<input type="file" name="attachment_file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png"></label>
+      {% if oral_exam_announcement.attachment_file %}
+        <p class="help-text">目前已上傳：{{ oral_exam_announcement.attachment_filename }}。這次若不選新檔案，會維持現有檔案不變；選了新檔案則直接取代。<br>Currently uploaded: {{ oral_exam_announcement.attachment_filename }}. Leaving the file picker empty keeps it as-is; selecting a new file replaces it.</p>
+      {% endif %}
+      <div class="inline-actions">
+        <button class="button button-primary" type="submit" name="action" value="publish">發佈完整內容 / Publish</button>
+        {% if oral_exam_announcement.is_published %}<button class="button button-secondary" type="submit" name="action" value="unpublish">取消發佈 / Unpublish</button>{% endif %}
+      </div>
+    </form>
+  </details>
+  {% if oral_exam_announcement %}
+    <details class="panel collapsible-panel" open>
+      <summary class="panel-heading"><div><span class="eyebrow">{% if oral_exam_announcement.is_published %}PUBLISHED{% else %}DRAFT{% endif %}</span><h2>完整內容預覽 <small>{% if oral_exam_announcement.is_published %}已發佈，Tutor 現在看得到 / Published — visible to teachers now{% else %}尚未發佈，Tutor 還看不到 / Not yet published — teachers can't see this yet{% endif %}</small></h2></div></summary>
+      {% comment %}
+        2026-10-09:`full_text` 本身已經是 `format_html()`/`mark_safe()` 產生的安全
+        HTML(含紅字粗體/粗體標籤),刻意不套用 `linebreaksbr`——那個 filter 會把這裡
+        的 `<strong>`/`<span>` 標籤逃脫成看得到標籤符號的純文字。
+      {% endcomment %}
+      <p class="oral-exam-text">{{ oral_exam_announcement.full_text }}</p>
+      {% if oral_exam_announcement.attachment_file %}
+        <div class="oral-exam-attachment-list">
+          <a href="{% url 'accounts:download_oral_exam_attachment' %}" target="_blank" rel="noopener">歷年試題附件 / Exam papers attachment（{{ oral_exam_announcement.attachment_filename }}）</a>
+        </div>
+      {% endif %}
+    </details>
+    <details class="panel collapsible-panel" open>
+      <summary class="panel-heading"><div><span class="eyebrow">REGISTRATIONS</span><h2>報名清單 <small>Registrations</small></h2></div></summary>
+      {% if oral_exam_registrations %}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>老師 / Teacher</th><th>可口試時段 / Available time slots</th><th>繳費紀錄 / Payment proof</th><th>報名時間 / Submitted at</th><th>登記 / Confirmed</th></tr></thead>
+            <tbody>
+              {% for registration in oral_exam_registrations %}
+                <tr>
+                  <td><a href="{% url 'accounts:admin_user_profile' registration.tutor_id %}"><strong>{{ registration.tutor.bilingual_name }}</strong></a><small>{{ registration.tutor.username }}</small></td>
+                  <td>{% for slot_range in registration.time_slot_ranges %}{{ slot_range }}{% if not forloop.last %}、{% endif %}{% endfor %}</td>
+                  <td><a href="{% url 'accounts:download_oral_exam_payment_proof' registration.pk %}" target="_blank" rel="noopener">{{ registration.payment_proof_filename }}</a></td>
+                  <td>{{ registration.submitted_at|date:"Y-m-d H:i" }}</td>
+                  <td>
+                    {% if registration.is_confirmed %}
+                      <span class="result-text status-approved">已登記 / Confirmed</span><small>{{ registration.reviewed_by.bilingual_name }} · {{ registration.reviewed_at|date:"Y-m-d H:i" }}</small>
+                      {% if registration.review_note %}<p class="help-text">{{ registration.review_note }}</p>{% endif %}
+                      <form action="{% url 'accounts:revert_oral_exam_registration' registration.pk %}" method="post" data-confirm="確定要撤回這筆登記嗎？老師會重新可以修改報名內容。 / Revert this confirmation? The teacher will be able to edit their registration again.">{% csrf_token %}<button class="button button-small button-secondary" type="submit">撤回 / Revert</button></form>
+                    {% elif registration.needs_revision %}
+                      <span class="result-text status-rejected">補件 / Needs revision</span><small>{{ registration.reviewed_by.bilingual_name }} · {{ registration.reviewed_at|date:"Y-m-d H:i" }}</small>
+                      {% if registration.review_note %}<p class="help-text">{{ registration.review_note }}</p>{% endif %}
+                      <form action="{% url 'accounts:revert_oral_exam_registration' registration.pk %}" method="post" data-confirm="確定要撤回這個補件要求嗎？ / Revert this request?">{% csrf_token %}<button class="button button-small button-secondary" type="submit">撤回 / Revert</button></form>
+                    {% else %}
+                      <form action="{% url 'accounts:review_oral_exam_registration' registration.pk %}" method="post" class="stack-form">
+                        {% csrf_token %}
+                        <input type="text" name="note" placeholder="留言（選填） / Note (optional)">
+                        <div class="inline-actions">
+                          <button class="button button-small button-success" type="submit" name="action" value="confirm">登記 / Confirm</button>
+                          <button class="button button-small button-secondary" type="submit" name="action" value="revise">補件 / Needs revision</button>
+                        </div>
+                      </form>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">目前沒有人報名。 / No registrations yet.</div>
+      {% endif %}
+    </details>
+    {% comment %}
+      2026-10-07(使用者要求「下方新增一個卡片「考試名單」，會先有一個按鈕「按排考試」，
+      然後把已登記的tutor，根據他們的時間組合排列...考試順序，每位只有10分鐘考試時間，
+      所以可以抓15分鐘一人這樣排下來」):按「安排考試」後由
+      `accounts/services.py::schedule_oral_exam_registrations()` 把目前所有已登記
+      報名排出互不衝突的考試時間(每人 15 分鐘一格,10 分鐘考試+5 分鐘緩衝),這裡只
+      顯示排出結果,不提供編輯——要調整順序請改時段或重新按一次「安排考試」整批重算。
+    {% endcomment %}
+    <details class="panel collapsible-panel" open>
+      <summary class="panel-heading"><div><span class="eyebrow">EXAM SCHEDULE</span><h2>考試名單 <small>Exam schedule</small></h2></div></summary>
+      <form action="{% url 'accounts:schedule_oral_exam' %}" method="post" class="inline-actions">
+        {% csrf_token %}
+        <button class="button button-primary" type="submit">安排考試 / Schedule exam</button>
+      </form>
+      {% if oral_exam_scheduled_registrations %}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>學號 / Student ID</th><th>姓名 / Name</th><th>Email</th><th>考試時間 / Exam time</th><th>順序 / Order</th><th>視訊連結 / Meeting link</th><th>口語能力審核 / Oral proficiency review</th></tr></thead>
+            <tbody>
+              {% for registration in oral_exam_scheduled_registrations %}
+                <tr>
+                  <td>{{ registration.tutor.username }}</td>
+                  <td><a href="{% url 'accounts:admin_user_profile' registration.tutor_id %}">{{ registration.tutor.bilingual_name }}</a></td>
+                  <td>{{ registration.tutor.email }}</td>
+                  <td>{{ registration.exam_time|time:"H:i" }}</td>
+                  <td>{{ registration.exam_order }}</td>
+                  <td>
+                    {% if registration.meet_link %}<a href="{{ registration.meet_link }}" target="_blank" rel="noopener">加入會議 / Join</a>{% endif %}
+                    <form action="{% url 'accounts:save_oral_exam_meet_link' registration.pk %}" method="post" class="inline-actions">
+                      {% csrf_token %}
+                      <input type="url" name="meet_link" value="{{ registration.meet_link }}" placeholder="https://meet.google.com/...">
+                      <button class="button button-small button-secondary" type="submit">儲存 / Save</button>
+                    </form>
+                  </td>
+                  <td>
+                    {% comment %}
+                      2026-10-09(使用者要求「口語是否通過（手動作業，如果按通過就代表口語
+                      能力證明直接通過，如果未通過就是口語能力證明未通過）」):直接重用既有
+                      的 `accounts:review_qualification` view(帶 `next=oral-exam` 導回這個
+                      分頁),不是另外做一個獨立的「口試結果」欄位——按下去真的就是在改這位
+                      Tutor 的口語能力證明審核狀態。
+                    {% endcomment %}
+                    {% with doc=registration.tutor.qualification %}
+                      {% if doc %}
+                        <span class="result-text status-{{ doc.status|lower }}">{{ doc.get_status_display }}</span>
+                        <form action="{% url 'accounts:review_qualification' doc.pk %}" method="post" class="inline-actions">
+                          {% csrf_token %}
+                          <input type="hidden" name="next" value="oral-exam">
+                          <button class="button button-small button-success" type="submit" name="action" value="approve">通過 / Pass</button>
+                          <button class="button button-small button-danger" type="submit" name="action" value="reject">未通過 / Fail</button>
+                        </form>
+                      {% else %}
+                        <span class="help-text">尚未上傳口語能力證明。 / No document uploaded yet.</span>
+                      {% endif %}
+                    {% endwith %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">尚未安排考試順序。 / Exam schedule hasn't been arranged yet.</div>
+      {% endif %}
+    </details>
+  {% endif %}
+</section>

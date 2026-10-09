@@ -2,6 +2,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass, field
+from datetime import time
 
 import openpyxl
 from django.contrib.sessions.models import Session
@@ -14,6 +15,8 @@ from .models import (
     DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
+    OralExamRegistration,
+    OralExamRegistrationReviewStatus,
     PartnerProgram,
     Role,
     RosterEntry,
@@ -454,3 +457,99 @@ def count_online_users():
         if session.get_decoded().get("_auth_user_id"):
             count += 1
     return count
+
+
+def _oral_exam_candidate_minutes(registration, *, exam_minutes, step_minutes):
+    """2026-10-07(使用者要求「根據他們的時間組合排列...考試順序」):每個報名都有三個
+    各 30 分鐘的可口試時段(`time_slot_1/2/3`),但實際口試只要 10 分鐘——這裡算出在
+    每個 30 分鐘時段內,排在 `step_minutes`(15 分鐘)間隔格線上、且留得下一次完整
+    10 分鐘考試的起始時間(以「從午夜算起的分鐘數」表示,方便後面排程比較大小)。
+    30 分鐘的時段剛好可以切出 2 個這種起始點(時段開始、時段開始+15 分鐘);
+    時段開始+30 分鐘那一點因為考完會超出時段範圍,不計入。"""
+    candidates = []
+    for slot in registration.time_slots:
+        window_start = slot.hour * 60 + slot.minute
+        window_end = window_start + 30
+        offset = 0
+        while window_start + offset + exam_minutes <= window_end:
+            candidates.append(window_start + offset)
+            offset += step_minutes
+    return sorted(set(candidates))
+
+
+def _oral_exam_try_assign(reg_pk, candidates_by_registration, minute_to_slot_index, match_for_slot, visited):
+    """標準的 Kuhn's algorithm augmenting-path 寫法:幫 `reg_pk` 這筆報名找一個還沒
+    被佔用、或可以把原本佔用者挪到別的候選時間(遞迴嘗試)的考試時間格。資料量(確認
+    報名的 Tutor 數)在本專案的實際使用情境下頂多幾十筆,這種 O(V·E) 寫法已經足夠,
+    不需要更複雜的演算法。"""
+    for minute in candidates_by_registration[reg_pk]:
+        slot_index = minute_to_slot_index[minute]
+        if slot_index in visited:
+            continue
+        visited.add(slot_index)
+        occupant_pk = match_for_slot.get(slot_index)
+        if occupant_pk is None or _oral_exam_try_assign(
+            occupant_pk, candidates_by_registration, minute_to_slot_index, match_for_slot, visited,
+        ):
+            match_for_slot[slot_index] = reg_pk
+            return True
+    return False
+
+
+def schedule_oral_exam_registrations(exam_date, *, exam_minutes=10, step_minutes=15):
+    """2026-10-07 新增(使用者要求「下方新增一個卡片「考試名單」，會先有一個按鈕
+    「按排考試」，然後把已登記的tutor，根據他們的時間組合排列...考試順序，每位只有
+    10分鐘考試時間，所以可以抓15分鐘一人這樣排下來」)。只排已登記
+    (`review_status=CONFIRMED`)的報名——還沒登記的 Admin 根本沒核對過,不該排進
+    考試名單。
+
+    把每筆報名的三個候選時段展開成多個 15 分鐘間隔的候選考試起始時間
+    (`_oral_exam_candidate_minutes()`),再用 Kuhn's algorithm 求「報名 ↔ 候選時間」
+    的最大二分匹配(bipartite matching)——這能找到一組「每人一個相異考試時間,且落在
+    該人自己申報的可口試時段內」的排法,是這類「每人有多個可用時段、需要互不重疊地
+    排出一個時間給每個人」問題的標準解法,比單純依送出時間或時段起始時間「先搶先贏」
+    的貪婪排法更能避免原本其實排得出來、卻因為搶位順序不對而漏排的情況。
+
+    成功排入的報名,依考試時間先後給 `exam_order`(1 起算);真的排不進去的(例如
+    候選時段嚴重撞車到無法兩全)`exam_time`/`exam_order` 都留空。每次呼叫都會重算
+    「目前所有已登記報名」並整批覆寫,不是疊加——比照本功能一路以來「只保留目前這次
+    結果」的既有慣例(見 `OralExamAnnouncement`/報名本身重新送出覆蓋同一筆的設計)。
+
+    回傳 `(scheduled, unscheduled)`,分別是已排入(依考試時間排序)與排不進去的
+    `OralExamRegistration` queryset 轉成的 list,方便呼叫端顯示結果或警示訊息。
+    """
+    registrations = list(
+        OralExamRegistration.objects.filter(
+            exam_date=exam_date, review_status=OralExamRegistrationReviewStatus.CONFIRMED,
+        ).select_related("tutor").order_by("pk")
+    )
+    candidates_by_registration = {}
+    all_minutes = set()
+    for registration in registrations:
+        candidates = _oral_exam_candidate_minutes(registration, exam_minutes=exam_minutes, step_minutes=step_minutes)
+        candidates_by_registration[registration.pk] = candidates
+        all_minutes.update(candidates)
+    sorted_minutes = sorted(all_minutes)
+    minute_to_slot_index = {minute: index for index, minute in enumerate(sorted_minutes)}
+
+    match_for_slot = {}
+    for registration in registrations:
+        _oral_exam_try_assign(registration.pk, candidates_by_registration, minute_to_slot_index, match_for_slot, set())
+    slot_index_for_registration = {reg_pk: slot_index for slot_index, reg_pk in match_for_slot.items()}
+
+    for registration in registrations:
+        slot_index = slot_index_for_registration.get(registration.pk)
+        if slot_index is None:
+            registration.exam_time = None
+        else:
+            total_minutes = sorted_minutes[slot_index]
+            registration.exam_time = time(total_minutes // 60 % 24, total_minutes % 60)
+        registration.exam_order = None
+
+    scheduled = sorted((r for r in registrations if r.exam_time is not None), key=lambda r: r.exam_time)
+    unscheduled = [r for r in registrations if r.exam_time is None]
+    for order, registration in enumerate(scheduled, start=1):
+        registration.exam_order = order
+
+    OralExamRegistration.objects.bulk_update(registrations, ["exam_time", "exam_order"])
+    return scheduled, unscheduled

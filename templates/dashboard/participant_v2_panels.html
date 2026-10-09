@@ -18,6 +18,114 @@
   </section>
 </section>
 
+{% if is_ntnu_tutor %}
+<section class="dashboard-view" data-dashboard-panel="oral-exam">
+  <div class="view-heading"><span>ORAL EXAM</span><h2>線上口語考試 <small>Online oral exam</small></h2></div>
+  <section class="panel">
+    {% if oral_exam_announcement %}
+      {% comment %}
+        2026-10-09(使用者要求「每次安排考試最多20人...歷年考試檔案下方，多一個標籤，
+        顯示目前報名人數（X/20）」,接著澄清「他們都已經繳費了，所以我才說要從報名
+        人數開始擋」,當天又要求「這個放在卡片右上角好了，還沒滿上線就用綠色背景，
+        滿上線就用紅色」):算的是「已送出報名」的總數,不分 PENDING/NEEDS_REVISION/
+        CONFIRMED——報名時就要求繳費,送出就代表已經付過這筆名額的費用。改成
+        `.panel-heading` 的第二個子元素,比照全站既有的「放第二個子元素就會自動靠右」
+        慣例(`.panel-heading` 本來就是 `flex`+`space-between`),不需要另外寫定位
+        樣式;顏色直接沿用既有的 `.status-badge`+`.status-approved`(綠)/
+        `.status-rejected`(紅),只新增 `.oral-exam-capacity-badge` 把 `.status-badge`
+        全站預設的不對稱 `margin` 歸零(這組 badge 疊在 flex row 裡,保留預設 margin
+        會跟標題文字對不齊,是這次改版前就已經踩過好幾次的同一個坑)。
+      {% endcomment %}
+      <div class="panel-heading">
+        <div><span class="eyebrow">{% if oral_exam_announcement.is_registration_open %}OPEN{% else %}CLOSED{% endif %}</span><h2>{% if oral_exam_announcement.is_registration_open %}報名開放中 <small>Registration open</small>{% else %}報名已截止 <small>Registration closed</small>{% endif %}</h2></div>
+        <span class="status-badge oral-exam-capacity-badge {% if oral_exam_registration_full %}status-rejected{% else %}status-approved{% endif %}">目前報名人數（{{ oral_exam_registered_count }}/{{ oral_exam_max_registrations }}） / Current registrations ({{ oral_exam_registered_count }}/{{ oral_exam_max_registrations }})</span>
+      </div>
+      {% comment %}
+        2026-10-09:`full_text` 本身已經是 `format_html()`/`mark_safe()` 產生的安全
+        HTML(含紅字粗體/粗體標籤),刻意不套用 `linebreaksbr`——那個 filter 會把這裡
+        的 `<strong>`/`<span>` 標籤逃脫成看得到標籤符號的純文字。
+      {% endcomment %}
+      <p class="oral-exam-text">{{ oral_exam_announcement.full_text }}</p>
+      {% if oral_exam_announcement.attachment_file %}
+        <div class="oral-exam-attachment-list">
+          <a href="{% url 'accounts:download_oral_exam_attachment' %}" target="_blank" rel="noopener">歷年試題附件 / Exam papers attachment</a>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">目前沒有線上口語考試公告。 / No oral exam announcement right now.</div>
+    {% endif %}
+  </section>
+  {% if my_oral_exam_registration.is_confirmed %}
+    {% comment %}
+      2026-10-07(使用者要求「如果admin檢查可以，狀態就顯示已登記，然後tutor介面就不能
+      再更改時間段了」):管理員登記後,不論報名本身是否還在開放期間內,都改成唯讀顯示,
+      不再出現可編輯的表單——伺服器端 `submit_oral_exam_registration()` 本來就會擋下
+      已登記的更新,這裡只是讓畫面提早反映,避免老師填好要送出才被擋下。
+    {% endcomment %}
+    <section class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">CONFIRMED</span><h2>我的報名 <small>My registration</small></h2></div></div>
+      <p class="help-text">管理員已完成登記核對，時段與繳費紀錄無法再修改。<br>An administrator has confirmed this registration — the time slots and payment proof can no longer be changed.</p>
+      <div class="counterpart-record-grid">
+        <div><span>可口試時段 / Available time slots</span><strong>{{ my_oral_exam_registration.time_slot_1|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_2|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_3|time:"H:i" }}</strong></div>
+        <div><span>繳費紀錄 / Payment proof</span><strong>{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
+      </div>
+    </section>
+  {% elif oral_exam_announcement.is_registration_open and oral_exam_registration_full and not my_oral_exam_registration %}
+    {% comment %}
+      2026-10-09(使用者要求「已經滿了先停止報名（無法打開報名的卡片）」):只擋還沒
+      送出過報名的 Tutor——已經有自己報名紀錄的人(不論 PENDING/NEEDS_REVISION)不受
+      影響,維持走下面可編輯表單的分支,因為他們不是在跟別人搶名額。
+    {% endcomment %}
+    <section class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">FULL</span><h2>報名已額滿 <small>Registration full</small></h2></div></div>
+      <p class="help-text">本次口語考試報名人數已達上限（{{ oral_exam_max_registrations }} 人），暫停開放新報名。<br>Registration has reached the cap ({{ oral_exam_max_registrations }}) — new sign-ups are paused.</p>
+    </section>
+  {% elif oral_exam_announcement.is_registration_open %}
+    <section class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">{% if my_oral_exam_registration.needs_revision %}REVISION{% elif my_oral_exam_registration %}SUBMITTED{% else %}REGISTER{% endif %}</span><h2>{% if my_oral_exam_registration %}我的報名 <small>My registration</small>{% else %}立即報名 <small>Register now</small>{% endif %}</h2></div></div>
+      {% if my_oral_exam_registration.needs_revision %}
+        {% comment %}
+          2026-10-07(使用者要求「「補件」按鈕和可以紀錄留言」):管理員要求補件後仍讓
+          表單可編輯(跟「已登記」的鎖定不同),這裡把管理員留的話顯示出來,讓老師知道
+          要補什麼。
+        {% endcomment %}
+        <div class="alert-active-box">
+          <span>管理員要求補件 / Admin requested additional documents</span>
+          {% if my_oral_exam_registration.review_note %}<p>{{ my_oral_exam_registration.review_note }}</p>{% endif %}
+        </div>
+      {% endif %}
+      <form action="{% url 'accounts:submit_oral_exam_registration' %}" method="post" enctype="multipart/form-data" class="stack-form">
+        {% csrf_token %}
+        <div class="oral-exam-attachment-years">
+          <label>{{ oral_exam_registration_form.time_slot_1.label }}<span class="oral-exam-time-select-group">{{ oral_exam_registration_form.time_slot_1 }}</span></label>
+          <label>{{ oral_exam_registration_form.time_slot_2.label }}<span class="oral-exam-time-select-group">{{ oral_exam_registration_form.time_slot_2 }}</span></label>
+          <label>{{ oral_exam_registration_form.time_slot_3.label }}<span class="oral-exam-time-select-group">{{ oral_exam_registration_form.time_slot_3 }}</span></label>
+        </div>
+        <label>{{ oral_exam_registration_form.payment_proof.label }}{{ oral_exam_registration_form.payment_proof }}</label>
+        {% if my_oral_exam_registration %}<p class="help-text">目前繳費紀錄：{{ my_oral_exam_registration.payment_proof_filename }}。不重新選檔案會維持原檔案。<br>Current payment proof: {{ my_oral_exam_registration.payment_proof_filename }}. Leaving the file picker empty keeps it as-is.</p>{% endif %}
+        <button class="button button-primary" type="submit">{% if my_oral_exam_registration %}更新報名 / Update registration{% else %}送出報名 / Submit registration{% endif %}</button>
+      </form>
+      {% if my_oral_exam_registration %}<p class="help-text">已於 {{ my_oral_exam_registration.submitted_at|date:"Y-m-d H:i" }} 送出，可在報名截止前修改。<br>Submitted at {{ my_oral_exam_registration.submitted_at|date:"Y-m-d H:i" }} — you can update it until registration closes.</p>{% endif %}
+    </section>
+  {% elif my_oral_exam_registration %}
+    <section class="panel">
+      <div class="panel-heading"><div><span class="eyebrow">SUBMITTED</span><h2>我的報名 <small>My registration</small></h2></div></div>
+      <p class="help-text">報名已截止，以下是您送出的報名內容。<br>Registration has closed. Here is what you submitted.</p>
+      {% if my_oral_exam_registration.needs_revision and my_oral_exam_registration.review_note %}
+        <div class="alert-active-box">
+          <span>管理員要求補件 / Admin requested additional documents</span>
+          <p>{{ my_oral_exam_registration.review_note }}</p>
+        </div>
+      {% endif %}
+      <div class="counterpart-record-grid">
+        <div><span>可口試時段 / Available time slots</span><strong>{{ my_oral_exam_registration.time_slot_1|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_2|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_3|time:"H:i" }}</strong></div>
+        <div><span>繳費紀錄 / Payment proof</span><strong>{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
+      </div>
+    </section>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="dashboard-view" data-dashboard-panel="pairing-release-history">
   <div class="view-heading"><span>RELEASE RESULTS</span><h2>解除配對結果 <small>Release results</small></h2><p>這個人涉及過的每一筆解除配對申請,不論最後是管理員人工處理還是系統自動解除,都會列在這裡。<br>Every pairing release request you've been part of — whether an administrator decided it or the system released it automatically — is listed here.</p></div>
   <section class="panel">

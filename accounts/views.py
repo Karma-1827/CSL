@@ -11,6 +11,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.core.validators import URLValidator
 from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
@@ -42,6 +43,7 @@ from tutoring.models import (
     HourAdjustment,
     IncidentReport,
     IncidentReportStatus,
+    validate_class_document_file,
 )
 from tutoring.forms import (
     AdminMatchingExclusionForm,
@@ -87,7 +89,9 @@ from .forms import (
     AnnouncementForm,
     BilingualAuthenticationForm,
     BilingualSetPasswordForm,
+    OralExamAnnouncementForm,
     OralExamPassListImportForm,
+    OralExamRegistrationForm,
     QualificationUploadForm,
     client_ip,
     RecoveryLookupForm,
@@ -106,6 +110,10 @@ from .models import (
     DashboardReadState,
     DashboardSection,
     DepartmentOralExamPass,
+    OralExamAnnouncement,
+    OralExamRegistration,
+    ORAL_EXAM_MAX_REGISTRATIONS,
+    OralExamRegistrationReviewStatus,
     PartnerProgram,
     RegistrationDraft,
     Role,
@@ -122,6 +130,7 @@ from .services import (
     import_roster_ids,
     roster_template_csv_bytes,
     roster_template_xlsx_bytes,
+    schedule_oral_exam_registrations,
 )
 from .throttle import any_throttled, clear_throttles, register_failures
 
@@ -406,6 +415,28 @@ def dashboard(request):
         announcement_rows = list(Announcement.objects.order_by("display_order", "-created_at"))
         for row in announcement_rows:
             row.edit_form = AnnouncementForm(instance=row, prefix=f"announcement-{row.pk}")
+        oral_exam_announcement = OralExamAnnouncement.objects.first()
+        oral_exam_form = OralExamAnnouncementForm(instance=oral_exam_announcement)
+        oral_exam_registrations = (
+            list(OralExamRegistration.objects.filter(exam_date=oral_exam_announcement.exam_date).select_related("tutor"))
+            if oral_exam_announcement else []
+        )
+        # 2026-10-07(使用者要求新增「考試名單」卡片):只取已經成功排入考試順序的
+        # (`exam_order` 非空),依考試時間排序;未排入的不在這份名單裡顯示(前一個
+        # view 已經用 flash message 提示衝突人數)。**同時要求 `review_status=
+        # CONFIRMED`**:撤回登記本來就會順手清空 `exam_time`/`exam_order`(見
+        # `revert_oral_exam_registration()`),但這裡還是多一道防呆——萬一有舊資料
+        # 在欄位改版(`review_status` 取代 `confirmed_at`)過程中殘留不一致的
+        # `exam_order`,不會因此誤把「其實已經不是已登記狀態」的人留在考試名單裡。
+        oral_exam_scheduled_registrations = (
+            list(
+                OralExamRegistration.objects.filter(
+                    exam_date=oral_exam_announcement.exam_date, exam_order__isnull=False,
+                    review_status=OralExamRegistrationReviewStatus.CONFIRMED,
+                ).select_related("tutor").order_by("exam_order")
+            )
+            if oral_exam_announcement else []
+        )
         overview_semesters = semester_rows
         overview_semester = current_semester or (overview_semesters[0] if overview_semesters else None)
         requested_semester_id = request.GET.get("class_semester")
@@ -638,6 +669,10 @@ def dashboard(request):
                 "new_class_document_form": ClassDocumentUploadForm(),
                 "announcement_rows": announcement_rows,
                 "new_announcement_form": AnnouncementForm(),
+                "oral_exam_announcement": oral_exam_announcement,
+                "oral_exam_form": oral_exam_form,
+                "oral_exam_registrations": oral_exam_registrations,
+                "oral_exam_scheduled_registrations": oral_exam_scheduled_registrations,
                 "roster_q": roster_q,
                 "roster_role": roster_role,
                 "roster_program": roster_program,
@@ -804,6 +839,40 @@ def dashboard(request):
             }
         )
     if request.user.role in {Role.TUTOR, Role.TUTEE}:
+        # 2026-10-06(使用者要求「師大外籍生計畫tutor左側欄位新增線上口語考試」):只有
+        # 師大外籍生(NTNU)計畫的 Tutor 才看得到這個分頁。一般 Tutor(`roster_entry.program`
+        # 為空)在 `user_program()` 既有慣例裡就是回傳 NTNU 這個 PartnerProgram 物件
+        # (見第 4.2 節),所以跟「可配對範圍」用同一個函式判斷,不另外寫規則;非 NTNU 的
+        # Tutor(例如馬里蘭)與所有 Tutee 皆看不到側邊欄連結,也不會拿到任何公告內容。
+        tutor_program = user_program(request.user) if request.user.role == Role.TUTOR else None
+        is_ntnu_tutor = bool(tutor_program and tutor_program.code == "NTNU")
+        oral_exam_announcement = (
+            OralExamAnnouncement.objects.filter(is_published=True).first() if is_ntnu_tutor else None
+        )
+        # 2026-10-06(使用者要求「開放報名，tutor就可以點擊報名...就可以送出」):
+        # 用 announcement.exam_date 這個快照值比對,不是直接拿 announcement 的 FK——
+        # 原因見 OralExamRegistration 的模型說明(避免 Admin 之後覆寫同一筆設定造成
+        # 舊報名紀錄被誤判成屬於新的一輪)。
+        my_oral_exam_registration = (
+            OralExamRegistration.objects.filter(
+                tutor=request.user, exam_date=oral_exam_announcement.exam_date
+            ).first()
+            if oral_exam_announcement else None
+        )
+        oral_exam_registration_form = (
+            OralExamRegistrationForm(instance=my_oral_exam_registration) if is_ntnu_tutor else None
+        )
+        # 2026-10-09(使用者要求「現在每次安排考試最多20人...顯示目前報名人數
+        # （X/20）...已經滿了先停止報名」,接著澄清「他們都已經繳費了，所以我才說要
+        # 從報名人數開始擋」):算的是「已送出報名」的總數(不分 PENDING/
+        # NEEDS_REVISION/CONFIRMED),不是只算已登記(CONFIRMED)人數——報名時就已經
+        # 要求繳費,送出就代表已經付過這筆名額的費用,所以上限要卡在「送出」這一步,
+        # 不是等 Admin 核對完才卡。
+        oral_exam_registered_count = (
+            OralExamRegistration.objects.filter(exam_date=oral_exam_announcement.exam_date).count()
+            if oral_exam_announcement else 0
+        )
+        oral_exam_registration_full = oral_exam_registered_count >= ORAL_EXAM_MAX_REGISTRATIONS
         participant_pairings = list(
             Pairing.objects.filter(
                 Q(tutor=request.user) | Q(tutee=request.user)
@@ -988,6 +1057,13 @@ def dashboard(request):
                 "pairing_release_history_full": pairing_release_history_full,
                 "pending_class_review_sessions": pending_class_review_sessions,
                 "unresolved_report_items": unresolved_report_items,
+                "is_ntnu_tutor": is_ntnu_tutor,
+                "oral_exam_announcement": oral_exam_announcement,
+                "my_oral_exam_registration": my_oral_exam_registration,
+                "oral_exam_registration_form": oral_exam_registration_form,
+                "oral_exam_registered_count": oral_exam_registered_count,
+                "oral_exam_registration_full": oral_exam_registration_full,
+                "oral_exam_max_registrations": ORAL_EXAM_MAX_REGISTRATIONS,
             }
         )
     elif request.user.role == Role.ADMIN:
@@ -1415,6 +1491,30 @@ def download_class_document(request, pk):
     return _private_file_response(document.file, document.filename)
 
 
+@role_required(Role.TUTOR, Role.ADMIN)
+def download_oral_exam_attachment(request):
+    """線上口語考試公告的歷年試題附件下載(2026-10-06 新增,只有一份合併檔案,不是
+    一年一個檔案——見 `OralExamAnnouncement` 的模型說明)。比照
+    `download_class_document()` 的既有寫法:Admin 永遠能看,其餘角色(這裡只有
+    `Role.TUTOR` 會通過上面的 `@role_required`)還要再檢查公告已發佈且本人是 NTNU
+    Tutor,跟 Tutor 能不能看到這則公告本身的規則完全一致。"""
+    announcement = OralExamAnnouncement.objects.first()
+    if announcement is None or not announcement.attachment_file:
+        raise Http404
+    if request.user.role != Role.ADMIN:
+        if not announcement.is_published:
+            raise Http404
+        tutor_program = user_program(request.user)
+        if not (tutor_program and tutor_program.code == "NTNU"):
+            raise Http404
+    AuditLog.record(
+        actor=request.user, target_user=request.user, event_type="ORAL_EXAM_ATTACHMENT_DOWNLOADED",
+        description="下載線上口語考試附件 / Oral exam attachment downloaded",
+        metadata={"years": announcement.attachment_years},
+    )
+    return _private_file_response(announcement.attachment_file, announcement.attachment_filename)
+
+
 @role_required(Role.TUTOR)
 @require_POST
 def upload_qualification(request):
@@ -1476,10 +1576,18 @@ def download_qualification(request, pk):
 @require_POST
 @transaction.atomic
 def review_qualification(request, pk):
+    """2026-10-09(使用者要求線上口語考試「考試名單」也能標記口語是否通過,直接重用
+    這個既有 view,不另外寫一套——使用者原話「如果按通過就代表口語能力證明直接通過」,
+    這就是口語能力審核本身):`next=oral-exam` 讓呼叫端(考試名單卡片)導回「線上口語
+    考試」分頁,不是預設的「口語能力審核」分頁,比照 `tutoring:review_class` 既有的
+    `next` 參數寫法。"""
     document = get_object_or_404(QualificationDocument.objects.select_for_update(), pk=pk)
     action = request.POST.get("action")
     if action not in {"approve", "reject", "revert"}:
         return HttpResponseBadRequest("Invalid review action")
+    redirect_target = reverse("accounts:dashboard") + (
+        "#oral-exam" if request.POST.get("next") == "oral-exam" else "#qualifications"
+    )
     if action == "revert":
         document.status = QualificationStatus.PENDING
         document.review_note = ""
@@ -1493,7 +1601,7 @@ def review_qualification(request, pk):
             document.tutor,
         )
         messages.success(request, "已撤回審核結果，回到待審核。 / Review result reverted to pending.")
-        return redirect(reverse("accounts:dashboard") + "#qualifications")
+        return redirect(redirect_target)
     document.status = QualificationStatus.APPROVED if action == "approve" else QualificationStatus.REJECTED
     document.review_note = request.POST.get("review_note", "").strip()
     document.reviewed_by = request.user
@@ -1507,7 +1615,7 @@ def review_qualification(request, pk):
         {"result": document.status},
     )
     messages.success(request, "審核結果已儲存。 / Review result saved.")
-    return redirect(reverse("accounts:dashboard") + "#qualifications")
+    return redirect(redirect_target)
 
 
 @role_required(Role.ADMIN)
@@ -1642,6 +1750,262 @@ def delete_announcement(request, pk):
     )
     messages.success(request, "公告已刪除。 / Announcement deleted.")
     return redirect(reverse("accounts:dashboard") + "#announcements")
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def save_oral_exam_announcement(request):
+    """師大外籍生(NTNU)線上口語考試公告的建立/編輯/發佈/取消發佈共用同一個 view
+    (2026-10-06 新增,使用者要求)。只保留「目前這一次」設定,`instance` 一律是
+    `OralExamAnnouncement.objects.first()`(可能是 `None`,代表第一次填寫);`action`
+    欄位決定這次送出是要發佈還是取消發佈,跟日期欄位本身的編輯共用同一個表單,因為
+    「取消發佈」按鈕就在同一個 `<form>` 裡,`request.POST` 已經包含目前表單上的日期值。
+    """
+    redirect_target = reverse("accounts:dashboard") + "#oral-exam"
+    instance = OralExamAnnouncement.objects.first()
+    form = OralExamAnnouncementForm(request.POST, instance=instance)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(redirect_target)
+
+    announcement = form.save(commit=False)
+    # 2026-10-06(使用者要求「附件年份...可以上傳檔案」,隨後澄清「那三個年份只是顯示用
+    # ...附件都是三年合併成一個檔案」):檔案只有一份(三年合併考題),跟三個年份欄位彼此
+    # 獨立——年份只用來組公告文字,不是一年一個檔案。這次送出沒有附加新檔案時維持既有
+    # 檔案不變(只改日期/年份不必重新上傳同一份合併考題);附加了新檔案則直接取代舊檔案。
+    uploaded_file = request.FILES.get("attachment_file")
+    if uploaded_file:
+        try:
+            validate_class_document_file(uploaded_file)
+        except ValidationError as error:
+            for message in error.messages:
+                messages.error(request, message)
+            return redirect(redirect_target)
+        announcement.attachment_file = uploaded_file
+        announcement.attachment_filename = uploaded_file.name
+    action = request.POST.get("action")
+    if action == "publish":
+        announcement.is_published = True
+    elif action == "unpublish":
+        announcement.is_published = False
+    announcement.updated_by = request.user
+    announcement.save()
+    log_event(
+        request,
+        "ORAL_EXAM_ANNOUNCEMENT_PUBLISHED" if announcement.is_published else "ORAL_EXAM_ANNOUNCEMENT_UNPUBLISHED",
+        "線上口語考試公告已發佈 / Oral exam announcement published"
+        if announcement.is_published
+        else "線上口語考試公告已取消發佈 / Oral exam announcement unpublished",
+        metadata={"exam_date": str(announcement.exam_date), "registration_deadline": str(announcement.registration_deadline)},
+    )
+    messages.success(
+        request,
+        "口語考試公告已發佈。 / Oral exam announcement published."
+        if announcement.is_published
+        else "口語考試公告已取消發佈。 / Oral exam announcement unpublished.",
+    )
+    return redirect(redirect_target)
+
+
+@role_required(Role.TUTOR)
+@require_POST
+def submit_oral_exam_registration(request):
+    """NTNU Tutor 報名線上口語考試(2026-10-06 新增,使用者要求「如果開放報名，tutor
+    就可以點擊報名，完成兩個欄位 1. 選3個時間段 2. 上傳檔案(繳費紀錄) 就可以送出」)。
+    報名截止前重新送出會更新(覆蓋)前一次,`instance` 一律抓這位 Tutor 對這一輪考試
+    (以 `announcement.exam_date` 這個快照值比對)已有的那一筆,不存在則是 `None`。
+    """
+    redirect_target = reverse("accounts:dashboard") + "#oral-exam"
+    announcement = OralExamAnnouncement.objects.first()
+    tutor_program = user_program(request.user)
+    if not announcement or not announcement.is_published or not (tutor_program and tutor_program.code == "NTNU"):
+        raise Http404
+    if not announcement.is_registration_open:
+        messages.error(request, "報名已截止。 / Registration has closed.")
+        return redirect(redirect_target)
+    existing = OralExamRegistration.objects.filter(tutor=request.user, exam_date=announcement.exam_date).first()
+    # 2026-10-07(使用者要求「如果admin檢查可以，狀態就顯示已登記，然後tutor介面就不能
+    # 再更改時間段了」):Admin 人工核對完成後按「登記」,這筆報名就鎖定,Tutor 不能再
+    # 透過這個 view 更新時段或繳費紀錄——比照 4.6 節 `ClassReview.APPROVED` 鎖定課堂
+    # 紀錄的既有慣例,伺服器端這道檢查才是真正把關,畫面上也會同步不顯示表單。
+    if existing and existing.is_confirmed:
+        messages.error(
+            request,
+            "此報名已由管理員登記完成，無法再修改。 / This registration has already been confirmed by an administrator and can no longer be changed.",
+        )
+        return redirect(redirect_target)
+    # 2026-10-09(使用者要求「現在每次安排考試最多20人...已經滿了先停止報名」,接著
+    # 澄清「如果讓他們報名...他們都已經繳費了，所以我才說要從報名人數開始擋」):只擋
+    # 全新報名(`existing` 為 None)——已經送出過的 Tutor(不論 PENDING/NEEDS_REVISION)
+    # 本來就不是在跟別人搶名額,維持可以繼續編輯自己原本那一筆。**算的是「已送出報名」
+    # 的總數,不分 PENDING/NEEDS_REVISION/CONFIRMED**——報名時就要求繳費,送出就代表
+    # 已經付過這筆名額的費用,若只擋已登記(CONFIRMED)人數,等 Admin 核對完才發現超額,
+    # 多繳費的人等於白白浪費,所以上限要卡在「送出」這一步。
+    if not existing and OralExamRegistration.objects.filter(
+        exam_date=announcement.exam_date,
+    ).count() >= ORAL_EXAM_MAX_REGISTRATIONS:
+        messages.error(
+            request,
+            f"報名已達上限（{ORAL_EXAM_MAX_REGISTRATIONS} 人），暫停開放新報名。 / "
+            f"Registration is full ({ORAL_EXAM_MAX_REGISTRATIONS} max) — new sign-ups are paused.",
+        )
+        return redirect(redirect_target)
+    form = OralExamRegistrationForm(request.POST, request.FILES, instance=existing)
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(redirect_target)
+    registration = form.save(commit=False)
+    registration.tutor = request.user
+    registration.exam_date = announcement.exam_date
+    if "payment_proof" in request.FILES:
+        try:
+            validate_class_document_file(request.FILES["payment_proof"])
+        except ValidationError as error:
+            for message in error.messages:
+                messages.error(request, message)
+            return redirect(redirect_target)
+        registration.payment_proof_filename = request.FILES["payment_proof"].name
+    registration.save()
+    log_event(
+        request,
+        "ORAL_EXAM_REGISTRATION_SUBMITTED",
+        "線上口語考試報名已送出 / Oral exam registration submitted",
+        metadata={"exam_date": str(registration.exam_date)},
+    )
+    messages.success(request, "報名已送出。 / Registration submitted.")
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def review_oral_exam_registration(request, pk):
+    """Admin 人工核對報名後按「登記」或「補件」(2026-10-06 新增「登記」,2026-10-07
+    使用者要求「登記狀態也加個撤回功能好了，以及「補件」按鈕和可以紀錄留言」擴充成
+    這個統一的 view,比照 `review_qualification()` 用單一 `action` 參數分流決定的
+    既有寫法,不是每種決定各開一個 view)。「登記」(`CONFIRMED`)後這筆報名就鎖定,
+    Tutor 不能再更改時段(見 `submit_oral_exam_registration()` 的鎖定檢查);
+    「補件」(`NEEDS_REVISION`)則刻意維持可編輯,讓 Tutor 看到留言後能補件重新送出。
+    沒有審核人員身分限制,任何 Admin 都可以操作,與本專案其餘審核類操作的既有慣例一致
+    (核准/拒絕、標記已紀錄等都不做逐筆歸屬限制)。"""
+    registration = get_object_or_404(OralExamRegistration, pk=pk)
+    action = request.POST.get("action")
+    if action == "confirm":
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        event_type, description = "ORAL_EXAM_REGISTRATION_CONFIRMED", "線上口語考試報名已登記 / Oral exam registration confirmed"
+        success_message = "已標記為已登記。 / Marked as confirmed."
+    elif action == "revise":
+        registration.review_status = OralExamRegistrationReviewStatus.NEEDS_REVISION
+        event_type = "ORAL_EXAM_REGISTRATION_NEEDS_REVISION"
+        description = "線上口語考試報名要求補件 / Oral exam registration marked as needing additional documents"
+        success_message = "已標記為補件，老師會看到您留的訊息。 / Marked as needing additional documents."
+    else:
+        raise Http404
+    registration.review_note = request.POST.get("note", "").strip()
+    registration.reviewed_by = request.user
+    registration.reviewed_at = timezone.now()
+    registration.save(update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at"])
+    log_event(
+        request, event_type, description, target_user=registration.tutor,
+        metadata={"registration_id": registration.pk, "exam_date": str(registration.exam_date)},
+    )
+    messages.success(request, success_message)
+    return redirect(reverse("accounts:dashboard") + "#oral-exam")
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def revert_oral_exam_registration(request, pk):
+    """Admin 誤按「登記」或「補件」時撤回(2026-10-07 新增,使用者要求),比照口語能力
+    審核撤回的既有慣例:退回 `PENDING`、清空留言與核對人員/時間。**若撤回的是
+    `CONFIRMED`,一併清掉 `exam_time`/`exam_order`**——這個人已經不算登記成功,
+    不該繼續留在「考試名單」卡片裡,不用等下一次按「安排考試」才會消失。"""
+    registration = get_object_or_404(OralExamRegistration, pk=pk)
+    previous_status = registration.review_status
+    registration.review_status = OralExamRegistrationReviewStatus.PENDING
+    registration.review_note = ""
+    registration.reviewed_by = None
+    registration.reviewed_at = None
+    registration.exam_time = None
+    registration.exam_order = None
+    registration.save(
+        update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at", "exam_time", "exam_order"],
+    )
+    log_event(
+        request, "ORAL_EXAM_REGISTRATION_REVERTED", "線上口語考試報名核對已撤回 / Oral exam registration review reverted",
+        target_user=registration.tutor,
+        metadata={"registration_id": registration.pk, "previous_status": previous_status},
+    )
+    messages.success(request, "已撤回，這筆報名改回尚未核對狀態。 / Reverted — this registration is pending review again.")
+    return redirect(reverse("accounts:dashboard") + "#oral-exam")
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def schedule_oral_exam(request):
+    """Admin 按「安排考試」後,依目前所有已登記報名的可口試時段排出考試順序表
+    (2026-10-07 新增,使用者要求「下方新增一個卡片「考試名單」...把已登記的tutor，
+    根據他們的時間組合排列...考試順序」)。排法見
+    `accounts/services.py::schedule_oral_exam_registrations()`;每次按都會整批
+    重算覆蓋,不是疊加。"""
+    redirect_target = reverse("accounts:dashboard") + "#oral-exam"
+    announcement = OralExamAnnouncement.objects.first()
+    if not announcement:
+        raise Http404
+    scheduled, unscheduled = schedule_oral_exam_registrations(announcement.exam_date)
+    log_event(
+        request,
+        "ORAL_EXAM_SCHEDULED",
+        "線上口語考試名單已安排 / Oral exam schedule arranged",
+        metadata={"exam_date": str(announcement.exam_date), "scheduled": len(scheduled), "unscheduled": len(unscheduled)},
+    )
+    if unscheduled:
+        messages.error(
+            request,
+            f"已排出 {len(scheduled)} 位，但有 {len(unscheduled)} 位時段互相衝突無法排入，請確認他們的可口試時段。 / "
+            f"Scheduled {len(scheduled)}, but {len(unscheduled)} couldn't be placed due to conflicting time slots.",
+        )
+    else:
+        messages.success(request, f"已安排 {len(scheduled)} 位的考試順序。 / Scheduled {len(scheduled)} exam slots.")
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def save_oral_exam_meet_link(request, pk):
+    """Admin(助教)幫「考試名單」裡的每一位填上口試用的視訊連結(2026-10-09 新增,
+    使用者要求「可以讓助教放上google meet連結」)。刻意不限定網域——Admin 可能改用
+    別的視訊工具(例如 Zoom),用通用的 URL 欄位比硬性要求 meet.google.com 更有彈性。"""
+    registration = get_object_or_404(OralExamRegistration, pk=pk)
+    meet_link = request.POST.get("meet_link", "").strip()
+    if meet_link:
+        try:
+            URLValidator(schemes=["http", "https"])(meet_link)
+        except ValidationError:
+            messages.error(request, "請輸入有效的網址（需以 http:// 或 https:// 開頭）。 / Please enter a valid URL (starting with http:// or https://).")
+            return redirect(reverse("accounts:dashboard") + "#oral-exam")
+    registration.meet_link = meet_link
+    registration.save(update_fields=["meet_link"])
+    messages.success(request, "視訊連結已儲存。 / Meeting link saved.")
+    return redirect(reverse("accounts:dashboard") + "#oral-exam")
+
+
+@login_required
+def download_oral_exam_payment_proof(request, pk):
+    """Tutor 報名時上傳的繳費紀錄下載(2026-10-06 新增)。Admin 永遠能看(核對有沒有
+    繳費);本人也能看自己上傳過的內容;其餘任何人都不行,包含其他 Tutor。"""
+    registration = get_object_or_404(OralExamRegistration, pk=pk)
+    if request.user.role != Role.ADMIN and registration.tutor_id != request.user.pk:
+        raise Http404
+    AuditLog.record(
+        actor=request.user, target_user=registration.tutor, event_type="ORAL_EXAM_PAYMENT_PROOF_DOWNLOADED",
+        description="下載線上口語考試繳費紀錄 / Oral exam payment proof downloaded",
+        metadata={"registration_id": registration.pk},
+    )
+    return _private_file_response(registration.payment_proof, registration.payment_proof_filename)
 
 
 @login_required

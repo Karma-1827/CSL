@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 import io
 import os
@@ -50,7 +50,7 @@ from tutoring.services import (
 )
 
 from .forms import client_ip
-from .services import import_department_oral_exam_pass_list
+from .services import import_department_oral_exam_pass_list, schedule_oral_exam_registrations
 
 from .models import (
     AccountStatus,
@@ -62,6 +62,9 @@ from .models import (
     DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
+    OralExamAnnouncement,
+    OralExamRegistration,
+    OralExamRegistrationReviewStatus,
     PartnerProgram,
     RegistrationDraft,
     Role,
@@ -3011,6 +3014,910 @@ class AnnouncementTests(TestCase):
         content = response.content.decode()
         self.assertIn("中文內容", content)
         self.assertIn("English content", content)
+
+
+class OralExamAnnouncementTests(TestCase):
+    """2026-10-06(使用者要求):師大外籍生(NTNU)計畫 Tutor 左側欄位新增「線上口語考試」,
+    開放報名時間由 Admin 手動設定並發佈。只保留「目前這一次」設定(改了就覆蓋,不像公告欄
+    那樣保留歷史清單),Tutor 端只在 Admin 按下「發佈」後才看得到完整內容,過了報名截止
+    時間只是改標示「已截止」,公告本身不會整個隱藏。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="ORALEXAM-ADMIN", password="Admin-password-2026")
+        ntnu_roster = RosterEntry.objects.create(
+            student_id="ORALEXAM-NTNU-TUTOR", name_zh="師大老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        self.ntnu_tutor = User.objects.create_user(
+            username="ORALEXAM-NTNU-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=ntnu_roster,
+        )
+        maryland_roster = RosterEntry.objects.create(
+            student_id="ORALEXAM-MD-TUTOR", name_zh="馬里蘭老師", role=Role.TUTOR,
+            education_level=EducationLevel.BACHELOR, identity_category=IdentityCategory.LOCAL,
+            program=PartnerProgram.objects.get(code="MARYLAND"),
+        )
+        self.maryland_tutor = User.objects.create_user(
+            username="ORALEXAM-MD-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=maryland_roster,
+        )
+        self.tutee = User.objects.create_user(
+            username="ORALEXAM-TUTEE", password="Tutee-password-2026", role=Role.TUTEE,
+        )
+
+    def test_full_text_matches_expected_format(self):
+        """2026-10-09(使用者提供排版後的新版文案,開頭三行合併成一句、日期標紅字粗體、
+        google meet 標粗體,報名方式改成系統實際的三步驟流程,`full_text` 回傳值從此是
+        `format_html()`/`mark_safe()` 產生的安全 HTML,不是純文字,斷言要連同標籤一起
+        比對,不能只比對裸文字)。"""
+        announcement = OralExamAnnouncement(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+        )
+        self.assertEqual(announcement.exam_date_full, "2026/10/27（二）")
+        self.assertEqual(announcement.exam_date_plain, "2026/10/27")
+        self.assertEqual(announcement.exam_date_short, "10/27週二")
+        self.assertEqual(announcement.registration_deadline_full, "2026/10/7(三)17：00")
+        full_text = announcement.full_text
+        self.assertIn(
+            '<span class="oral-exam-highlight">2026/10/27（二）</span>將舉行線上語音口試，'
+            "測驗軟體：<strong>google meet</strong>，每位同學10分鐘",
+            full_text,
+        )
+        self.assertIn(
+            '即日起開始報名，<span class="oral-exam-highlight">報名截止：2026/10/7(三)17：00</span>，'
+            "本次僅受理2026/10/27語音口試報名，口試時間安排在8-17時之間。",
+            full_text,
+        )
+        self.assertIn('<span class="oral-exam-highlight">報名方式：</span>', full_text)
+        self.assertIn("1. 點擊下方報名", full_text)
+        self.assertIn("2. 選擇三個時段考試", full_text)
+        self.assertIn("3. 上傳轉帳帳號後4碼口試費截圖", full_text)
+        self.assertNotIn("以電郵回覆姓名學號", full_text)
+        self.assertNotIn("請至少告知3個30分鐘時段", full_text)
+
+    def test_full_text_omits_the_two_lines_the_user_asked_to_delete(self):
+        """2026-10-06(使用者要求「這兩行刪掉」):教育部華語教師能力認證考試/華語正音與
+        口語表達這兩行要整段移除,不是隱藏。"""
+        announcement = OralExamAnnouncement(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+        )
+        self.assertNotIn("教育部華語教師能力認證考試", announcement.full_text)
+        self.assertNotIn("華語正音與口語表達", announcement.full_text)
+
+    def test_full_text_omits_attachment_paragraph_when_no_years_set(self):
+        announcement = OralExamAnnouncement(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+        )
+        self.assertEqual(announcement.attachment_years, [])
+        self.assertNotIn("附件是", announcement.full_text)
+        self.assertNotIn("考試時將抽一份題目測驗", announcement.full_text)
+
+    def test_full_text_includes_dynamic_attachment_years(self):
+        """2026-10-09(使用者要求把原本三行合併成一句,年份那一段改成粗體)。"""
+        announcement = OralExamAnnouncement(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+            attachment_year_1=2024, attachment_year_2=2025, attachment_year_3=2026,
+        )
+        self.assertIn(
+            "附件是<strong>2024﹑2025﹑2026的試題</strong>，考試時將抽一份題目測驗。"
+            "請抽空認字﹑練習發音，以便通過考試。",
+            announcement.full_text,
+        )
+
+    def test_full_text_includes_only_the_years_that_are_filled_in(self):
+        announcement = OralExamAnnouncement(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+            attachment_year_1=2024,
+        )
+        self.assertIn("附件是<strong>2024的試題</strong>，", announcement.full_text)
+
+    def test_sidebar_link_and_panel_shown_for_ntnu_tutor(self):
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'data-dashboard-target="oral-exam"')
+        self.assertContains(response, '線上口語考試')
+
+    def test_sidebar_link_hidden_for_non_ntnu_tutor(self):
+        self.client.force_login(self.maryland_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotIn('data-dashboard-panel="oral-exam"', response.content.decode())
+
+    def test_sidebar_link_hidden_for_tutee(self):
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertNotIn('data-dashboard-panel="oral-exam"', response.content.decode())
+
+    def test_admin_dashboard_shows_setup_form_and_sidebar_link(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "設定線上口試時間")
+        self.assertContains(response, 'data-dashboard-target="oral-exam"')
+
+    def test_admin_can_publish_oral_exam_announcement(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:save_oral_exam_announcement"),
+            {"exam_date": "2026-10-27", "registration_deadline": "2026-10-07T17:00", "action": "publish"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertEqual(announcement.exam_date, date(2026, 10, 27))
+        self.assertTrue(announcement.is_published)
+        self.assertEqual(announcement.updated_by, self.admin)
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_ANNOUNCEMENT_PUBLISHED").exists())
+
+    def test_admin_can_unpublish_oral_exam_announcement(self):
+        OralExamAnnouncement.objects.create(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+            is_published=True,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:save_oral_exam_announcement"),
+            {"exam_date": "2026-10-27", "registration_deadline": "2026-10-07T17:00", "action": "unpublish"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertFalse(announcement.is_published)
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_ANNOUNCEMENT_UNPUBLISHED").exists())
+
+    def test_saving_again_overwrites_the_single_existing_row(self):
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("accounts:save_oral_exam_announcement"),
+            {"exam_date": "2026-10-27", "registration_deadline": "2026-10-07T17:00", "action": "publish"},
+        )
+        self.client.post(
+            reverse("accounts:save_oral_exam_announcement"),
+            {"exam_date": "2026-11-10", "registration_deadline": "2026-10-20T17:00", "action": "publish"},
+        )
+        self.assertEqual(OralExamAnnouncement.objects.count(), 1)
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertEqual(announcement.exam_date, date(2026, 11, 10))
+
+    def test_non_admin_cannot_save_oral_exam_announcement(self):
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(
+            reverse("accounts:save_oral_exam_announcement"),
+            {"exam_date": "2026-10-27", "registration_deadline": "2026-10-07T17:00", "action": "publish"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard"))
+        self.assertFalse(OralExamAnnouncement.objects.exists())
+
+    def test_tutor_sees_full_text_only_once_published(self):
+        OralExamAnnouncement.objects.create(
+            exam_date=date(2026, 10, 27),
+            registration_deadline=timezone.make_aware(datetime(2026, 10, 7, 17, 0)),
+            is_published=False,
+        )
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "目前沒有線上口語考試公告")
+        self.assertNotIn("將舉行線上語音口試", response.content.decode())
+
+        OralExamAnnouncement.objects.update(is_published=True)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn('<span class="oral-exam-highlight">2026/10/27（二）</span>將舉行線上語音口試', content)
+        self.assertIn("戶名：王雪妮", content)
+
+    def test_tutor_sees_closed_label_after_deadline_but_text_stays_visible(self):
+        OralExamAnnouncement.objects.create(
+            exam_date=timezone.localdate() - timedelta(days=1),
+            registration_deadline=timezone.now() - timedelta(hours=1),
+            is_published=True,
+        )
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("報名已截止", content)
+        self.assertNotIn("報名開放中", content)
+        self.assertIn("將舉行線上語音口試", content)
+
+    def _post_setup(self, **extra):
+        data = {"exam_date": "2026-10-27", "registration_deadline": "2026-10-07T17:00", "action": "publish"}
+        data.update(extra)
+        return self.client.post(reverse("accounts:save_oral_exam_announcement"), data)
+
+    def test_admin_can_upload_a_combined_attachment_and_tutor_can_download_it(self):
+        """2026-10-06(使用者澄清「那三個年份只是顯示用，而不是一年一個檔案，附件都是
+        三年合併成一個檔案，所以只是為了顯示在公布而已」):三個年份欄位只影響公告文字,
+        檔案只有一份、跟年份彼此獨立。"""
+        self.client.force_login(self.admin)
+        response = self._post_setup(
+            attachment_year_1="2024", attachment_year_2="2025", attachment_year_3="2026",
+            attachment_file=SimpleUploadedFile("combined.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertEqual(announcement.attachment_filename, "combined.pdf")
+        self.assertEqual(announcement.attachment_years, [2024, 2025, 2026])
+
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:download_oral_exam_attachment"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_ATTACHMENT_DOWNLOADED").exists())
+
+    def test_resaving_without_a_new_file_keeps_the_existing_attachment(self):
+        self.client.force_login(self.admin)
+        self._post_setup(
+            attachment_year_1="2024",
+            attachment_file=SimpleUploadedFile("combined.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+        )
+        self._post_setup(exam_date="2026-11-10", attachment_year_1="2024")
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertEqual(announcement.exam_date, date(2026, 11, 10))
+        self.assertEqual(announcement.attachment_filename, "combined.pdf")
+        self.assertTrue(announcement.attachment_file)
+
+    def test_resaving_with_a_new_file_replaces_the_old_one(self):
+        self.client.force_login(self.admin)
+        self._post_setup(
+            attachment_year_1="2024",
+            attachment_file=SimpleUploadedFile("old.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+        )
+        self._post_setup(
+            attachment_year_1="2024",
+            attachment_file=SimpleUploadedFile("new.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+        )
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertEqual(announcement.attachment_filename, "new.pdf")
+
+    def test_attachment_years_and_file_are_independent(self):
+        """年份可以先填、檔案晚點補;或者檔案存在但年份還沒填——兩者互不要求對方存在。"""
+        self.client.force_login(self.admin)
+        self._post_setup(attachment_year_1="2024", attachment_year_2="2025")
+        announcement = OralExamAnnouncement.objects.get()
+        self.assertEqual(announcement.attachment_years, [2024, 2025])
+        self.assertFalse(announcement.attachment_file)
+        self.assertIn("附件是<strong>2024﹑2025的試題</strong>，", announcement.full_text)
+
+    def test_invalid_attachment_file_type_is_rejected(self):
+        self.client.force_login(self.admin)
+        bad_file = SimpleUploadedFile("not-allowed.exe", b"not a real exe", content_type="application/octet-stream")
+        response = self._post_setup(attachment_year_1="2024", attachment_file=bad_file)
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        self.assertFalse(OralExamAnnouncement.objects.exists())
+
+    def test_non_ntnu_tutor_and_tutee_cannot_download_attachment(self):
+        self.client.force_login(self.admin)
+        self._post_setup(
+            attachment_year_1="2024",
+            attachment_file=SimpleUploadedFile("combined.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+        )
+        self.client.force_login(self.maryland_tutor)
+        response = self.client.get(reverse("accounts:download_oral_exam_attachment"))
+        self.assertEqual(response.status_code, 404)
+
+        # A Tutee never reaches the view body at all — @role_required(Role.TUTOR,
+        # Role.ADMIN) redirects away before the NTNU/published checks even run.
+        self.client.force_login(self.tutee)
+        response = self.client.get(reverse("accounts:download_oral_exam_attachment"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_download_unpublished_attachment_is_blocked_for_tutor(self):
+        self.client.force_login(self.admin)
+        self._post_setup(
+            attachment_year_1="2024",
+            attachment_file=SimpleUploadedFile("combined.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+            action="unpublish",
+        )
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:download_oral_exam_attachment"))
+        self.assertEqual(response.status_code, 404)
+
+
+class OralExamRegistrationTests(TestCase):
+    """2026-10-06(使用者要求「如果開放報名，tutor就可以點擊報名，完成兩個欄位 1. 選3個
+    時間段 2. 上傳檔案(繳費紀錄) 就可以送出」)。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username="ORALREG-ADMIN", password="Admin-password-2026")
+        ntnu_roster = RosterEntry.objects.create(
+            student_id="ORALREG-NTNU-TUTOR", name_zh="師大老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        self.ntnu_tutor = User.objects.create_user(
+            username="ORALREG-NTNU-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=ntnu_roster,
+        )
+        other_roster = RosterEntry.objects.create(
+            student_id="ORALREG-NTNU-TUTOR2", name_zh="師大老師2", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        self.other_ntnu_tutor = User.objects.create_user(
+            username="ORALREG-NTNU-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=other_roster,
+        )
+        maryland_roster = RosterEntry.objects.create(
+            student_id="ORALREG-MD-TUTOR", name_zh="馬里蘭老師", role=Role.TUTOR,
+            education_level=EducationLevel.BACHELOR, identity_category=IdentityCategory.LOCAL,
+            program=PartnerProgram.objects.get(code="MARYLAND"),
+        )
+        self.maryland_tutor = User.objects.create_user(
+            username="ORALREG-MD-TUTOR", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=maryland_roster,
+        )
+        self.announcement = OralExamAnnouncement.objects.create(
+            exam_date=date(2026, 10, 27),
+            # 2026-10-09 修正:原本寫死 2026-10-07 17:00,隨著真實時間推進(現在已經是
+            # 2026-10-09)這個截止時間會自然過去,讓整個測試類別的「報名開放中」假設
+            # 失效、大量測試改以「報名已截止」分支失敗——改用相對 `timezone.now()` 的
+            # 日期,不會隨著測試執行的真實日期而腐化。`test_cannot_register_once_
+            # registration_has_closed()` 自己會另外覆寫成過去時間,不受影響。
+            registration_deadline=timezone.now() + timedelta(days=60),
+            is_published=True,
+        )
+
+    def _submit(self, user, **extra):
+        """時段改用小時+分鐘兩個 <select>(見 `accounts/forms.py::OralExamTimeSlotField`)
+        之後,表單欄位名稱變成 `time_slot_1_0`/`time_slot_1_1` 這種拆開的子欄位——這裡
+        仍然讓呼叫端用好讀的 "HH:MM" 字串覆寫(例如 `time_slot_1="09:05"`),由這個
+        helper 自己拆成兩個子欄位 POST 上去,不用每個測試都手動拆。"""
+        defaults = {"time_slot_1": "09:00", "time_slot_2": "09:30", "time_slot_3": "16:30"}
+        payment_proof = extra.pop(
+            "payment_proof", SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf")
+        )
+        data = {}
+        for key, default_value in defaults.items():
+            hour, minute = extra.pop(key, default_value).split(":")
+            data[f"{key}_0"] = hour
+            data[f"{key}_1"] = minute
+        data["payment_proof"] = payment_proof
+        self.client.force_login(user)
+        return self.client.post(reverse("accounts:submit_oral_exam_registration"), data)
+
+    def test_ntnu_tutor_can_submit_a_registration(self):
+        response = self._submit(self.ntnu_tutor)
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration = OralExamRegistration.objects.get()
+        self.assertEqual(registration.tutor, self.ntnu_tutor)
+        self.assertEqual(registration.exam_date, date(2026, 10, 27))
+        self.assertEqual(registration.time_slot_1, time(9, 0))
+        self.assertEqual(registration.payment_proof_filename, "proof.pdf")
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_REGISTRATION_SUBMITTED").exists())
+
+    def test_resubmitting_updates_the_same_registration_not_a_new_one(self):
+        self._submit(self.ntnu_tutor)
+        self._submit(self.ntnu_tutor, time_slot_1="10:00")
+        self.assertEqual(OralExamRegistration.objects.count(), 1)
+        registration = OralExamRegistration.objects.get()
+        self.assertEqual(registration.time_slot_1, time(10, 0))
+
+    def test_resubmitting_without_a_new_file_keeps_the_existing_payment_proof(self):
+        self._submit(self.ntnu_tutor)
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(
+            reverse("accounts:submit_oral_exam_registration"),
+            {
+                "time_slot_1_0": "10", "time_slot_1_1": "00",
+                "time_slot_2_0": "09", "time_slot_2_1": "30",
+                "time_slot_3_0": "16", "time_slot_3_1": "30",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration = OralExamRegistration.objects.get()
+        self.assertEqual(registration.payment_proof_filename, "proof.pdf")
+        self.assertTrue(registration.payment_proof)
+
+    def test_allows_five_minute_increments_not_just_thirty(self):
+        """2026-10-06(使用者要求「選時段的分鐘，能不能只列0、5、10、15、20...55」):原本
+        限制分鐘只能是 0 或 30,放寬成 5 分鐘為單位後,09:05 這種值應該要能通過。"""
+        response = self._submit(self.ntnu_tutor, time_slot_1="09:05")
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration = OralExamRegistration.objects.get()
+        self.assertEqual(registration.time_slot_1, time(9, 5))
+
+    def test_rejects_slot_not_on_a_five_minute_boundary(self):
+        self._submit(self.ntnu_tutor, time_slot_1="09:03")
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_rejects_slot_outside_eight_to_seventeen_range(self):
+        self._submit(self.ntnu_tutor, time_slot_1="07:30")
+        self.assertFalse(OralExamRegistration.objects.exists())
+        self._submit(self.ntnu_tutor, time_slot_3="17:00")
+        self.assertFalse(OralExamRegistration.objects.exists())
+        # 16:35 isn't rejected by the hour <select> (16 is a valid hour choice) — the
+        # overflow-past-17:00 check has to happen in clean() instead.
+        self._submit(self.ntnu_tutor, time_slot_3="16:35")
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_rejects_duplicate_slots(self):
+        self._submit(self.ntnu_tutor, time_slot_2="09:00")
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_rejects_invalid_attachment_file_type(self):
+        bad_file = SimpleUploadedFile("not-allowed.exe", b"not a real exe", content_type="application/octet-stream")
+        self._submit(self.ntnu_tutor, payment_proof=bad_file)
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_non_ntnu_tutor_cannot_register(self):
+        response = self._submit(self.maryland_tutor)
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_cannot_register_once_registration_has_closed(self):
+        self.announcement.registration_deadline = timezone.now() - timedelta(hours=1)
+        self.announcement.save(update_fields=["registration_deadline"])
+        response = self._submit(self.ntnu_tutor)
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_cannot_register_when_announcement_is_not_published(self):
+        self.announcement.is_published = False
+        self.announcement.save(update_fields=["is_published"])
+        response = self._submit(self.ntnu_tutor)
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(OralExamRegistration.objects.exists())
+
+    def test_dashboard_shows_registration_form_when_open_and_status_once_submitted(self):
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "送出報名 / Submit registration")
+
+        self._submit(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "更新報名 / Update registration")
+        self.assertContains(response, "已於")
+
+    def test_time_slot_inputs_are_constrained_to_eight_to_sixteen_thirty_in_the_ui(self):
+        """2026-10-06(使用者要求「還有時段選擇限制在8-17點」「選時段的分鐘,能不能只列
+        0、5、10、15、20...55」):改用 `OralExamTimeSlotField`(見
+        `accounts/forms.py`,比照 `tutoring/forms.py::FiveMinuteTimeField` 既有的
+        小時+分鐘兩個 `<select>` 寫法)取代原本的 `<input type="time">`,小時只列
+        08-16、分鐘只列 00/05/.../55,讓使用者操作上就選不到超出範圍或非 5 分鐘倍數
+        的時間(伺服器端的範圍檢查本來就有,這裡測的是前端 widget 的 `<select>` 選項
+        有沒有正確設定)。"""
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        for i in (1, 2, 3):
+            self.assertIn(f'name="time_slot_{i}_0"', content)
+            self.assertIn(f'name="time_slot_{i}_1"', content)
+        # 小時下拉選單只到 08-16(預設值 08 會多帶 selected 屬性,改用 09/16 這種非
+        # 預設選項驗證範圍,避免被 `selected` 屬性插在中間打斷字串比對)。
+        self.assertIn('<option value="09">09</option>', content)
+        self.assertIn('<option value="16">16</option>', content)
+        self.assertNotIn('<option value="07">07</option>', content)
+        self.assertNotIn('<option value="17">17</option>', content)
+        # 分鐘下拉選單只列 5 分鐘的倍數(同理用非預設的 05/55 驗證)。
+        self.assertIn('<option value="05">05</option>', content)
+        self.assertIn('<option value="55">55</option>', content)
+        self.assertNotIn('<option value="01">01</option>', content)
+        self.assertNotIn('<option value="03">03</option>', content)
+
+    def test_dashboard_shows_read_only_submission_after_deadline(self):
+        self._submit(self.ntnu_tutor)
+        self.announcement.registration_deadline = timezone.now() - timedelta(hours=1)
+        self.announcement.save(update_fields=["registration_deadline"])
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("報名已截止，以下是您送出的報名內容。", content)
+        self.assertNotIn("送出報名 / Submit registration", content)
+        self.assertNotIn("更新報名 / Update registration", content)
+
+    def test_admin_sees_registration_list_with_payment_proof_download(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, self.ntnu_tutor.bilingual_name)
+        response = self.client.get(reverse("accounts:download_oral_exam_payment_proof", args=[registration.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_time_slot_ranges_show_the_thirty_minute_window_not_just_the_start_time(self):
+        """2026-10-06(使用者問「tutor選三個口試時段，在admin介面會出現＋30分嗎？」):
+        Admin 的報名清單原本只顯示起始時間,容易誤會成單一時間點。"""
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.assertEqual(registration.time_slot_ranges, ["09:00–09:30", "09:30–10:00", "16:30–17:00"])
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("09:00–09:30", content)
+        self.assertIn("16:30–17:00", content)
+
+    def test_other_tutor_cannot_download_someone_elses_payment_proof(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.other_ntnu_tutor)
+        response = self.client.get(reverse("accounts:download_oral_exam_payment_proof", args=[registration.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_tutor_can_download_their_own_payment_proof(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        response = self.client.get(reverse("accounts:download_oral_exam_payment_proof", args=[registration.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_admin_can_confirm_a_registration_with_a_note(self):
+        """2026-10-07(使用者要求「報名清單最右側多一個欄位「登記」...如果admin檢查可以，
+        狀態就顯示已登記」,當天再要求「可以紀錄留言」)。"""
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:review_oral_exam_registration", args=[registration.pk]),
+            {"action": "confirm", "note": "已核對繳費紀錄"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration.refresh_from_db()
+        self.assertTrue(registration.is_confirmed)
+        self.assertEqual(registration.reviewed_by, self.admin)
+        self.assertIsNotNone(registration.reviewed_at)
+        self.assertEqual(registration.review_note, "已核對繳費紀錄")
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_REGISTRATION_CONFIRMED").exists())
+
+    def test_admin_can_request_additional_documents(self):
+        """2026-10-07(使用者要求「補件」按鈕)。"""
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:review_oral_exam_registration", args=[registration.pk]),
+            {"action": "revise", "note": "繳費紀錄看不清楚，請重新上傳"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration.refresh_from_db()
+        self.assertTrue(registration.needs_revision)
+        self.assertFalse(registration.is_confirmed)
+        self.assertEqual(registration.review_note, "繳費紀錄看不清楚，請重新上傳")
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_REGISTRATION_NEEDS_REVISION").exists())
+
+    def test_non_admin_cannot_confirm_a_registration(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(
+            reverse("accounts:review_oral_exam_registration", args=[registration.pk]), {"action": "confirm"},
+        )
+        self.assertNotEqual(response.status_code, 200)
+        registration.refresh_from_db()
+        self.assertFalse(registration.is_confirmed)
+
+    def test_tutor_cannot_update_a_confirmed_registration_even_while_registration_is_open(self):
+        """使用者原話:「如果admin檢查可以，狀態就顯示已登記，然後tutor介面就不能再更改
+        時間端了」——鎖定跟「報名是否還在開放期間內」無關,只跟「有沒有被登記」有關。"""
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        registration.reviewed_by = self.admin
+        registration.reviewed_at = timezone.now()
+        registration.save(update_fields=["review_status", "reviewed_by", "reviewed_at"])
+        self._submit(self.ntnu_tutor, time_slot_1="10:00")
+        registration.refresh_from_db()
+        self.assertEqual(registration.time_slot_1, time(9, 0))
+
+    def test_tutor_can_still_update_a_registration_after_being_asked_for_revision(self):
+        """「補件」跟「登記」不同,刻意不鎖定——老師要能依管理員的留言補件重新送出。"""
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.NEEDS_REVISION
+        registration.review_note = "請重新上傳繳費紀錄"
+        registration.reviewed_by = self.admin
+        registration.reviewed_at = timezone.now()
+        registration.save(update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at"])
+        self._submit(self.ntnu_tutor, time_slot_1="10:00")
+        registration.refresh_from_db()
+        self.assertEqual(registration.time_slot_1, time(10, 0))
+
+    def test_dashboard_shows_confirmed_registration_as_read_only_even_when_registration_is_open(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        registration.reviewed_by = self.admin
+        registration.reviewed_at = timezone.now()
+        registration.save(update_fields=["review_status", "reviewed_by", "reviewed_at"])
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("管理員已完成登記核對，時段與繳費紀錄無法再修改。", content)
+        self.assertNotIn('name="time_slot_1_0"', content)
+
+    def test_dashboard_shows_revision_note_and_still_shows_editable_form(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.NEEDS_REVISION
+        registration.review_note = "請重新上傳繳費紀錄"
+        registration.reviewed_by = self.admin
+        registration.reviewed_at = timezone.now()
+        registration.save(update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at"])
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("管理員要求補件", content)
+        self.assertIn("請重新上傳繳費紀錄", content)
+        self.assertIn('name="time_slot_1_0"', content)
+
+    def test_admin_dashboard_shows_review_buttons_until_decided_then_shows_status_and_revert(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.admin)
+        review_url = reverse("accounts:review_oral_exam_registration", args=[registration.pk])
+        revert_url = reverse("accounts:revert_oral_exam_registration", args=[registration.pk])
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn(review_url, content)
+        self.assertNotIn(revert_url, content)
+        self.client.post(review_url, {"action": "confirm", "note": "沒問題"})
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("已登記 / Confirmed", content)
+        self.assertIn("沒問題", content)
+        self.assertIn(revert_url, content)
+        self.assertNotIn(review_url, content)
+
+    def test_admin_can_revert_a_confirmed_registration(self):
+        """2026-10-07(使用者要求「登記狀態也加個撤回功能好了」)。"""
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        registration.review_note = "沒問題"
+        registration.reviewed_by = self.admin
+        registration.reviewed_at = timezone.now()
+        registration.exam_time, registration.exam_order = time(9, 0), 1
+        registration.save(
+            update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at", "exam_time", "exam_order"],
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("accounts:revert_oral_exam_registration", args=[registration.pk]))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration.refresh_from_db()
+        self.assertEqual(registration.review_status, OralExamRegistrationReviewStatus.PENDING)
+        self.assertEqual(registration.review_note, "")
+        self.assertIsNone(registration.reviewed_by)
+        self.assertIsNone(registration.reviewed_at)
+        self.assertIsNone(registration.exam_time)
+        self.assertIsNone(registration.exam_order)
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_REGISTRATION_REVERTED").exists())
+
+    def test_non_admin_cannot_revert_a_registration(self):
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(reverse("accounts:revert_oral_exam_registration", args=[registration.pk]))
+        self.assertNotEqual(response.status_code, 200)
+
+    def _create_confirmed_registration(self, tutor, slot1, slot2, slot3):
+        """2026-10-07(使用者要求新增「考試名單」):直接用 ORM 建立已登記的報名,
+        不經過 `_submit()`/表單驗證,方便建構表單原本不允許的邊界情境(例如三個
+        時段重複)來測試排程演算法本身在真的排不進去時的行為。"""
+        registration = OralExamRegistration.objects.create(
+            tutor=tutor, exam_date=self.announcement.exam_date,
+            time_slot_1=slot1, time_slot_2=slot2, time_slot_3=slot3,
+            payment_proof=SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+            payment_proof_filename="proof.pdf",
+            review_status=OralExamRegistrationReviewStatus.CONFIRMED,
+            reviewed_by=self.admin, reviewed_at=timezone.now(),
+        )
+        return registration
+
+    def test_schedule_oral_exam_arranges_confirmed_registrations_without_conflicts(self):
+        """三位老師都在 11:00 有重複的可口試時段(比照本機 demo 帳號實測用的資料),
+        排程演算法應該要能各自排到不衝突的考試時間,不是只有先搶先贏撞上就放棄。"""
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self._create_confirmed_registration(self.other_ntnu_tutor, time(9, 0), time(11, 0), time(13, 30))
+        third_roster = RosterEntry.objects.create(
+            student_id="ORALREG-NTNU-TUTOR3", name_zh="師大老師3", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        third_tutor = User.objects.create_user(
+            username="ORALREG-NTNU-TUTOR3", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=third_roster,
+        )
+        self._create_confirmed_registration(third_tutor, time(10, 0), time(11, 0), time(14, 0))
+
+        scheduled, unscheduled = schedule_oral_exam_registrations(self.announcement.exam_date)
+        self.assertEqual(unscheduled, [])
+        self.assertEqual(len(scheduled), 3)
+        times = [registration.exam_time for registration in scheduled]
+        self.assertEqual(len(set(times)), 3)
+        self.assertEqual(times, sorted(times))
+        self.assertEqual([registration.exam_order for registration in scheduled], [1, 2, 3])
+        for registration in scheduled:
+            registration.refresh_from_db()
+            self.assertIsNotNone(registration.exam_time)
+            self.assertIsNotNone(registration.exam_order)
+
+    def test_schedule_oral_exam_only_includes_confirmed_registrations(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(9, 0), time(10, 0))
+        OralExamRegistration.objects.create(
+            tutor=self.other_ntnu_tutor, exam_date=self.announcement.exam_date,
+            time_slot_1=time(8, 0), time_slot_2=time(9, 0), time_slot_3=time(10, 0),
+            payment_proof=SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+            payment_proof_filename="proof.pdf",
+        )
+        scheduled, unscheduled = schedule_oral_exam_registrations(self.announcement.exam_date)
+        self.assertEqual(unscheduled, [])
+        self.assertEqual(len(scheduled), 1)
+        self.assertEqual(scheduled[0].tutor, self.ntnu_tutor)
+
+    def test_schedule_oral_exam_leaves_unresolvable_conflicts_unscheduled(self):
+        """三位老師的三個時段都填一樣的時間,總共只生得出 2 個不同的候選考試起始時間
+        (時段開始/時段開始+15分),第三位理當排不進去。"""
+        for index in range(3):
+            roster = RosterEntry.objects.create(
+                student_id=f"ORALREG-CONFLICT-{index}", name_zh=f"衝突老師{index}", role=Role.TUTOR,
+                education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+            )
+            tutor = User.objects.create_user(
+                username=f"ORALREG-CONFLICT-{index}", password="Tutor-password-2026", role=Role.TUTOR,
+                roster_entry=roster,
+            )
+            self._create_confirmed_registration(tutor, time(8, 0), time(8, 0), time(8, 0))
+
+        scheduled, unscheduled = schedule_oral_exam_registrations(self.announcement.exam_date)
+        self.assertEqual(len(scheduled), 2)
+        self.assertEqual(len(unscheduled), 1)
+        self.assertIsNone(unscheduled[0].exam_time)
+        self.assertIsNone(unscheduled[0].exam_order)
+
+    def test_admin_can_trigger_scheduling_from_the_dashboard(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("accounts:schedule_oral_exam"))
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration = OralExamRegistration.objects.get(tutor=self.ntnu_tutor)
+        self.assertEqual(registration.exam_time, time(8, 0))
+        self.assertEqual(registration.exam_order, 1)
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_SCHEDULED").exists())
+
+    def test_non_admin_cannot_trigger_scheduling(self):
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(reverse("accounts:schedule_oral_exam"))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_admin_dashboard_shows_exam_schedule_card_with_required_columns(self):
+        self.ntnu_tutor.email = "oralreg-tutor@example.com"
+        self.ntnu_tutor.save(update_fields=["email"])
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:schedule_oral_exam"))
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("考試名單", content)
+        self.assertIn(self.ntnu_tutor.username, content)
+        self.assertIn(self.ntnu_tutor.bilingual_name, content)
+        self.assertIn(self.ntnu_tutor.email, content)
+        self.assertIn("08:00", content)
+
+    def test_admin_can_save_a_meeting_link_for_a_scheduled_registration(self):
+        """2026-10-09(使用者要求「考試名單右側多加兩個欄位：1. 可以讓助教放上google
+        meet連結」)。"""
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:save_oral_exam_meet_link", args=[registration.pk]),
+            {"meet_link": "https://meet.google.com/abc-defg-hij"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration.refresh_from_db()
+        self.assertEqual(registration.meet_link, "https://meet.google.com/abc-defg-hij")
+
+    def test_invalid_meeting_link_is_rejected(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("accounts:save_oral_exam_meet_link", args=[registration.pk]), {"meet_link": "not a url"},
+        )
+        registration.refresh_from_db()
+        self.assertEqual(registration.meet_link, "")
+
+    def test_non_admin_cannot_save_a_meeting_link(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        registration = OralExamRegistration.objects.get()
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(
+            reverse("accounts:save_oral_exam_meet_link", args=[registration.pk]),
+            {"meet_link": "https://meet.google.com/abc-defg-hij"},
+        )
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_marking_oral_exam_as_passed_approves_the_qualification_document(self):
+        """2026-10-09(使用者要求「口語是否通過（手動作業，如果按通過就代表口語能力證明
+        直接通過...)」):重用既有的 `accounts:review_qualification`,不是另外做一套。"""
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        document = QualificationDocument.objects.create(
+            tutor=self.ntnu_tutor,
+            file=SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+            original_filename="proof.pdf",
+        )
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:schedule_oral_exam"))
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertIn(reverse("accounts:review_qualification", args=[document.pk]), response.content.decode())
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]),
+            {"action": "approve", "next": "oral-exam"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.APPROVED)
+        self.assertEqual(document.reviewed_by, self.admin)
+
+    def test_marking_oral_exam_as_failed_rejects_the_qualification_document(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        document = QualificationDocument.objects.create(
+            tutor=self.ntnu_tutor,
+            file=SimpleUploadedFile("proof.pdf", minimal_pdf_bytes(), content_type="application/pdf"),
+            original_filename="proof.pdf",
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("accounts:review_qualification", args=[document.pk]),
+            {"action": "reject", "next": "oral-exam"},
+        )
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        document.refresh_from_db()
+        self.assertEqual(document.status, QualificationStatus.REJECTED)
+
+    def test_exam_schedule_card_shows_upload_prompt_when_no_qualification_document_exists(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:schedule_oral_exam"))
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "尚未上傳口語能力證明")
+
+    def _create_n_submitted_registrations(self, n):
+        """2026-10-09(使用者要求「每次安排考試最多20人...已經滿了先停止報名」,接著
+        澄清「如果讓他們報名...他們都已經繳費了，所以我才說要從報名人數開始擋」):
+        製造 n 位**單純送出、完全沒被 Admin 登記(CONFIRMED)**的報名——上限要算的是
+        「已送出報名」的總數,不是已登記人數,這裡故意全部維持 `PENDING`,確保測試能
+        真正驗證「連還沒登記的報名也算進上限」這個修正重點,而不是意外測成舊版「只看
+        已登記人數」的邏輯。"""
+        for index in range(n):
+            roster = RosterEntry.objects.create(
+                student_id=f"ORALREG-CAP-{index}", name_zh=f"滿額老師{index}", role=Role.TUTOR,
+                education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+            )
+            tutor = User.objects.create_user(
+                username=f"ORALREG-CAP-{index}", password="Tutor-password-2026", role=Role.TUTOR,
+                roster_entry=roster,
+            )
+            self._submit(tutor)
+
+    def test_dashboard_shows_registered_count_label(self):
+        self._submit(self.ntnu_tutor)
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "目前報名人數（1/20）")
+
+    def test_new_registration_is_rejected_once_submission_cap_is_reached_even_without_any_confirmation(self):
+        self._create_n_submitted_registrations(20)
+        self.assertEqual(
+            OralExamRegistration.objects.filter(review_status=OralExamRegistrationReviewStatus.CONFIRMED).count(), 0,
+        )
+        response = self._submit(self.ntnu_tutor)
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        self.assertFalse(OralExamRegistration.objects.filter(tutor=self.ntnu_tutor).exists())
+
+    def test_existing_registrant_can_still_update_when_submission_cap_is_reached(self):
+        self._submit(self.ntnu_tutor)
+        self._create_n_submitted_registrations(20)
+        response = self._submit(self.ntnu_tutor, time_slot_1="10:00")
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        registration = OralExamRegistration.objects.get(tutor=self.ntnu_tutor)
+        self.assertEqual(registration.time_slot_1, time(10, 0))
+
+    def test_dashboard_hides_registration_form_when_full_for_a_brand_new_registrant(self):
+        self._create_n_submitted_registrations(20)
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertIn("報名已額滿", content)
+        self.assertNotIn('name="time_slot_1_0"', content)
+
+    def test_dashboard_still_shows_editable_form_when_full_but_tutor_already_registered(self):
+        self._submit(self.ntnu_tutor)
+        self._create_n_submitted_registrations(20)
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.get(reverse("accounts:dashboard"))
+        content = response.content.decode()
+        self.assertNotIn("報名已額滿", content)
+        self.assertIn('name="time_slot_1_0"', content)
 
 
 class DashboardSectionNotificationTests(TestCase):
