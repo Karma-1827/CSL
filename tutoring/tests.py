@@ -2894,6 +2894,36 @@ class ClassWorkflowTests(TestCase):
         self.assertFalse(over_limit_remarks_form.is_valid())
         self.assertIn("remarks", over_limit_remarks_form.errors)
 
+    def test_class_record_content_counts_newlines_the_same_as_the_browser_displays(self):
+        """2026-10-12(Tutor 回報):畫面上的即時字數(`character-count.js` 看
+        `<textarea>.value.length`,換行只算 1 個字元)跟送出後伺服器端驗證算出的
+        字數不一致,顯示 500 字以內卻被擋下「至多包含 500 個字(目前為 511 個字)」。
+        查明是瀏覽器送出表單時,依 HTML 規格會把 `<textarea>` 內容裡的換行正規化成
+        `\\r\\n`(每個換行多一個 `\\r`)——這裡故意用 `\\r\\n` 模擬瀏覽器實際送出的
+        資料(不是直接送 `\\n`,那樣測不到這個 bug),確認含 11 個換行、瀏覽器端看
+        起來剛好 500 字的內容,送出後依然通過驗證,不會被誤判成 511 字。"""
+        base = {
+            "location": "綜合大樓 / General Building", "topic": "課堂主題",
+            "materials_used": "課本、教具", "individual_progress": "進度正常",
+            "evidence_links": ["https://example.com/evidence"],
+        }
+        # 畫面上(.value.length)剛好 500 字:11 個換行穿插在文字中間(不放在最前/最後,
+        # 避免被 Django CharField 預設的 strip=True 去掉首尾空白,誤蓋掉真正要測的
+        # 換行正規化行為)。
+        displayed_content = "內" * 10 + "段\n" * 11 + "內" * 468
+        self.assertEqual(len(displayed_content), 500)
+        self.assertEqual(displayed_content.count("\n"), 11)
+        browser_submitted_content = displayed_content.replace("\n", "\r\n")
+        form = ClassRecordForm(data={**base, "content": browser_submitted_content, "remarks": ""})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["content"], displayed_content)
+
+        # 畫面上(.value.length)501 字時(換行正規化前就已經超過),仍然要擋下。
+        over_limit_content = browser_submitted_content + "多"
+        over_limit_form = ClassRecordForm(data={**base, "content": over_limit_content, "remarks": ""})
+        self.assertFalse(over_limit_form.is_valid())
+        self.assertIn("content", over_limit_form.errors)
+
     def test_class_record_attachment_saved_and_downloadable_by_counterpart_and_admin(self):
         """This exercises a Tutor record with an attachment via the service layer directly
         (bypassing ClassRecordForm, which no longer offers Tutors an attachment field after

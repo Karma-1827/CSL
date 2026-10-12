@@ -2539,6 +2539,40 @@ class ProfileEditTests(TestCase):
         self.assertEqual(self.tutor_profile.teaching_notes, "重視口語互動")
         self.assertFalse(AuditLog.objects.filter(event_type="PROFILE_UPDATED").exists())
 
+    def test_teaching_notes_counts_newlines_the_same_as_the_browser_displays(self):
+        """2026-10-12(Tutor 回報「本日教學範圍與完整流程」字數不一致的同一個 bug
+        類別,`teaching_notes` 用的是同一種 `<textarea>`+伺服器端 `max_length`
+        組合,受影響的邏輯一致):瀏覽器送出表單時會把換行正規化成 `\\r\\n`,這裡故意
+        送出 `\\r\\n`(模擬真實瀏覽器行為)確認畫面上看起來剛好 500 字的內容
+        (11 個換行+489 個字)能正常送出,不會被誤判成 511 字而擋下。"""
+        self.client.force_login(self.tutor)
+        # 11 個換行穿插在文字中間(不放在最前/最後,避免被 Django CharField 預設的
+        # strip=True 去掉首尾空白,誤蓋掉真正要測的換行正規化行為)。
+        displayed_notes = "重" * 10 + "點\n" * 11 + "重" * 468
+        self.assertEqual(len(displayed_notes), 500)
+        browser_submitted_notes = displayed_notes.replace("\n", "\r\n")
+        response = self.client.post(
+            reverse("accounts:update_profile"),
+            {
+                "phone": "0911222333",
+                "email": "tutor.edit@example.com",
+                "gender": "MALE",
+                "native_language": "Mandarin Chinese",
+                "nationality": "Taiwan",
+                "department": "應用華語文學系",
+                "level_listening": 5,
+                "level_speaking": 5,
+                "level_reading": 5,
+                "level_writing": 5,
+                "teaching_notes": browser_submitted_notes,
+                "available_days": ["MON"],
+                "available_time_slots": ["09:00-11:00"],
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile") + "#edit-profile")
+        self.tutor_profile.refresh_from_db()
+        self.assertEqual(self.tutor_profile.teaching_notes, displayed_notes)
+
     def test_tutee_can_update_profile_fields(self):
         self.client.force_login(self.tutee)
         response = self.client.post(

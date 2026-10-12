@@ -343,6 +343,22 @@ class RegistrationLookupForm(forms.Form):
         return draft
 
 
+class NewlineNormalizingTextarea(forms.Textarea):
+    """2026-10-12(Tutor 回報,見 `tutoring/forms.py` 同名類別的完整說明):瀏覽器送出
+    表單時會把 `<textarea>` 內容的換行正規化成 `\\r\\n`,但畫面上的即時字數
+    (`static/js/character-count.js`)看的是換行只算 1 個字元的 DOM `.value.length`,
+    造成伺服器端驗證算出的字數比畫面顯示多(每個換行多 1 個字元),使用者在還沒達到
+    畫面顯示的上限前就被擋下。這裡刻意跟 `tutoring/forms.py` 各自維護一份一樣的
+    小型 widget,不跨 app 互相匯入(兩個 app 的 forms.py 之間沒有既有的匯入慣例,
+    為這麼小的輔助類別新增跨 app 依賴不值得),修法本身完全相同。"""
+
+    def value_from_datadict(self, data, files, name):
+        value = super().value_from_datadict(data, files, name)
+        if isinstance(value, str):
+            value = value.replace("\r\n", "\n").replace("\r", "\n")
+        return value
+
+
 class BaseRoleRegistrationForm(forms.Form):
     name_zh = forms.CharField(label="中文姓名 / Chinese name", max_length=100)
     name_en = forms.CharField(label="英文姓名 / English name", max_length=150, required=False)
@@ -474,7 +490,7 @@ class TutorRegistrationForm(BaseRoleRegistrationForm):
     level_writing = forms.TypedChoiceField(label="寫作 / Writing", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     teaching_notes = forms.CharField(
         label="教學簡介 / Teaching notes", required=False, max_length=500,
-        widget=forms.Textarea(attrs={"rows": 4, "maxlength": 500, "data-character-count": "500"}),
+        widget=NewlineNormalizingTextarea(attrs={"rows": 4, "maxlength": 500, "data-character-count": "500"}),
     )
     available_days = forms.MultipleChoiceField(
         label="可配合星期 / Available days", choices=DAYS, widget=forms.CheckboxSelectMultiple
@@ -644,7 +660,7 @@ class QualificationUploadForm(forms.ModelForm):
                 "data-max-file-bytes": "1000000",
                 "data-max-file-size-label": "1 MB",
             }),
-            "tutor_note": forms.Textarea(attrs={"rows": 2, "maxlength": 300}),
+            "tutor_note": NewlineNormalizingTextarea(attrs={"rows": 2, "maxlength": 300}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -686,7 +702,7 @@ class TutorProfileEditForm(forms.Form):
     level_writing = forms.TypedChoiceField(label="寫作 / Writing", choices=LEVEL_CHOICES, coerce=int, widget=forms.RadioSelect)
     teaching_notes = forms.CharField(
         label="教學簡介 / Teaching notes", required=False, max_length=500,
-        widget=forms.Textarea(attrs={"rows": 4, "maxlength": 500, "data-character-count": "500"}),
+        widget=NewlineNormalizingTextarea(attrs={"rows": 4, "maxlength": 500, "data-character-count": "500"}),
     )
     available_days = forms.MultipleChoiceField(
         label="可配合星期 / Available days", choices=DAYS, widget=forms.CheckboxSelectMultiple

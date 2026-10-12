@@ -187,6 +187,26 @@ class EvidenceLinksField(forms.Field):
                 raise ValidationError(f"「{link}」不是合法的 https 網址。 / \"{link}\" is not a valid https:// URL.")
 
 
+class NewlineNormalizingTextarea(forms.Textarea):
+    """2026-10-12(Tutor 回報):畫面上的即時字數(`static/js/character-count.js`,看
+    `<textarea>.value.length`,換行只算 1 個字元)跟送出後伺服器端驗證算出來的字數
+    不一致,顯示 500 字以內卻被擋下「至多包含 500 個字(目前為 511 個字)」。查明是
+    瀏覽器送出表單時,依 HTML 規格會把 `<textarea>` 內容的換行正規化成 `\\r\\n`
+    (每個換行多一個 `\\r`),但 Django 收到 `request.POST` 後不會反過來正規化回來,
+    `len()` 直接把 `\\r`、`\\n`各算一個字元——使用者這次回報的 11 個字差距,剛好
+    對應內容裡的 11 個換行(已用 Django test client 重現確認,見 commit)。修法是在
+    `value_from_datadict()`(Django 表單驗證流程裡,比 `Field.clean()`/長度驗證器
+    更早被呼叫的那一步)把 `\\r\\n`、單獨的 `\\r` 都正規化成 `\\n`,讓伺服器端驗證
+    的字數跟畫面上本來就算對的即時字數一致——不是放寬字數上限,也不用改前端計數
+    方式,前端原本的算法才是對的。"""
+
+    def value_from_datadict(self, data, files, name):
+        value = super().value_from_datadict(data, files, name)
+        if isinstance(value, str):
+            value = value.replace("\r\n", "\n").replace("\r", "\n")
+        return value
+
+
 class ClassRecordForm(forms.ModelForm):
     evidence_links = EvidenceLinksField(label="佐證連結 / Evidence links")
 
@@ -197,10 +217,10 @@ class ClassRecordForm(forms.ModelForm):
             "attachment", "evidence_links",
         )
         widgets = {
-            "content": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
-            "materials_used": forms.Textarea(attrs={"rows": 3, "maxlength": 200, "data-character-count": "200"}),
-            "individual_progress": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
-            "remarks": forms.Textarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
+            "content": NewlineNormalizingTextarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
+            "materials_used": NewlineNormalizingTextarea(attrs={"rows": 3, "maxlength": 200, "data-character-count": "200"}),
+            "individual_progress": NewlineNormalizingTextarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
+            "remarks": NewlineNormalizingTextarea(attrs={"rows": 5, "maxlength": 500, "data-character-count": "500"}),
             "attachment": forms.FileInput(attrs={"accept": ".pdf,.jpg,.jpeg,.png"}),
         }
 
