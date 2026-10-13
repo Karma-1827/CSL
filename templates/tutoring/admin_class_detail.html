@@ -99,7 +99,18 @@
 
     {% if class_review.status == 'PENDING' %}
       <section class="panel class-review-block admin-review-decision">
-        <div class="panel-heading"><div><span class="eyebrow">DECISION</span><h2>課程審核 <small>Class review decision</small></h2></div></div>
+        {% comment %}
+          2026-10-13(使用者要求「由上面加上師大外籍生/馬里蘭大學的標籤，這樣審課的人
+          比較清楚是哪個計畫」,放右上角):沿用既有的 `.privacy-chip`(已經在
+          `.panel-heading` 這種 flex row 裡用過,不需要新增樣式),第二個子元素放進
+          `.panel-heading` 就會自動靠右(既有慣例)。計畫看 Tutee 的
+          `roster_entry.program`(每位 Tutee 必填,見 `RosterEntry.clean()`),不是
+          Tutor 的,因為 Tutor 可能同時帶不同計畫的學生,計畫本身是跟著 Tutee 走的。
+        {% endcomment %}
+        <div class="panel-heading">
+          <div><span class="eyebrow">DECISION</span><h2>課程審核 <small>Class review decision</small></h2></div>
+          <span class="privacy-chip">{{ session.pairing.tutee.roster_entry.program.name_zh }} <small>{{ session.pairing.tutee.roster_entry.program.code }}</small></span>
+        </div>
         {% if class_review_history.0.note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|linebreaksbr }}</p>{% endif %}
         <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
           {% csrf_token %}<input type="hidden" name="next" value="detail"><label>審核意見 / Review comments<textarea name="note" rows="3"></textarea></label>

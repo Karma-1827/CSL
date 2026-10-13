@@ -2603,6 +2603,34 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, '<button class="button button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
         self.assertContains(detail, '<button class="button button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
 
+    def test_admin_class_detail_decision_form_shows_the_tutees_program_tag(self):
+        """2026-10-13(使用者要求「課程審核 Class review decision，由上面加上師大外籍生/
+        馬里蘭大學的標籤，這樣審課的人比較清楚是哪個計畫」):標籤看 Tutee 的
+        `roster_entry.program`,不是 Tutor 的(Tutor 可能同時帶不同計畫的學生)。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="PROGRAM-TAG-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(detail, '<span class="privacy-chip">師大外籍生 <small>NTNU</small></span>', html=True)
+
+        maryland_roster = RosterEntry.objects.create(
+            student_id="PROGRAM-TAG-TUTEE-MD", name_zh="馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=PartnerProgram.objects.get(code="MARYLAND"),
+        )
+        maryland_tutee = User.objects.create_user(
+            username="PROGRAM-TAG-TUTEE-MD", password="Test-password-2026", role=Role.TUTEE,
+            roster_entry=maryland_roster,
+        )
+        maryland_pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=maryland_tutee)
+        maryland_session = schedule_classes(
+            tutor=self.tutor, pairing=maryland_pairing, class_date=timezone.localdate() + timedelta(days=1),
+            start_time=time(10), duration="1.0",
+        )[0]
+        ClassReview.objects.create(session=maryland_session, status=ClassReviewStatus.PENDING)
+        maryland_detail = self.client.get(reverse("tutoring:class_detail", args=[maryland_session.pk]))
+        self.assertContains(maryland_detail, '<span class="privacy-chip">馬里蘭大學 <small>MARYLAND</small></span>', html=True)
+
     def test_admin_dashboard_class_review_list_has_no_inline_actions(self):
         """2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片外做
         審核」):dashboard 課程審核清單的每一列不應該再有任何審核意見輸入框、通過/待補正/
