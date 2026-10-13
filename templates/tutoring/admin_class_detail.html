@@ -59,6 +59,20 @@
         <ul class="incident-report-reply-list">
           {% for entry in class_review_history %}
             <li class="incident-report-reply-item class-review-history-item">
+              {% comment %}
+                2026-10-13(使用者回報「有時內容太長，待補正的標籤會擋到字，因為距離只抓到
+                撤回按鈕前」):原本徽章+撤回按鈕用 position: absolute 疊在卡片右側,靠固定
+                的 padding-right(128px)幫文字留空間——這個數字是抓「狀態徽章+間距+撤回
+                按鈕」這組合當時量出來的寬度,但「待補正 / Revise」這個標籤文字比「通過」
+                「未通過」長,組合寬度超出 128px 時就會往左溢出蓋到旁邊的審核意見文字(尤其
+                內容本身較長、卡片本身被撐高的情況更明顯)。改用 flexbox 兩欄並排(文字區
+                flex:1 + 固定寬度的徽章/按鈕區),不再靠猜測的固定寬度留白,徽章文字多長都
+                不會疊到文字,結構上不可能重疊。
+              {% endcomment %}
+              <div class="class-review-history-body">
+                <time>{{ entry.created_at|date:"Y-m-d H:i" }} · {{ entry.reviewed_by.bilingual_name }}</time>
+                {% if entry.note %}<p>{{ entry.note|linebreaksbr }}</p>{% endif %}
+              </div>
               <div class="class-review-history-actions">
                 <span class="status-badge status-{{ entry.status|lower }}">{{ entry.get_status_display }}</span>
                 {% comment %}
@@ -71,8 +85,6 @@
                 {% endcomment %}
                 <form action="{% url 'tutoring:delete_class_review_decision' entry.pk %}" method="post">{% csrf_token %}<button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form>
               </div>
-              <time>{{ entry.created_at|date:"Y-m-d H:i" }} · {{ entry.reviewed_by.bilingual_name }}</time>
-              {% if entry.note %}<p>{{ entry.note|linebreaksbr }}</p>{% endif %}
             </li>
           {% endfor %}
         </ul>

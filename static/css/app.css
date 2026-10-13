@@ -4256,18 +4256,22 @@ td small {
   font-size: 0.8rem;
 }
 .class-review-history-item {
-  /* 2026-10-02(使用者更正「每個紀錄都要放撤回按鈕」):撤回改回每一筆歷史紀錄各自
-     一顆按鈕(不是區塊標題旁共用一顆),卡片右側要同時容納狀態徽章與撤回按鈕,留寬一
-     點的空間。 */
-  position: relative;
-  padding-right: 128px;
-  min-height: 40px;
+  /* 2026-10-13(使用者回報「待補正的標籤會擋到字，因為距離只抓到撤回按鈕前」):原本用
+     position: absolute 把徽章/撤回按鈕疊在卡片右側,靠猜測的固定 padding-right 幫文字
+     留空間——「待補正 / Revise」這個標籤比「通過」「未通過」長,組合寬度超出那個固定
+     值時就會往左溢出蓋到文字。改用 flexbox 兩欄並排,徽章/按鈕區永遠靠自己實際寬度
+     佔位,文字區用 flex: 1 吃剩餘空間,結構上不會重疊,不需要再猜測任何固定寬度。 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.class-review-history-body {
+  flex: 1;
+  min-width: 0;
 }
 .class-review-history-actions {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
