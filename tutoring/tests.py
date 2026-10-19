@@ -1885,13 +1885,12 @@ class ClassWorkflowTests(TestCase):
         session.refresh_from_db()
         self.assertTrue(class_is_valid(session))
 
-    def test_editing_own_record_after_both_confirmed_resets_pending_review_to_waiting(self):
-        """2026-10-01(使用者回報):「9/23 唐子雯 x 朴敍亨，tutee放未確認，為什麼會放在
-        等待管理員核准的區塊」。實際原因:雙方互相確認後 ClassReview 變成 PENDING;提交
-        自己課堂紀錄時既有邏輯只會在 ClassReview 已經是 APPROVED/REJECTED 時才重置狀態
-        並刪除對方對自己的舊確認,但沒有呼叫 _sync_class_review() 依刪除後剩下的確認筆數
-        重新計算——如果原本就是 PENDING(還沒被 Admin 審過),狀態完全沒被動到,導致
-        「對方其實已經不算確認了,畫面卻還留在等待管理員核准」這個不一致。"""
+    def test_editing_own_record_after_both_confirmed_keeps_pending_review_without_reconfirmation(self):
+        """2026-10-19(使用者要求「第一次填寫課堂紀錄需要雙方確認，過後的每一次更新就
+        不用等待雙方確認」,取代 2026-10-01 的舊規則——舊版在這個情境下會把狀態打回
+        WAITING、刪除對方的確認,要求重新走一次互相確認):雙方第一次互相確認完成後
+        ClassReview 進入 PENDING;老師之後再編輯自己的紀錄,不應該再影響對方既有的
+        確認,也不應該退回 WAITING——應該維持 PENDING,讓管理員直接審核最新內容。"""
         class_date = timezone.localdate()
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
@@ -1911,20 +1910,23 @@ class ClassWorkflowTests(TestCase):
         session.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
 
-        # Tutor edits their own record again — this must invalidate the tutee's
-        # confirmation *of the tutor* and drop the review back to WAITING, since only
-        # one of the two required confirmations is still valid afterward.
+        # Tutor edits their own record again — this is the first *update* after the
+        # first-time submission, so mutual confirmation should no longer be required:
+        # the tutee's existing confirmation of the tutor must survive, and the review
+        # must stay PENDING (ready for admin review), not drop back to WAITING.
         submit_class_record(
             session_id=session.pk, author=self.tutor, data=self.record_data("老師更新後的紀錄"), now=normal_now
         )
         session.refresh_from_db()
-        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
         self.assertEqual(
             ClassConfirmation.objects.filter(
                 session=session, status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
             ).count(),
-            1,
+            2,
         )
+        tutor_record = session.class_records.get(author=self.tutor)
+        self.assertEqual(tutor_record.topic, "老師更新後的紀錄")
 
     def test_submit_class_record_creates_revision_snapshot_on_first_save(self):
         """2026-10-05(使用者要求「重新送審時列出 tutor/tutee 所有編輯/更新內容,前後都要,
@@ -2178,10 +2180,8 @@ class ClassWorkflowTests(TestCase):
         now = self.aware(timezone.localdate(), time(11, 5))
         submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("補正後"), now=now)
         session.class_review.refresh_from_db()
-        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
-        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
-        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
-        session.class_review.refresh_from_db()
+        # 2026-10-19(使用者要求「過後的每一次更新就不用等待雙方確認」):補正後直接退回
+        # PENDING,不需要再呼叫 confirm_counterpart() 走一次重新確認。
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
 
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="未通過")
@@ -2256,10 +2256,12 @@ class ClassWorkflowTests(TestCase):
         self.assertIsNone(reverted.reviewed_at)
         self.assertEqual(reverted.decisions.count(), 0)
 
-    def test_editing_own_record_after_revise_resets_pending_review_to_waiting(self):
-        """REVISE 跟 APPROVED/REJECTED 一樣是「已決定」的終局狀態之一,任一方修改自己的
-        課堂紀錄時,一樣要重置回 WAITING 讓雙方重新互相確認——不應該只對 APPROVED/REJECTED
-        做這個重置,獨漏 REVISE。"""
+    def test_editing_own_record_after_revise_returns_directly_to_pending(self):
+        """2026-10-19(使用者要求「第一次填寫課堂紀錄需要雙方確認，過後的每一次更新就
+        不用等待雙方確認」,取代舊規則「REVISE 跟 APPROVED/REJECTED 一樣要重置回
+        WAITING 讓雙方重新互相確認」):老師補正(這是對這筆紀錄的更新,不是第一次送出)
+        後應該直接退回 PENDING 讓管理員重新審核,不需要再等雙方重新確認——對方既有的
+        確認也應該維持不變。"""
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="REVISE-EDIT-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正教材")
@@ -2268,7 +2270,16 @@ class ClassWorkflowTests(TestCase):
             now=self.aware(timezone.localdate(), time(11, 5)),
         )
         session.refresh_from_db()
-        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
+        self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        self.assertIsNone(session.class_review.reviewed_by)
+        self.assertEqual(session.class_review.review_note, "")
+        self.assertIsNone(session.class_review.reviewed_at)
+        self.assertEqual(
+            ClassConfirmation.objects.filter(
+                session=session, status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
+            ).count(),
+            2,
+        )
 
     def test_review_note_carries_over_as_previous_comment_until_next_decision(self):
         """2026-10-01(使用者要求「admin的審核意見上方也列出上一則留言，這樣比較好追蹤」):
@@ -2283,13 +2294,10 @@ class ClassWorkflowTests(TestCase):
         now = self.aware(timezone.localdate(), time(11, 5))
         submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"), now=now)
         session.refresh_from_db()
-        self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
-        self.assertEqual(session.class_review.review_note, "")
-
-        confirm_counterpart(session_id=session.pk, reviewer=self.tutor, status=ConfirmationStatus.CONFIRMED)
-        confirm_counterpart(session_id=session.pk, reviewer=self.tutee, status=ConfirmationStatus.CONFIRMED)
-        session.refresh_from_db()
+        # 2026-10-19(使用者要求「過後的每一次更新就不用等待雙方確認」):補正後直接退回
+        # PENDING,不需要再呼叫 confirm_counterpart()。
         self.assertEqual(session.class_review.status, ClassReviewStatus.PENDING)
+        self.assertEqual(session.class_review.review_note, "")
         self.assertEqual(session.class_review.review_note, "")
         self.assertEqual(session.class_review.decisions.count(), 1)
         self.assertEqual(session.class_review.decisions.first().note, "請補充授課照片")
@@ -2313,16 +2321,18 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(session.class_review.decisions.count(), 2)
 
     def test_review_note_still_visible_while_waiting_for_mutual_reconfirmation(self):
-        """2026-10-01(使用者要求「只要admin有給建議，都要顯示出來」):上一則測試只涵蓋
-        重新確認完成、回到 PENDING 之後的畫面——這裡補上「學生剛編輯完紀錄、對方還沒重新
-        確認、審核仍停留在 WAITING」這段期間,三處畫面(Admin 課程詳情頁、Admin dashboard
-        課程審核清單、Tutor/Tutee 自己的課程詳情頁)都必須繼續顯示管理員上一次的留言,不能
-        因為狀態還是 WAITING 就整個藏起來。"""
+        """2026-10-01(使用者要求「只要admin有給建議，都要顯示出來」):驗證即使審核狀態
+        停留在 WAITING,過去的審核意見(ClassReviewDecision 歷史)仍要顯示,不能因為不是
+        PENDING/已決定狀態就被藏起來。**2026-10-19 起,更新課堂紀錄不再會把審核打回
+        WAITING(只有第一次送出、雙方還沒確認完畢時才會是 WAITING,那個情境下不可能已經
+        有審核歷史),這個「WAITING 又有歷史」的組合在正常流程裡已經不會再自然發生——
+        改用直接操作 ClassReview 狀態模擬這個邊界情況,確保畫面的防禦性顯示邏輯沒有被
+        移除或弄壞。"""
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="WAITING-NOTE-ADMIN", password="Admin-password-2026")
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補充授課照片")
-        now = self.aware(timezone.localdate(), time(11, 5))
-        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師補正後的紀錄"), now=now)
+        session.class_review.status = ClassReviewStatus.WAITING
+        session.class_review.save(update_fields=["status", "updated_at"])
         session.refresh_from_db()
         self.assertEqual(session.class_review.status, ClassReviewStatus.WAITING)
 

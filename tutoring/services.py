@@ -1327,28 +1327,33 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
         evidence_links=record.evidence_links,
     )
     if existing:
-        # Editing a record after it already has a review decision invalidates that
-        # decision (2026-09-10): applies to every session now, not just makeup ones,
-        # since every session's review can be reset by a later edit either way.
+        # 2026-10-19(使用者要求「第一次填寫課堂紀錄需要雙方確認，過後的每一次更新就
+        # 不用等待雙方確認」,取代 2026-09-10/2026-10-01 的舊規則):只有「第一次送出」
+        # (existing 為 None,這是該作者第一次對這堂課提交紀錄)才需要走完整的互相確認
+        # 流程——`existing` 非空代表這是對已存在紀錄的「更新」(不論第幾次編輯),一律
+        # 不再要求重新等待對方確認:不刪除對方既有的確認,也不把狀態退回 WAITING。若審
+        # 核已經是終局決定(REJECTED/REVISE;APPROVED 在上方已被擋下不可編輯,不會走到
+        # 這裡),直接退回 PENDING 讓管理員依最新內容重新審核,略過「等待雙方重新確認」
+        # 這個中間狀態——`review_class_session()` 一律只從 PENDING 狀態受理決定,所以
+        # 這裡進入 REJECTED/REVISE 之前一定已經有過 2 筆有效確認,直接退回 PENDING 跟
+        # 下面 `_sync_class_review()` 依現有(未被刪除)確認筆數重新計算的結果一致,不會
+        # 錯誤放行尚未真正確認過的課程。
         review, _ = ClassReview.objects.get_or_create(session=session)
-        if review.status in {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
-            review.status = ClassReviewStatus.WAITING
+        if review.status in {ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
+            review.status = ClassReviewStatus.PENDING
             review.reviewed_by = None
-            # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」後改用
-            # ClassReviewDecision 歷史表):review_note 清空不會遺失過去的意見——每次
-            # review_class_session() 成功時都會在 ClassReviewDecision 另外留一筆快照,
-            # 畫面上的「上一則留言」與「完整審核紀錄」改讀那張表,不再依賴這裡保留一份
-            # 容易混淆語意的殘留值(review_note 清空後才真正代表「目前沒有決定中的意見」)。
+            # review_note 清空不會遺失過去的意見——每次 review_class_session() 成功時
+            # 都會在 ClassReviewDecision 另外留一筆快照,畫面上的「上一則留言」與「完整
+            # 審核紀錄」改讀那張表,不再依賴這裡保留一份容易混淆語意的殘留值(review_note
+            # 清空後才真正代表「目前沒有決定中的意見」)。
             review.review_note = ""
             review.reviewed_at = None
             review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
-    ClassConfirmation.objects.filter(session=session, subject=author).delete()
-    # 2026-10-01(使用者回報「tutee放未確認，為什麼會放在等待管理員核准的區塊」):
-    # 刪除對方針對這筆紀錄的舊確認之後,必須重新呼叫 _sync_class_review() 讓審核狀態
-    # 跟著現在剩下的確認筆數重新計算——先前只有 confirm_counterpart() 會呼叫這個函式,
-    # 這裡原本漏呼叫,導致「審核已經是 PENDING 之後,任一方又重新送出/修改自己的課堂
-    # 紀錄」這個情境下,即使剛剛那個刪除動作已經讓確認筆數掉回 1 筆,ClassReview 仍然
-    # 卡在 PENDING,跟畫面上另一方顯示「未確認」互相矛盾。
+    # 2026-10-19 起,第一次送出(existing 為 None)不再需要主動刪除對方的確認——
+    # confirm_counterpart() 本來就要求「對方的紀錄已經存在」才能確認,第一次送出時這筆
+    # 紀錄根本還不存在,不可能已經有對方對它的確認,這裡的刪除向來是沒有實際效果的
+    # 防禦寫法,直接省略。`_sync_class_review()` 一律呼叫,讓審核狀態永遠跟目前真正的
+    # 確認筆數同步(對編輯而言,確認筆數現在維持不變;對第一次送出而言,維持原本的計算)。
     _sync_class_review(session)
     return record
 

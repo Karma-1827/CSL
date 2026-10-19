@@ -759,7 +759,9 @@ class ClassReviewStatus(models.TextChoices):
     APPROVED = "APPROVED", "通過 / Approved"
     REJECTED = "REJECTED", "未通過 / Rejected"
     # 2026-10-01(使用者要求):跟「未通過」(終局、不會再採計)區分開來——這個狀態代表
-    # 課堂紀錄還有地方需要補正,老師/學生修改後會重新進入互相確認與審核流程,不是定案。
+    # 課堂紀錄還有地方需要補正,不是定案。**2026-10-19 起,老師/學生修改後不再重新進入
+    # 互相確認流程**(只有第一次送出才需要雙方確認,見 `tutoring/services.py::
+    # submit_class_record()`),補正後會直接退回 PENDING 讓管理員重新審核最新內容。
     REVISE = "REVISE", "待補正 / Revise"
 
 
