@@ -375,7 +375,7 @@
                       <span class="review-row-participants"><a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutor_id %}">{{ review.session.pairing.tutor.bilingual_name }}</a> × <a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutee_id %}">{{ review.session.pairing.tutee.bilingual_name }}</a></span>
                     </div>
                     <div class="review-row-badges">
-                      <i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>
+                      {% if section.status == 'DISCUSSION' %}<i class="status-badge status-discussion">待討論 <small>For discussion</small></i>{% else %}<i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>{% endif %}
                       <b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b>
                     </div>
                   </article>

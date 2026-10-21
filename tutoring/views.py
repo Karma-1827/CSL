@@ -32,6 +32,7 @@ from .reporting import (
     user_has_hour_records,
 )
 from .services import (
+    set_class_review_discussion_flag,
     acknowledge_pairing_release_notice,
     add_incident_report_reply,
     cancel_class,
@@ -883,6 +884,24 @@ def review_class(request, pk):
     if request.POST.get("next") == "detail":
         return redirect("tutoring:class_detail", pk=pk)
     return redirect(f"{reverse('accounts:dashboard')}#class-review")
+
+
+@login_required
+@require_POST
+def flag_class_review_discussion(request, pk):
+    # 2026-10-21(使用者要求):Admin 專屬的「待討論」整理動作,不改審核狀態。
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    flagged = request.POST.get("action") == "flag"
+    try:
+        set_class_review_discussion_flag(session_id=pk, admin=request.user, flagged=flagged)
+        messages.success(
+            request,
+            "已移到待討論。 / Moved to discussion." if flagged else "已移回等待核准。 / Moved back to pending.",
+        )
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    return redirect("tutoring:class_detail", pk=pk)
 
 
 @login_required

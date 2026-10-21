@@ -2374,6 +2374,10 @@ td small {
   color: var(--slate-700);
   background: var(--slate-100);
 }
+.status-discussion {
+  color: #5b2a86;
+  background: #efe6f7;
+}
 .class-review-note {
   margin: 10px 0 0;
   color: var(--navy);
@@ -3721,6 +3725,33 @@ td small {
 .status-group-revise {
   border-left: 4px solid var(--slate-700);
   background: linear-gradient(100deg, var(--slate-100), #fff 22%);
+}
+.discussion-flag-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #d9c7ea;
+  border-radius: 10px;
+  background: #faf6fd;
+}
+.discussion-flag-box.is-flagged {
+  border-color: #7b4bb0;
+  background: #efe6f7;
+}
+.discussion-flag-box span {
+  display: grid;
+  gap: 3px;
+}
+.discussion-flag-box small {
+  color: var(--ink-muted);
+}
+.status-group-discussion {
+  border-left: 4px solid #7b4bb0;
+  background: linear-gradient(100deg, #efe6f7, #fff 22%);
 }
 .makeup-review-row {
   display: grid;

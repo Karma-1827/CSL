@@ -83,6 +83,7 @@ from .services import (
     resolve_class_alert,
     resolve_incident_report,
     review_class_session,
+    set_class_review_discussion_flag,
     report_class_alert,
     process_pending_pairing_releases,
     review_pairing_release_request,
@@ -2720,6 +2721,64 @@ class ClassWorkflowTests(TestCase):
         self.assertNotIn("{#", content)
         self.assertNotIn("使用者要求", content)
         self.assertNotIn("審核意見拿掉，因為都要點進課堂紀錄查看才會審核", content)
+
+    def test_discussion_flag_moves_pending_class_to_admin_only_section(self):
+        """2026-10-21:移到待討論只是 Admin 內部整理,審核狀態仍是 PENDING,老師/學生端不變。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="DISCUSS-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+
+        response = self.client.post(
+            reverse("tutoring:flag_class_review_discussion", args=[session.pk]), {"action": "flag"}
+        )
+        self.assertRedirects(response, reverse("tutoring:class_detail", args=[session.pk]))
+        review = session.class_review
+        review.refresh_from_db()
+        self.assertEqual(review.status, ClassReviewStatus.PENDING)
+        self.assertTrue(review.is_on_discussion)
+        self.assertTrue(AuditLog.objects.filter(event_type="CLASS_REVIEW_DISCUSSION_FLAGGED").exists())
+
+        sections = {
+            row["status"]: row for row in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]
+        }
+        self.assertEqual(sections["DISCUSSION"]["page"].paginator.count, 1)
+        self.assertEqual(sections[ClassReviewStatus.PENDING]["page"].paginator.count, 0)
+        order = [row["status"] for row in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]]
+        self.assertEqual(order[-2:], [ClassReviewStatus.REVISE, "DISCUSSION"])
+
+        # 老師看到的仍是「等待管理員核准」,頁面上完全沒有待討論字樣。
+        self.client.force_login(session.pairing.tutor)
+        tutor_page = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(tutor_page, "等待管理員核准")
+        self.assertNotContains(tutor_page, "待討論")
+        self.assertNotContains(tutor_page, "review/discussion/")
+
+        # 可以移回。
+        self.client.force_login(admin)
+        self.client.post(reverse("tutoring:flag_class_review_discussion", args=[session.pk]), {"action": "unflag"})
+        review.refresh_from_db()
+        self.assertFalse(review.is_on_discussion)
+
+    def test_discussion_flag_is_cleared_when_a_decision_is_made_and_rejects_non_pending(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="DISCUSS-ADMIN2", password="Admin-password-2026")
+        set_class_review_discussion_flag(session_id=session.pk, admin=admin, flagged=True)
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note="請補正")
+        review = session.class_review
+        review.refresh_from_db()
+        self.assertIsNone(review.discussion_flagged_at)
+        with self.assertRaises(ValidationError):
+            set_class_review_discussion_flag(session_id=session.pk, admin=admin, flagged=True)
+
+    def test_non_admin_cannot_flag_class_for_discussion(self):
+        session = self._confirmed_pending_session()
+        self.client.force_login(session.pairing.tutor)
+        response = self.client.post(
+            reverse("tutoring:flag_class_review_discussion", args=[session.pk]), {"action": "flag"}
+        )
+        self.assertEqual(response.status_code, 404)
+        session.class_review.refresh_from_db()
+        self.assertFalse(session.class_review.is_on_discussion)
 
     def test_admin_dashboard_class_review_section_paginates_at_seven_per_page(self):
         """2026-10-02(使用者要求「比數會越來越多，每個區塊只7筆就換第二頁」):單一狀態

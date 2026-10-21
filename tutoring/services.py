@@ -1409,7 +1409,10 @@ def _sync_class_review(session):
     decided_statuses = {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}
     if review.status not in decided_statuses and review.status != target:
         review.status = target
-        review.save(update_fields=["status", "updated_at"])
+        # 離開 PENDING 就不再是「待討論」,避免之後又回到 PENDING 時殘留舊標記。
+        review.discussion_flagged_at = None
+        review.discussion_flagged_by = None
+        review.save(update_fields=["status", "discussion_flagged_at", "discussion_flagged_by", "updated_at"])
 
 
 @transaction.atomic
@@ -1489,7 +1492,12 @@ def review_class_session(*, session_id, admin, decision, note=""):
     review.reviewed_by = admin
     review.review_note = note
     review.reviewed_at = timezone.now()
-    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    review.discussion_flagged_at = None
+    review.discussion_flagged_by = None
+    review.save(update_fields=[
+        "status", "reviewed_by", "review_note", "reviewed_at",
+        "discussion_flagged_at", "discussion_flagged_by", "updated_at",
+    ])
     # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):額外寫入一筆
     # 不受後續重置/撤回影響的歷史快照,讓畫面能列出這堂課完整的審核歷程(例如先被要求
     # 補正兩次、第三次才通過),不是只看得到「目前這一次」的決定。
@@ -1507,6 +1515,38 @@ def review_class_session(*, session_id, admin, decision, note=""):
             "tutor": review.session.pairing.tutor.username,
             "tutee": review.session.pairing.tutee.username,
             "result": review.status,
+        },
+    )
+    return review
+
+
+@transaction.atomic
+def set_class_review_discussion_flag(*, session_id, admin, flagged):
+    """2026-10-21(使用者要求):把有問題、要留到開會討論的 PENDING 課程移進/移出 Admin 專屬的
+    「待討論」放置區。只動一個內部標記,不改 status,老師/學生端完全看不出差別。"""
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以整理課程審核。 / Only administrators may organize class reviews.")
+    review = ClassReview.objects.select_for_update().select_related(
+        "session__pairing__tutor", "session__pairing__tutee"
+    ).get(session_id=session_id)
+    if review.status != ClassReviewStatus.PENDING:
+        raise ValidationError("只有等待管理員核准的課程可以移到待討論。 / Only classes awaiting admin approval can be moved to discussion.")
+    if flagged:
+        review.discussion_flagged_at = timezone.now()
+        review.discussion_flagged_by = admin
+    else:
+        review.discussion_flagged_at = None
+        review.discussion_flagged_by = None
+    review.save(update_fields=["discussion_flagged_at", "discussion_flagged_by", "updated_at"])
+    AuditLog.record(
+        actor=admin,
+        target_user=review.session.pairing.tutee,
+        event_type="CLASS_REVIEW_DISCUSSION_FLAGGED" if flagged else "CLASS_REVIEW_DISCUSSION_UNFLAGGED",
+        description="課程移到待討論 / Class moved to discussion" if flagged else "課程移回等待核准 / Class moved back to pending",
+        metadata={
+            "session_id": review.session_id,
+            "tutor": review.session.pairing.tutor.username,
+            "tutee": review.session.pairing.tutee.username,
         },
     )
     return review

@@ -1098,6 +1098,9 @@ def dashboard(request):
             (ClassReviewStatus.APPROVED, "通過", "Approved", False),
             (ClassReviewStatus.REJECTED, "未通過", "Rejected", False),
             (ClassReviewStatus.REVISE, "待補正", "Revise", False),
+            # 2026-10-21(使用者要求):Admin 專屬放置區,放在待補正下方。不是真正的審核狀態,
+            # 底層仍是 PENDING + discussion_flagged_at,老師/學生端看不到這個分類。
+            ("DISCUSSION", "待討論", "For discussion", False),
         )
         # 2026-10-02(使用者要求「比數會越來越多，每個區塊只7筆就換第二頁」):五個狀態
         # 區塊各自獨立分頁,比照 roster_page/pairing_page 既有慣例,用各自的查詢參數
@@ -1107,7 +1110,12 @@ def dashboard(request):
         class_review_sections = []
         for status, label, label_en, is_open in status_definitions:
             page_param = f"{status.lower()}_page"
-            rows = [review for review in class_reviews if review.status == status]
+            if status == "DISCUSSION":
+                rows = [review for review in class_reviews if review.is_on_discussion]
+            elif status == ClassReviewStatus.PENDING:
+                rows = [review for review in class_reviews if review.status == status and not review.is_on_discussion]
+            else:
+                rows = [review for review in class_reviews if review.status == status]
             class_review_sections.append({
                 "status": status,
                 "label": label,

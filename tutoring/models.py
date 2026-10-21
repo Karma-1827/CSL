@@ -778,8 +778,20 @@ class ClassReview(models.Model):
     )
     review_note = models.TextField("審核意見 / Review comments", blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # 2026-10-21(使用者要求「待補正下方增加放置區,有問題的課堂移到這區,開會時一起討論」):
+    # 純 Admin 內部的整理標記,不是新的審核狀態——status 仍是 PENDING,老師/學生端看到的
+    # 一律還是「等待管理員核准」。只有 status==PENDING 時才有意義,離開 PENDING(做出決定、
+    # 或編輯紀錄使確認筆數變動)時由 services 清掉。
+    discussion_flagged_at = models.DateTimeField(null=True, blank=True)
+    discussion_flagged_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_on_discussion(self):
+        return self.status == ClassReviewStatus.PENDING and self.discussion_flagged_at is not None
 
 
 class ClassReviewDecision(models.Model):

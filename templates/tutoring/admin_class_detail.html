@@ -124,6 +124,21 @@
           <div><span class="eyebrow">DECISION</span><h2>課程審核 <small>Class review decision</small></h2></div>
           <span class="privacy-chip">{{ session.pairing.tutee.roster_entry.program.name_zh }} <small>{{ session.pairing.tutee.roster_entry.program.code }}</small></span>
         </div>
+        {% comment %}
+          2026-10-21(使用者要求):把有問題的課堂移到 Admin 專屬的「待討論」區,開會時一起
+          討論。純內部整理,審核狀態仍是等待管理員核准,老師/學生端看不到;決定表單在待討論
+          期間照常可用。
+        {% endcomment %}
+        <form action="{% url 'tutoring:flag_class_review_discussion' session.pk %}" method="post" class="discussion-flag-box{% if class_review.is_on_discussion %} is-flagged{% endif %}">
+          {% csrf_token %}
+          {% if class_review.is_on_discussion %}
+            <span><strong>待討論 / For discussion</strong><small>此課程已移到管理員專屬的待討論區（{{ class_review.discussion_flagged_at|date:"Y-m-d H:i" }}）。<br>Only admins see this placement; participants still see "waiting for admin approval".</small></span>
+            <button class="button button-secondary" name="action" value="unflag">移回等待核准 / Move back to pending</button>
+          {% else %}
+            <span><strong>有疑問的課堂？ / Needs discussion?</strong><small>移到「待討論」區，開會時一起討論；老師與學生端不受影響。<br>Park it for the next meeting; participants see no change.</small></span>
+            <button class="button button-secondary" name="action" value="flag">移到待討論 / Move to discussion</button>
+          {% endif %}
+        </form>
         {% if class_review_history.0.note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|rich_note }}</p>{% endif %}
         <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
           {% csrf_token %}<input type="hidden" name="next" value="detail"><div class="rich-note-field"><span class="rich-note-label">審核意見 / Review comments</span><textarea name="note" rows="3" data-rich-note></textarea></div>
