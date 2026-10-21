@@ -22,7 +22,8 @@
     editor.setAttribute("role", "textbox");
     editor.setAttribute("aria-multiline", "true");
 
-    function addButton(label, title, command, value, className) {
+    // 站台 CSP 啟用 Trusted Types,不能用 innerHTML;按鈕文字一律用 DOM API 建立。
+    function addButton(label, title, command, value, className, tag) {
       var button = document.createElement("button");
       button.type = "button";
       button.className = "rich-note-button" + (className ? " " + className : "");
@@ -30,23 +31,26 @@
       button.setAttribute("aria-label", title);
       if (value && command === "foreColor") {
         button.style.background = value;
-      } else {
-        button.innerHTML = label;
+      } else if (label) {
+        var face = document.createElement(tag || "span");
+        face.textContent = label;
+        button.appendChild(face);
       }
       // mousedown 阻止預設行為,避免點工具列時編輯區失去選取範圍。
       button.addEventListener("mousedown", function (event) { event.preventDefault(); });
       button.addEventListener("click", function () {
         editor.focus();
-        document.execCommand("styleWithCSS", false, true);
+        // 不用 CSS 樣式:產生 <b>/<i>/<u> 與 <font color>,這些才是伺服器端清理器認得的標記。
+        document.execCommand("styleWithCSS", false, false);
         document.execCommand(command, false, value || null);
         sync();
       });
       toolbar.appendChild(button);
     }
 
-    addButton("<b>B</b>", "粗體 / Bold", "bold");
-    addButton("<i>I</i>", "斜體 / Italic", "italic");
-    addButton("<u>U</u>", "底線 / Underline", "underline");
+    addButton("B", "粗體 / Bold", "bold", null, "", "b");
+    addButton("I", "斜體 / Italic", "italic", null, "", "i");
+    addButton("U", "底線 / Underline", "underline", null, "", "u");
     COLORS.forEach(function (color) {
       addButton("", "文字顏色 / Text color: " + color[1], "foreColor", color[0], "rich-note-swatch");
     });

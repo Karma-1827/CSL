@@ -30,3 +30,21 @@ class RichTextSanitizerTests(SimpleTestCase):
     def test_legacy_plain_text_renders_with_line_breaks_and_escaping(self):
         self.assertEqual(render_rich_text("第一行\n第二行 & 補充"), "第一行<br>第二行 &amp; 補充")
         self.assertEqual(render_rich_text("a <第二行> b"), "a &lt;第二行&gt; b")
+
+
+class RichNoteEditorScriptTests(SimpleTestCase):
+    """站台 CSP 啟用 Trusted Types,編輯器 JS 不得寫入 innerHTML,否則整個編輯器不會建立。"""
+
+    def test_editor_script_never_assigns_html_sinks(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        source = (Path(settings.BASE_DIR) / "static/js/rich-note-editor.js").read_text(encoding="utf-8")
+        for sink in ("innerHTML =", "outerHTML =", "insertAdjacentHTML", "document.write"):
+            self.assertNotIn(sink, source)
+
+    def test_editor_script_emits_markup_the_sanitizer_keeps(self):
+        # 編輯器關閉 styleWithCSS 後產生的標記:粗體/斜體/<font color>,清理器都必須保留。
+        cleaned = sanitize_rich_text('<b><i><font color="#c0392b">字</font></i></b>')
+        self.assertEqual(cleaned, '<b><i><span style="color:#c0392b">字</span></i></b>')
