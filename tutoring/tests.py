@@ -2358,6 +2358,26 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(own_detail, "上一則留言 / Previous comment")
         self.assertContains(own_detail, "請補充授課照片")
 
+    def test_review_note_is_sanitized_and_rendered_as_rich_text(self):
+        """2026-10-21:審核意見支援粗體/顏色,但儲存前一律經白名單清理,顯示端才輸出 HTML。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="RICH-ADMIN", password="Admin-password-2026")
+        review_class_session(
+            session_id=session.pk,
+            admin=admin,
+            decision=ClassReviewStatus.REVISE,
+            note='<b>請補照片</b><span style="color: rgb(192, 57, 43)">紅字</span><script>alert(1)</script>',
+        )
+        session.class_review.refresh_from_db()
+        self.assertEqual(
+            session.class_review.review_note,
+            '<b>請補照片</b><span style="color:#c0392b">紅字</span>',
+        )
+        self.client.force_login(admin)
+        response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(response, '<b>請補照片</b><span style="color:#c0392b">紅字</span>', html=False)
+        self.assertNotContains(response, "<script>alert(1)")
+
     def test_review_class_session_accumulates_full_decision_history(self):
         """2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):同一堂課
         若被要求補正多次,每一次 review_class_session() 都要在 ClassReviewDecision 另外

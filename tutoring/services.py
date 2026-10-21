@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, User
 
+from .richtext import MAX_RICH_NOTE_LENGTH, sanitize_rich_text
 from .models import (
     InvitationStatus,
     MatchingExclusion,
@@ -1479,9 +1480,14 @@ def review_class_session(*, session_id, admin, decision, note=""):
     ).get(session_id=session_id)
     if review.status != ClassReviewStatus.PENDING:
         raise ValidationError("此課程尚未進入可審核狀態。 / This class is not ready for review.")
+    # 2026-10-21(使用者要求審核意見支援粗體/斜體/顏色):前端送來的是 HTML,一律用白名單
+    # 重建後才存,不信任前端內容。
+    note = sanitize_rich_text(note)
+    if len(note) > MAX_RICH_NOTE_LENGTH:
+        raise ValidationError("審核意見過長。 / Review comments are too long.")
     review.status = decision
     review.reviewed_by = admin
-    review.review_note = note.strip()
+    review.review_note = note
     review.reviewed_at = timezone.now()
     review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
     # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):額外寫入一筆

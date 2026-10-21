@@ -6938,3 +6938,62 @@ td small {
     font-size: 0.74rem;
   }
 }
+
+/* 2026-10-21:課程審核意見的簡易富文字編輯器(粗體/斜體/底線/顏色) */
+.rich-note-field {
+  display: grid;
+  gap: 6px;
+}
+.rich-note-label {
+  color: var(--navy);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+.rich-note-editor {
+  border: 1px solid #e7c8d2;
+  border-radius: 9px;
+  background: #fff;
+  overflow: hidden;
+}
+.rich-note-editor:focus-within {
+  border-color: var(--blue);
+}
+.rich-note-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f0dde3;
+  background: var(--mist);
+}
+.rich-note-button {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #e7c8d2;
+  border-radius: 7px;
+  color: var(--navy);
+  background: #fff;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.rich-note-button:hover {
+  border-color: var(--blue);
+}
+.rich-note-swatch {
+  min-width: 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+}
+.rich-note-surface {
+  min-height: 84px;
+  padding: 9px 11px;
+  color: var(--navy);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  outline: none;
+}
