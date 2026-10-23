@@ -4,6 +4,17 @@ from tutoring.richtext import render_rich_text, sanitize_rich_text
 
 
 class RichTextSanitizerTests(SimpleTestCase):
+    def test_lists_are_kept_and_rendered_with_classes(self):
+        raw = '前言<ol><li>一</li><li><b>二</b></li></ol><ul><li onclick="x()">點</li></ul><script>x</script>'
+        self.assertEqual(
+            sanitize_rich_text(raw),
+            '前言<ol><li>一</li><li><b>二</b></li></ol><ul><li>點</li></ul>',
+        )
+        rendered = render_rich_text(raw)
+        self.assertIn('<ol class="rn-ol"><li>一</li>', rendered)
+        self.assertIn('<ul class="rn-ul"><li>點</li></ul>', rendered)
+        self.assertNotIn("<script", rendered)
+
     def test_render_uses_color_classes_because_csp_blocks_inline_style(self):
         rendered = render_rich_text('<font color="#c0392b">紅</font><span style="color:#aabbcc">他</span>')
         self.assertEqual(rendered, '<span class="rn-color-c0392b">紅</span><span>他</span>')

@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 
 from django.utils.safestring import mark_safe
 
-ALLOWED_TAGS = {"b", "strong", "i", "em", "u", "br", "p", "div"}
+ALLOWED_TAGS = {"b", "strong", "i", "em", "u", "br", "p", "div", "ol", "ul", "li"}
 TAG_ALIASES = {"strong": "b", "em": "i"}
 VOID_TAGS = {"br"}
 DROP_CONTENT_TAGS = {"script", "style", "iframe", "object", "template"}
@@ -133,9 +133,14 @@ def _colors_to_classes(cleaned):
     return SPAN_COLOR.sub(replace, cleaned)
 
 
+def _lists_to_classes(cleaned):
+    """清單樣式同樣用 class(編號 1 2 3 與「・」項目符號),見 app.css 的 .rn-ol / .rn-ul。"""
+    return cleaned.replace("<ol>", '<ol class="rn-ol">').replace("<ul>", '<ul class="rn-ul">')
+
+
 def render_rich_text(value):
     """顯示用:純文字舊資料(沒有任何標籤)照舊以換行轉 <br>,其餘重新清理後輸出。"""
     value = value or ""
     if "<" not in value:
         return mark_safe(html.escape(value, quote=False).replace("\r\n", "\n").replace("\n", "<br>"))
-    return mark_safe(_colors_to_classes(sanitize_rich_text(value)))
+    return mark_safe(_lists_to_classes(_colors_to_classes(sanitize_rich_text(value))))

@@ -7042,3 +7042,6 @@ td small {
   font-size: 0.8rem;
 }
 .rich-note-text div { margin: 0; }
+.rn-ol, .rich-note-surface ol { margin: 4px 0; padding-left: 1.6em; list-style: decimal; }
+.rn-ul, .rich-note-surface ul { margin: 4px 0; padding-left: 1.4em; list-style: "・ "; }
+.rn-ol li, .rn-ul li, .rich-note-surface li { margin: 0; }

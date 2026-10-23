@@ -54,6 +54,8 @@
     COLORS.forEach(function (color) {
       addButton("", "文字顏色 / Text color: " + color[1], "foreColor", color[0], "rich-note-swatch");
     });
+    addButton("1.", "編號清單 / Numbered list", "insertOrderedList");
+    addButton("・", "項目符號 / Bullet list", "insertUnorderedList");
     addButton("清除", "清除格式 / Clear formatting", "removeFormat");
 
     function sync() {
