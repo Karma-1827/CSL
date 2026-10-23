@@ -118,9 +118,24 @@ def sanitize_rich_text(value):
     return cleaned.strip()
 
 
+PALETTE_COLORS = {"8c1d40", "c0392b", "d97706", "1f7a4d", "1d4ed8", "111111"}
+SPAN_COLOR = re.compile(r'<span style="color:#([0-9a-f]{6})">')
+
+
+def _colors_to_classes(cleaned):
+    """站台 CSP 的 style-src 'self' 會擋掉行內 style 屬性,顯示時改用 class(CSS 見 app.css 的 .rn-color-*)。
+    儲存的資料仍是 style="color:#hex";不在調色盤內的顏色顯示成預設文字色。"""
+    def replace(match):
+        hex_value = match.group(1)
+        if hex_value in PALETTE_COLORS:
+            return '<span class="rn-color-%s">' % hex_value
+        return "<span>"
+    return SPAN_COLOR.sub(replace, cleaned)
+
+
 def render_rich_text(value):
     """顯示用:純文字舊資料(沒有任何標籤)照舊以換行轉 <br>,其餘重新清理後輸出。"""
     value = value or ""
     if "<" not in value:
         return mark_safe(html.escape(value, quote=False).replace("\r\n", "\n").replace("\n", "<br>"))
-    return mark_safe(sanitize_rich_text(value))
+    return mark_safe(_colors_to_classes(sanitize_rich_text(value)))

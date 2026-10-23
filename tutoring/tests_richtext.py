@@ -4,6 +4,11 @@ from tutoring.richtext import render_rich_text, sanitize_rich_text
 
 
 class RichTextSanitizerTests(SimpleTestCase):
+    def test_render_uses_color_classes_because_csp_blocks_inline_style(self):
+        rendered = render_rich_text('<font color="#c0392b">紅</font><span style="color:#aabbcc">他</span>')
+        self.assertEqual(rendered, '<span class="rn-color-c0392b">紅</span><span>他</span>')
+        self.assertNotIn("style=", rendered)
+
     def test_keeps_basic_formatting_and_normalizes_colors(self):
         cleaned = sanitize_rich_text(
             '<b>粗</b><em>斜</em><span style="color: rgb(192, 57, 43)">紅</span><font color="#abc">藍</font>'

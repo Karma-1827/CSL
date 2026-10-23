@@ -2376,7 +2376,8 @@ class ClassWorkflowTests(TestCase):
         )
         self.client.force_login(admin)
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
-        self.assertContains(response, '<b>請補照片</b><span style="color:#c0392b">紅字</span>', html=False)
+        self.assertContains(response, '<b>請補照片</b><span class="rn-color-c0392b">紅字</span>', html=False)
+        self.assertNotContains(response, 'style="color:#c0392b"')
         self.assertNotContains(response, "<script>alert(1)")
 
     def test_review_class_session_accumulates_full_decision_history(self):

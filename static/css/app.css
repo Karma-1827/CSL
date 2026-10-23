@@ -7028,3 +7028,11 @@ td small {
   line-height: 1.6;
   outline: none;
 }
+
+/* 審核意見顯示用文字顏色(CSP 不允許行內 style,改用 class) */
+.rn-color-8c1d40 { color: #8c1d40; }
+.rn-color-c0392b { color: #c0392b; }
+.rn-color-d97706 { color: #d97706; }
+.rn-color-1f7a4d { color: #1f7a4d; }
+.rn-color-1d4ed8 { color: #1d4ed8; }
+.rn-color-111111 { color: #111111; }
