@@ -7036,3 +7036,9 @@ td small {
 .rn-color-1f7a4d { color: #1f7a4d; }
 .rn-color-1d4ed8 { color: #1d4ed8; }
 .rn-color-111111 { color: #111111; }
+.incident-report-reply-item .rich-note-text {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.8rem;
+}
+.rich-note-text div { margin: 0; }

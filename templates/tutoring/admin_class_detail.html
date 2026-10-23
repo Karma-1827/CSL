@@ -72,7 +72,7 @@
               {% endcomment %}
               <div class="class-review-history-body">
                 <time>{{ entry.created_at|date:"Y-m-d H:i" }} · {{ entry.reviewed_by.bilingual_name }}</time>
-                {% if entry.note %}<p>{{ entry.note|rich_note }}</p>{% endif %}
+                {% if entry.note %}<div class="rich-note-text">{{ entry.note|rich_note }}</div>{% endif %}
               </div>
               <div class="class-review-history-actions">
                 <span class="status-badge status-{{ entry.status|lower }}">{{ entry.get_status_display }}</span>
@@ -139,7 +139,7 @@
             <button class="button button-secondary" name="action" value="flag">移到待討論 / Move to discussion</button>
           {% endif %}
         </form>
-        {% if class_review_history.0.note %}<p class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|rich_note }}</p>{% endif %}
+        {% if class_review_history.0.note %}<div class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|rich_note }}</div>{% endif %}
         <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
           {% csrf_token %}<input type="hidden" name="next" value="detail"><div class="rich-note-field"><span class="rich-note-label">審核意見 / Review comments</span><textarea name="note" rows="3" data-rich-note></textarea></div>
           <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button></div>

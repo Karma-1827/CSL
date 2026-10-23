@@ -2378,6 +2378,9 @@ class ClassWorkflowTests(TestCase):
         response = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
         self.assertContains(response, '<b>請補照片</b><span class="rn-color-c0392b">紅字</span>', html=False)
         self.assertNotContains(response, 'style="color:#c0392b"')
+        # 審核意見可能含 <div>,不能放在 <p> 裡(瀏覽器會提前關閉 <p>,導致後面行的字級/顏色跑掉)。
+        self.assertNotContains(response, '<p><b>請補照片</b>', html=False)
+        self.assertContains(response, '<div class="rich-note-text">', html=False)
         self.assertNotContains(response, "<script>alert(1)")
 
     def test_review_class_session_accumulates_full_decision_history(self):
