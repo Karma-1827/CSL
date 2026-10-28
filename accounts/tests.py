@@ -1763,6 +1763,39 @@ class AdminDashboardProfileLinkTests(TestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertContains(response, self._profile_url(self.tutor))
 
+    def test_class_overview_program_filter_separates_tutors_by_tutee_program(self):
+        md = PartnerProgram.objects.get(code="MARYLAND")
+        md_roster = RosterEntry.objects.create(
+            student_id="PROFILE-LINK-MD-TUTEE", name_zh="馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=md,
+        )
+        md_tutee = User.objects.create_user(
+            username="PROFILE-LINK-MD-TUTEE", password="Tutee-password-2026", role=Role.TUTEE, roster_entry=md_roster
+        )
+        other_roster = RosterEntry.objects.create(
+            student_id="PROFILE-LINK-TUTOR2", name_zh="馬里蘭老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        other_tutor = User.objects.create_user(
+            username="PROFILE-LINK-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR, roster_entry=other_roster
+        )
+        Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        Pairing.objects.create(semester=self.semester, tutor=other_tutor, tutee=md_tutee)
+        url = reverse("accounts:dashboard")
+
+        response = self.client.get(url, {"class_semester": self.semester.pk, "class_program": md.pk})
+        self.assertEqual([row["tutor"] for row in response.context["tutor_class_page"]], [other_tutor])
+        self.assertEqual(response.context["class_overview_totals"]["working_tutors"], 1)
+
+        response = self.client.get(url, {"class_semester": self.semester.pk})
+        counts = {row["program"].code: row["tutors"] for row in response.context["program_tutor_counts"]}
+        self.assertEqual(counts["NTNU"], 1)
+        self.assertEqual(counts["MARYLAND"], 1)
+
+        response = self.client.get(url, {"class_semester": self.semester.pk, "class_program": "999999"})
+        self.assertIsNone(response.context["class_program"])
+
     def test_matching_management_links_pairing_and_invitation_participants(self):
         pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
         response = self.client.get(reverse("accounts:dashboard"))

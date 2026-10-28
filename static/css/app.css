@@ -7045,3 +7045,6 @@ td small {
 .rn-ol, .rich-note-surface ol { margin: 4px 0; padding-left: 1.6em; list-style: decimal; }
 .rn-ul, .rich-note-surface ul { margin: 4px 0; padding-left: 1.4em; list-style: "・ "; }
 .rn-ol li, .rn-ul li, .rich-note-surface li { margin: 0; }
+
+.class-overview-program-counts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 14px; color: var(--ink-muted); font-size: 0.78rem; }
+.class-overview-program-counts b { color: var(--navy); }

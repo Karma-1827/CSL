@@ -445,11 +445,19 @@ def dashboard(request):
                 (row for row in overview_semesters if str(row.pk) == requested_semester_id),
                 overview_semester,
             )
+        # 2026-10-29(助教要求):課程總覽可依合作計畫篩選,分開看師大/馬里蘭各有多少老師在做事。
+        # 計畫以學生(Tutee)的名冊計畫判定,與證明/匯出的歸屬規則一致。
+        overview_programs = list(PartnerProgram.objects.filter(is_active=True).order_by("name_zh"))
+        class_program = next(
+            (row for row in overview_programs if str(row.pk) == request.GET.get("class_program", "")),
+            None,
+        )
+        program_filter = {"pairing__tutee__roster_entry__program": class_program} if class_program else {}
         all_classes = list(
             ClassSession.objects.select_related(
                 "pairing__semester", "pairing__tutor", "pairing__tutee"
             ).prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "class_review")
-            .filter(pairing__semester=overview_semester) if overview_semester else ClassSession.objects.none()
+            .filter(pairing__semester=overview_semester, **program_filter) if overview_semester else ClassSession.objects.none()
         )
         all_classes.sort(key=lambda row: (row.class_date, row.start_time), reverse=True)
         now = timezone.now()
@@ -483,8 +491,22 @@ def dashboard(request):
         tutor_users = list(User.objects.filter(role=Role.TUTOR).order_by("name_zh", "username"))
         tutor_pairing_counts = {}
         if overview_semester:
-            for pairing in Pairing.objects.filter(semester=overview_semester).select_related("tutor"):
+            for pairing in Pairing.objects.filter(
+                semester=overview_semester,
+                **({"tutee__roster_entry__program": class_program} if class_program else {}),
+            ).select_related("tutor"):
                 tutor_pairing_counts[pairing.tutor_id] = tutor_pairing_counts.get(pairing.tutor_id, 0) + 1
+        if class_program:
+            tutor_users = [tutor for tutor in tutor_users if tutor_pairing_counts.get(tutor.pk)]
+        program_tutor_counts = []
+        if overview_semester:
+            for program in overview_programs:
+                program_tutor_counts.append({
+                    "program": program,
+                    "tutors": Pairing.objects.filter(
+                        semester=overview_semester, tutee__roster_entry__program=program
+                    ).values("tutor_id").distinct().count(),
+                })
         tutor_class_map = {}
         for session in all_classes:
             tutor_class_map.setdefault(session.pairing.tutor_id, []).append(session)
@@ -650,9 +672,13 @@ def dashboard(request):
                 "overview_semester": overview_semester,
                 "class_q": request.GET.get("class_q", ""),
                 "class_status": class_status,
+                "overview_programs": overview_programs,
+                "class_program": class_program,
+                "program_tutor_counts": program_tutor_counts,
                 "tutor_class_page": tutor_page,
                 "class_overview_totals": {
                     "tutors": len(tutor_users),
+                    "working_tutors": sum(1 for tutor in tutor_users if tutor_pairing_counts.get(tutor.pk)),
                     "classes": len(active_overview_classes),
                     "reserved_hours": sum((row.duration for row in active_overview_classes), start=Decimal("0")),
                     "verified_hours": sum((row.duration for row in active_overview_classes if row.is_official), start=Decimal("0")),
