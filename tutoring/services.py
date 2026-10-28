@@ -900,6 +900,13 @@ def create_admin_pairing(*, admin, tutor_id, tutee_id, semester_id):
         raise ValidationError(
             "此 Tutor 不在該計畫的修課名單中，無法配對。 / This tutor is not on that program's course roster and cannot be matched."
         )
+    # 2026-10-29: 兩個計畫的學期可能同名,Admin 曾把馬里蘭學生配進師大學期。專屬某計畫的
+    # 學期只接受該計畫的學生;舊版共用期間(program 為空)不受限制。
+    if semester.program_id and tutee_program and semester.program_id != tutee_program.pk:
+        raise ValidationError(
+            "所選學期屬於其他合作計畫，與學生所屬計畫不符。 / "
+            "The selected semester belongs to a different partner program than the tutee's."
+        )
     if not tutor_has_approved_qualification(tutor):
         raise ValidationError("Tutor 尚未通過口語能力審查。 / The tutor's oral proficiency has not been approved.")
     if not tutor_has_admin_pairing_capacity(tutor, semester, tutee_program):

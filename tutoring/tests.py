@@ -1458,6 +1458,24 @@ class AdminPairingTests(MatchingFixtureTestCase):
             )
         self.assertEqual(Pairing.objects.filter(tutor=self.tutor, status=PairingStatus.ACTIVE).count(), 2)
 
+    def test_admin_pairing_rejects_semester_of_a_different_program(self):
+        admin = User.objects.create_superuser(username="PAIR-ADMIN5", password="Admin-password-2026")
+        kwargs = dict(
+            name_zh="115學年度第1學期", name_en="115 Term 1", is_active=True,
+            starts_on=self.semester.starts_on, ends_on=self.semester.ends_on,
+        )
+        ntnu_term = Semester.objects.create(program=self.ntnu_program, **kwargs)
+        maryland_term = Semester.objects.create(program=self.maryland_program, **kwargs)
+        with self.assertRaises(ValidationError):
+            create_admin_pairing(
+                admin=admin, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk, semester_id=ntnu_term.pk,
+            )
+        self.assertFalse(Pairing.objects.exists())
+        pairing = create_admin_pairing(
+            admin=admin, tutor_id=self.maryland_tutor.pk, tutee_id=self.maryland.pk, semester_id=maryland_term.pk,
+        )
+        self.assertEqual(pairing.semester, maryland_term)
+
     def test_admin_pairing_still_enforces_program_roster_and_existing_tutor_checks(self):
         admin = User.objects.create_superuser(username="PAIR-ADMIN4", password="Admin-password-2026")
         with self.assertRaises(ValidationError):

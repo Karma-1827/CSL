@@ -483,9 +483,9 @@ class AdminPairingForm(forms.Form):
         label="Tutee",
         queryset=User.objects.filter(role=Role.TUTEE, is_active=True).order_by("username"),
     )
-    semester = forms.ModelChoiceField(
+    semester = SemesterChoiceField(
         label="學期 / 期間 (Semester / period)",
-        queryset=Semester.objects.filter(is_active=True).order_by("-starts_on"),
+        queryset=Semester.objects.filter(is_active=True).select_related("program").order_by("-starts_on"),
     )
 
 
