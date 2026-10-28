@@ -1793,6 +1793,8 @@ class AdminDashboardProfileLinkTests(TestCase):
         self.assertEqual(counts["NTNU"], 1)
         self.assertEqual(counts["MARYLAND"], 1)
 
+        self.assertContains(response, "（舊版共用 / Legacy shared）")
+
         response = self.client.get(url, {"class_semester": self.semester.pk, "class_program": "999999"})
         self.assertIsNone(response.context["class_program"])
 

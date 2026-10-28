@@ -403,7 +403,7 @@ def dashboard(request):
         "incident_reports_unread_count": incident_reports_unread_count,
     }
     if request.user.role == Role.ADMIN:
-        semester_rows = list(Semester.objects.order_by("-starts_on"))
+        semester_rows = list(Semester.objects.select_related("program").order_by("-starts_on"))
         for row in semester_rows:
             row.edit_form = SemesterSettingsForm(instance=row, prefix=f"semester-{row.pk}")
         class_document_programs = list(PartnerProgram.objects.filter(class_documents_enabled=True).order_by("name_zh"))
