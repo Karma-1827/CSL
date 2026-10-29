@@ -1793,10 +1793,32 @@ class AdminDashboardProfileLinkTests(TestCase):
         self.assertEqual(counts["NTNU"], 1)
         self.assertEqual(counts["MARYLAND"], 1)
 
-        self.assertContains(response, "（舊版共用 / Legacy shared）")
-
         response = self.client.get(url, {"class_semester": self.semester.pk, "class_program": "999999"})
         self.assertIsNone(response.context["class_program"])
+
+    def test_class_overview_merges_same_named_semesters_of_different_programs(self):
+        md = PartnerProgram.objects.get(code="MARYLAND")
+        md_semester = Semester.objects.create(
+            name_zh=self.semester.name_zh, name_en=self.semester.name_en, program=md,
+            starts_on=self.semester.starts_on + timedelta(days=7), ends_on=self.semester.ends_on,
+        )
+        md_roster = RosterEntry.objects.create(
+            student_id="PROFILE-LINK-MD-TUTEE", name_zh="馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=md,
+        )
+        md_tutee = User.objects.create_user(
+            username="PROFILE-LINK-MD-TUTEE", password="Tutee-password-2026", role=Role.TUTEE, roster_entry=md_roster
+        )
+        Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        Pairing.objects.create(semester=md_semester, tutor=self.tutor, tutee=md_tutee)
+
+        response = self.client.get(reverse("accounts:dashboard"), {"class_semester": md_semester.pk})
+        options = response.context["overview_semester_options"]
+        self.assertEqual(len([row for row in options if row.name_zh == self.semester.name_zh]), 1)
+        self.assertEqual(response.context["tutor_class_page"][0]["pairing_count"], 2)
+        counts = {row["program"].code: row["tutors"] for row in response.context["program_tutor_counts"]}
+        self.assertEqual((counts["NTNU"], counts["MARYLAND"]), (1, 1))
 
     def test_matching_management_links_pairing_and_invitation_participants(self):
         pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)

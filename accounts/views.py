@@ -438,13 +438,10 @@ def dashboard(request):
             if oral_exam_announcement else []
         )
         overview_semesters = semester_rows
-        overview_semester = current_semester or (overview_semesters[0] if overview_semesters else None)
-        requested_semester_id = request.GET.get("class_semester")
-        if requested_semester_id:
-            overview_semester = next(
-                (row for row in overview_semesters if str(row.pk) == requested_semester_id),
-                overview_semester,
-            )
+        overview_semester_groups = _semester_name_groups(overview_semesters)
+        overview_semester, overview_semester_members = _pick_semester_group(
+            overview_semester_groups, request.GET.get("class_semester"), current_semester
+        )
         # 2026-10-29(助教要求):課程總覽可依合作計畫篩選,分開看師大/馬里蘭各有多少老師在做事。
         # 計畫以學生(Tutee)的名冊計畫判定,與證明/匯出的歸屬規則一致。
         overview_programs = list(PartnerProgram.objects.filter(is_active=True).order_by("name_zh"))
@@ -457,7 +454,7 @@ def dashboard(request):
             ClassSession.objects.select_related(
                 "pairing__semester", "pairing__tutor", "pairing__tutee"
             ).prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "class_review")
-            .filter(pairing__semester=overview_semester, **program_filter) if overview_semester else ClassSession.objects.none()
+            .filter(pairing__semester__in=overview_semester_members, **program_filter) if overview_semester else ClassSession.objects.none()
         )
         all_classes.sort(key=lambda row: (row.class_date, row.start_time), reverse=True)
         now = timezone.now()
@@ -492,7 +489,7 @@ def dashboard(request):
         tutor_pairing_counts = {}
         if overview_semester:
             for pairing in Pairing.objects.filter(
-                semester=overview_semester,
+                semester__in=overview_semester_members,
                 **({"tutee__roster_entry__program": class_program} if class_program else {}),
             ).select_related("tutor"):
                 tutor_pairing_counts[pairing.tutor_id] = tutor_pairing_counts.get(pairing.tutor_id, 0) + 1
@@ -504,7 +501,7 @@ def dashboard(request):
                 program_tutor_counts.append({
                     "program": program,
                     "tutors": Pairing.objects.filter(
-                        semester=overview_semester, tutee__roster_entry__program=program
+                        semester__in=overview_semester_members, tutee__roster_entry__program=program
                     ).values("tutor_id").distinct().count(),
                 })
         tutor_class_map = {}
@@ -670,6 +667,7 @@ def dashboard(request):
                 ),
                 "overview_semesters": overview_semesters,
                 "overview_semester": overview_semester,
+                "overview_semester_options": [rep for rep, _rows in overview_semester_groups],
                 "class_q": request.GET.get("class_q", ""),
                 "class_status": class_status,
                 "overview_programs": overview_programs,
@@ -1169,20 +1167,42 @@ def dashboard(request):
     return render(request, "dashboard/index.html", context)
 
 
+def _semester_name_groups(semesters):
+    """把同名學期（如兩個計畫的「115學年度第1學期」）併成一個下拉選項。
+
+    回傳 [(代表學期, [同名學期...]), ...]，順序沿用傳入順序；各計畫的日期仍各自獨立。
+    """
+    groups = {}
+    for row in semesters:
+        groups.setdefault((row.name_zh, row.name_en), []).append(row)
+    return [(rows[0], rows) for rows in groups.values()]
+
+
+def _pick_semester_group(groups, requested_id, default_semester):
+    """依請求的學期 id（任一成員皆可）或預設學期挑出所屬的同名群組。"""
+    for wanted in (requested_id, str(default_semester.pk) if default_semester else None):
+        if not wanted:
+            continue
+        for rep, rows in groups:
+            if any(str(row.pk) == wanted for row in rows):
+                return rep, rows
+    return (groups[0] if groups else (None, []))
+
+
 @login_required
 def admin_tutor_schedule(request, user_id):
     if request.user.role != Role.ADMIN:
         raise Http404
     tutor = get_object_or_404(User, pk=user_id, role=Role.TUTOR)
     semesters = list(Semester.objects.order_by("-starts_on"))
-    semester = active_semester() or (semesters[0] if semesters else None)
-    requested_semester_id = request.GET.get("semester")
-    if requested_semester_id:
-        semester = next((row for row in semesters if str(row.pk) == requested_semester_id), semester)
+    semester_groups = _semester_name_groups(semesters)
+    semester, semester_members = _pick_semester_group(
+        semester_groups, request.GET.get("semester"), active_semester() or (semesters[0] if semesters else None)
+    )
     sessions = []
     if semester:
         sessions = list(
-            ClassSession.objects.filter(pairing__tutor=tutor, pairing__semester=semester)
+            ClassSession.objects.filter(pairing__tutor=tutor, pairing__semester__in=semester_members)
             .select_related("pairing__semester", "pairing__tutee")
             .prefetch_related("attendances", "class_records", "confirmations", "class_alerts", "class_review")
             .order_by("class_date", "start_time")
@@ -1209,10 +1229,10 @@ def admin_tutor_schedule(request, user_id):
     active_rows = [row for row in sessions if row.status != ClassSessionStatus.CANCELLED]
     future_sessions = [row for row in active_rows if row.ends_at >= now]
     past_sessions = list(reversed([row for row in sessions if row.ends_at < now or row.status == ClassSessionStatus.CANCELLED]))
-    pairings = Pairing.objects.filter(tutor=tutor, semester=semester).select_related("tutee") if semester else Pairing.objects.none()
+    pairings = Pairing.objects.filter(tutor=tutor, semester__in=semester_members).select_related("tutee") if semester else Pairing.objects.none()
     return render(request, "accounts/admin_tutor_schedule.html", {
         "tutor": tutor,
-        "semesters": semesters,
+        "semesters": [rep for rep, _rows in semester_groups],
         "selected_semester": semester,
         "pairings": pairings,
         "future_sessions": future_sessions,

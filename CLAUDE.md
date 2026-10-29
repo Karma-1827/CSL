@@ -41,7 +41,7 @@
 - 設定學期、修改學期、手動封存學期。
 - 查看解除配對申請並核准/拒絕;查看歷史結果。
 - 查看全系課程總覽、老師名單、各老師個人課表及未完成課程。
-  - **2026-10-29 課程總覽新增合作計畫篩選**(`class_program` GET 參數,以學生 `roster_entry.program` 判定課程屬於哪個計畫,不看老師,因同一位老師可能同時帶不同計畫的學生):另有「有配對的老師」數字卡(`working_tutors`)與各計畫本學期有配對老師人數的一行文字(`program_tutor_counts`)。課程總覽與老師個人課表(`admin_tutor_schedule.html`)的學期下拉選單一律標示所屬計畫(舊版共用期間標「（舊版共用 / Legacy shared）」),因為 NTNU 與 MARYLAND 的學期常取同名(如「115學年度第1學期」)。測試見 `AdminDashboardProfileLinkTests.test_class_overview_program_filter_separates_tutors_by_tutee_program`。
+  - **2026-10-29 課程總覽新增合作計畫篩選**(`class_program` GET 參數,以學生 `roster_entry.program` 判定課程屬於哪個計畫,不看老師,因同一位老師可能同時帶不同計畫的學生):另有「有配對的老師」數字卡(`working_tutors`)與各計畫本學期有配對老師人數的一行文字(`program_tutor_counts`)。課程總覽與老師個人課表(`admin_tutor_schedule.html`)的學期下拉選單**依名稱併成單一選項**(`accounts/views.py::_semester_name_groups()`;NTNU 與 MARYLAND 的學期常取同名如「115學年度第1學期」,各計畫日期仍各自獨立),選到後涵蓋所有同名學期,要分計畫看請用「合作計畫」篩選。(2026-10-29 先前曾改為在選項後標示計畫,同日使用者改為併成單一選項。)測試見 `AdminDashboardProfileLinkTests.test_class_overview_program_filter_separates_tutors_by_tutee_program`。
 - 查看單一 Tutor/Tutee 的「行政檔案」整合頁(`accounts:admin_user_profile`,`accounts/admin_user_profile.html`):唯讀彙整基本資料、Profile(教學/學習資料)、口語能力狀態(僅 Tutor)、全部學期的配對紀錄、依學期分組的課程與時數、課堂通報與異常回報紀錄(各取最近 20 筆)。入口在 Django Admin 的學生名冊(`RosterEntry`)清單多一欄「查看檔案」連結。**刻意不做任何操作按鈕**(審核口語能力、核准解除、標記通報等仍在原本頁面做),只負責彙整顯示,避免與既有審核流程重複或衝突。
 - 查看課堂通報與異常回報,可標記為「已紀錄」並留備註(見第 4.7 節)。
 - 查看課程雙方的簽到、紀錄、確認與補登詳情。

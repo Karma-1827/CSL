@@ -41,7 +41,7 @@
 <section class="dashboard-view" data-dashboard-panel="class-overview">
   <div class="view-heading"><span>CLASS OVERVIEW</span><h2>全系課程與異常總覽 <small>Classes and exceptions</small></h2></div>
   <form class="class-overview-filter" action="{% url 'accounts:dashboard' %}#class-overview" method="get">
-    <label>學期 / Semester<select name="class_semester">{% for semester in overview_semesters %}<option value="{{ semester.pk }}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}{% if semester.program %} · {{ semester.program.name_zh }}{% else %}（舊版共用 / Legacy shared）{% endif %}</option>{% endfor %}</select></label>
+    <label>學期 / Semester<select name="class_semester">{% for semester in overview_semester_options %}<option value="{{ semester.pk }}"{% if overview_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label>
     <label>合作計畫 / Program<select name="class_program"><option value="">全部計畫 / All programs</option>{% for program in overview_programs %}<option value="{{ program.pk }}"{% if class_program.pk == program.pk %} selected{% endif %}>{{ program.name_zh }}</option>{% endfor %}</select></label>
     <label>搜尋老師 / Search<input name="class_q" value="{{ class_q }}" placeholder="姓名或學號 / Name or student ID"></label>
     <label>狀態 / Status<select name="class_status"><option value="all"{% if class_status == 'all' %} selected{% endif %}>全部老師 / All teachers</option><option value="incomplete"{% if class_status == 'incomplete' %} selected{% endif %}>有未完成課程 / Incomplete classes</option></select></label>
