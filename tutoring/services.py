@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 import uuid
 
@@ -1298,15 +1298,10 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
                 "審核通過的課堂紀錄無法再修改,如需更正請聯絡系辦撤回審核結果。 / "
                 "An approved class record can no longer be edited — contact the department office to revert the decision first."
             )
-    # 2026-09-16(使用者要求):很多學生在課堂還沒結束前就先填寫課堂紀錄,開放時間點從「上課
-    # 後」改成「下課後」。同時把「是否算補登」的界線,從下課後 24 小時的浮動視窗,改成「上課
-    # 當天 23:59:59 前」都算準時,超過當天才算補登——避免傍晚或深夜下課的課,因為 24 小時
-    # 視窗橫跨到隔天很晚才算逾期,一律以「上課當天」為準,跟簽到的獨立規則互不影響。
-    end_of_class_day = timezone.make_aware(
-        datetime.combine(timezone.localtime(session.ends_at).date(), time(23, 59, 59)),
-        timezone.get_current_timezone(),
-    )
-    is_makeup = now > end_of_class_day
+    # 2026-09-16:課堂紀錄須在課堂結束後才可提交(防止提早偷寫)。
+    # 2026-10-29(使用者要求):「是否算補登」的界線改回下課後 24 小時內都算準時,
+    # 取代 2026-09-16 起的「上課當天 23:59:59 前」規則;超過 24 小時才算補登。
+    is_makeup = now > session.ends_at + timedelta(hours=24)
     if now > session.pairing.semester.makeup_deadline_at:
         raise ValidationError("已超過補課堂紀錄截止時間。 / The makeup record deadline has passed.")
     if is_makeup and not existing:

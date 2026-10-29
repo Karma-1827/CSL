@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -722,13 +722,6 @@ def class_detail(request, pk):
         ).order_by("-resolved_at")
     )
     now = timezone.now()
-    # 2026-09-16(使用者要求):課堂紀錄的「是否算補登」界線,從下課後 24 小時的浮動視窗,改成
-    # 「上課當天 23:59:59 前」都算準時——跟 tutoring/services.py::submit_class_record() 用
-    # 同一套公式,這裡只是為了畫面上的按鈕文字/必填提示先算一次,實際把關仍在 service 那層。
-    end_of_class_day = timezone.make_aware(
-        datetime.combine(timezone.localtime(session.ends_at).date(), time(23, 59, 59)),
-        timezone.get_current_timezone(),
-    )
     form = ClassRecordForm(request.POST or None, request.FILES or None, instance=own_record, author=request.user)
     reschedule_form = RescheduleClassForm(
         session=session,
@@ -769,7 +762,7 @@ def class_detail(request, pk):
             "own_resolved_alerts": own_resolved_alerts,
             "alert_form": ClassAlertForm(),
             "checkin_requires_makeup_reason": now > session.ends_at + timedelta(minutes=30),
-            "record_requires_makeup_reason": own_record is None and now > end_of_class_day,
+            "record_requires_makeup_reason": own_record is None and now > session.ends_at + timedelta(hours=24),
             # 2026-09-16(使用者要求):課堂紀錄表單本身在課堂結束前不顯示,只顯示「尚未開放」
             # 提示——避免有人提早打好內容準備直接貼上("偷寫"),不只是靠送出當下的伺服器端
             # 驗證擋下。這是本次唯一在畫面上加的時間限制,submit_class_record() 原本就有的

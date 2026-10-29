@@ -3389,33 +3389,30 @@ class ClassWorkflowTests(TestCase):
                 session_id=session.pk, author=self.tutor, data=self.record_data("太早填寫"), now=mid_class
             )
 
-    def test_class_record_counts_as_on_time_until_end_of_class_day_no_matter_the_gap(self):
-        """2026-09-16(使用者要求):「一樣到當天的23:59算是在期限內」——即使下課後過了很多
-        小時,只要還在上課當天內送出,都不算補登。"""
-        class_date = timezone.localdate()
-        session = schedule_classes(
-            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
-            start_time=time(8), duration="1.0", now=self.aware(class_date, time(7)),
-        )[0]
-        late_same_day = self.aware(class_date, time(23, 30))
-        record = submit_class_record(
-            session_id=session.pk, author=self.tutor, data=self.record_data("當天很晚才填寫"), now=late_same_day
-        )
-        self.assertFalse(record.is_makeup)
-
-    def test_class_record_becomes_makeup_right_after_midnight_even_within_a_few_hours(self):
-        """2026-09-16:「是否算補登」的界線從下課後 24 小時的浮動視窗,改成「上課當天
-        23:59:59 前」——晚上上課的課,過了午夜就算補登,即使距離下課只過了一兩個小時,
-        跟舊版 24 小時視窗（此時仍在視窗內、不算補登）的結果不同。"""
+    def test_class_record_is_on_time_within_24_hours_after_class_ends(self):
+        """2026-10-29(使用者要求):課堂紀錄在課堂結束後 24 小時內提交都不算補登,
+        超過 24 小時才算補登(取代 2026-09-16 起「上課當天 23:59」的規則)。"""
         class_date = timezone.localdate()
         session = schedule_classes(
             tutor=self.tutor, pairing=self.pairing, class_date=class_date,
             start_time=time(22), duration="1.0", now=self.aware(class_date, time(21)),
         )[0]
-        just_after_midnight = self.aware(class_date + timedelta(days=1), time(0, 30))
+        next_day_evening = self.aware(class_date + timedelta(days=1), time(22, 30))
         record = submit_class_record(
-            session_id=session.pk, author=self.tutor, data=self.record_data("跨午夜填寫"),
-            reason="忘記在期限內填寫", now=just_after_midnight,
+            session_id=session.pk, author=self.tutor, data=self.record_data("隔天晚上填寫"), now=next_day_evening
+        )
+        self.assertFalse(record.is_makeup)
+
+    def test_class_record_becomes_makeup_after_24_hours(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(22), duration="1.0", now=self.aware(class_date, time(21)),
+        )[0]
+        late = self.aware(class_date + timedelta(days=1), time(23, 30))
+        record = submit_class_record(
+            session_id=session.pk, author=self.tutor, data=self.record_data("超過24小時填寫"),
+            reason="忘記在期限內填寫", now=late,
         )
         self.assertTrue(record.is_makeup)
 
