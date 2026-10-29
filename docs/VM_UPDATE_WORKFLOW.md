@@ -293,6 +293,7 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-10-29(一百四十八)**:操作者 Claude Code(依使用者指示執行)。上一版 `08950d9` → 新版 `93abdc0`(Admin 手動配對的學期選單標示合作計畫,並在 `create_admin_pairing()` 擋下學期所屬計畫與學生計畫不符的配對)。純 form/service,無 migration。部署前備份:`/var/backups/mpts/20261029-003359`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,`nginx -t` 通過。同日一次性資料訂正:配對 135、153 原誤建於師大學期(id 5),已在交易內改為馬里蘭學期(id 6)並寫入 `PAIRING_SEMESTER_CORRECTED` AuditLog,訂正前備份:`/var/backups/mpts/20261029-003248`;事後全站「學期計畫與學生計畫不符」配對為 0。
 - **2026-10-29(一百四十七)**:操作者 Claude Code(依使用者指示執行)。上一版 `c5941de` → 新版 `32c4f12`(課程總覽與老師個人課表的學期下拉選單標示合作計畫,避免兩計畫同名學期無法分辨)。純 template/view,無 migration。部署前備份:`/var/backups/mpts/20261029-002406`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作。
 - **2026-10-29(一百四十六)**:操作者 Claude Code(依使用者指示執行)。上一版 `6de044c` → 新版 `9b65cf2`(Admin「課程總覽」新增合作計畫篩選,並顯示各計畫本學期有配對的老師人數;計畫以學生名冊計畫判定,助教要求)。無 migration。部署前備份:`/var/backups/mpts/20261029-001754`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,`app.css` 含新規則。本機 602 項測試僅 1 項失敗,為已知的跨午夜時間敏感測試(`test_counterpart_sees_non_sensitive_reason_note_but_not_reviewer_identity`),與本次無關。
 - **2026-10-28(一百四十五)**:操作者 Claude Code(依使用者指示執行)。上一版 `b85526a` → 新版 `3443b48`(使用手冊「課堂紀錄」期限由「課程結束後 24 小時內」更正為「課程結束後、上課當天 23:59 前」,老師版 10.1 與學生版 9.1 兩處,與 2026-09-16 起的實際規則一致)。純 template,無 migration。部署前備份:`/var/backups/mpts/20261028-230802`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,部署目錄手冊含新文字 2 處。
