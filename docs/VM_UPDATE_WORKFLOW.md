@@ -293,6 +293,7 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-10-29(一百五十)**:操作者 Claude Code(依使用者指示執行)。上一版 `29c63d9` → 新版 `64f5868`(課堂紀錄「是否算補登」界線由「上課當天 23:59」改回「課堂結束後 24 小時內」,老師/學生手冊同步)。純 service/view/template,無 migration。部署前備份:`/var/backups/mpts/20261029-115210`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,`nginx -t` 通過。
 - **2026-10-29(一百四十九)**:操作者 Claude Code(依使用者指示執行)。上一版 `93abdc0` → 新版 `29c63d9`(課程總覽與老師個人課表的學期下拉選單,將不同計畫的同名學期併成單一選項,各計畫日期不變)。純 view/template,無 migration。部署前備份:`/var/backups/mpts/20261029-090719`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,`nginx -t` 通過。
 - **2026-10-29(一百四十八)**:操作者 Claude Code(依使用者指示執行)。上一版 `08950d9` → 新版 `93abdc0`(Admin 手動配對的學期選單標示合作計畫,並在 `create_admin_pairing()` 擋下學期所屬計畫與學生計畫不符的配對)。純 form/service,無 migration。部署前備份:`/var/backups/mpts/20261029-003359`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,`nginx -t` 通過。同日一次性資料訂正:配對 135、153 原誤建於師大學期(id 5),已在交易內改為馬里蘭學期(id 6)並寫入 `PAIRING_SEMESTER_CORRECTED` AuditLog,訂正前備份:`/var/backups/mpts/20261029-003248`;事後全站「學期計畫與學生計畫不符」配對為 0。
 - **2026-10-29(一百四十七)**:操作者 Claude Code(依使用者指示執行)。上一版 `c5941de` → 新版 `32c4f12`(課程總覽與老師個人課表的學期下拉選單標示合作計畫,避免兩計畫同名學期無法分辨)。純 template/view,無 migration。部署前備份:`/var/backups/mpts/20261029-002406`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作。
