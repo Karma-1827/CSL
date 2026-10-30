@@ -1102,6 +1102,10 @@ def dashboard(request):
             # WAITING/PENDING 時會被清空,不能再直接拿它當顯示來源。
             decisions = list(review.decisions.all())
             review.latest_decision = decisions[0] if decisions else None
+            # 2026-10-31(使用者要求):單一堂課累計 5 次(含)以上待補正,卡片底色變淡灰,
+            # 讓管理員一眼看出反覆補正仍未過的課程。
+            review.revise_count = sum(1 for row in decisions if row.status == ClassReviewStatus.REVISE)
+            review.revise_heavy = review.revise_count >= 5
             # 2026-10-30(使用者要求):待討論中的課程,老師/學生在移入後又更新了課堂紀錄,
             # 仍留在待討論,只在卡片上多一個紅點提醒管理員有新內容。
             review.discussion_updated = bool(

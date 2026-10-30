@@ -354,7 +354,7 @@
               <summary><span><strong>{{ section.label }}</strong><small>{{ section.label_en }}</small></span>{% if section.has_updates %}<i class="discussion-updated-dot is-header" role="img" aria-label="有課程在移入後被更新 / Some classes were updated" title="有課程在移入待討論後被老師或學生更新 / Some classes were updated after being flagged"></i>{% endif %}<em>{{ section.page.paginator.count }}</em></summary>
               <div class="makeup-review-list">
                 {% for review in section.page %}
-                  <article class="makeup-review-row review-history-row">{% if review.discussion_updated %}<span class="discussion-updated-dot" role="img" aria-label="移入後有更新 / Updated since flagged" title="移入待討論後，老師或學生有更新課堂紀錄 / Record updated after being flagged"></span>{% endif %}
+                  <article class="makeup-review-row review-history-row{% if review.revise_heavy %} is-revise-heavy{% endif %}"{% if review.revise_heavy %} title="已累計 {{ review.revise_count }} 次待補正 / {{ review.revise_count }} revise requests so far"{% endif %}>{% if review.discussion_updated %}<span class="discussion-updated-dot" role="img" aria-label="移入後有更新 / Updated since flagged" title="移入待討論後，老師或學生有更新課堂紀錄 / Record updated after being flagged"></span>{% endif %}
                     {% comment %}
                       2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片
                       外做審核」):列表本身不再提供任何審核/撤回動作(通過/待補正/未通過

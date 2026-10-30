@@ -2808,6 +2808,19 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(sections["DISCUSSION"]["page"].paginator.count, 1)
         self.assertEqual(sections[ClassReviewStatus.PENDING]["page"].paginator.count, 0)
 
+    def test_dashboard_card_turns_gray_after_five_revise_decisions(self):
+        """2026-10-31:單一堂課累計 5 次待補正,Admin 課程審核卡片底色變淡灰。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="REVISE5-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        review = ClassReview.objects.get(session=session)
+        dashboard = reverse("accounts:dashboard")
+        for _ in range(4):
+            ClassReviewDecision.objects.create(review=review, status=ClassReviewStatus.REVISE, note="x", reviewed_by=admin)
+        self.assertNotContains(self.client.get(dashboard), "is-revise-heavy")
+        ClassReviewDecision.objects.create(review=review, status=ClassReviewStatus.REVISE, note="x", reviewed_by=admin)
+        self.assertContains(self.client.get(dashboard), "review-history-row is-revise-heavy")
+
     def test_discussion_flag_is_cleared_when_a_decision_is_made_and_rejects_non_pending(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="DISCUSS-ADMIN2", password="Admin-password-2026")

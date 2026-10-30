@@ -2381,6 +2381,10 @@ td small {
 .review-history-row {
   position: relative;
 }
+.review-history-row.is-revise-heavy {
+  background: #eceef1;
+  border-color: #cfd4da;
+}
 .discussion-updated-dot {
   position: absolute;
   top: -7px;
