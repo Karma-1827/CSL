@@ -2781,6 +2781,28 @@ class ClassWorkflowTests(TestCase):
         review.refresh_from_db()
         self.assertFalse(review.is_on_discussion)
 
+    def test_discussion_card_shows_red_dot_only_when_record_updated_after_flag(self):
+        """2026-10-30:待討論中的課程,移入後老師/學生又更新紀錄,仍留在待討論但卡片多一個紅點。"""
+        from datetime import timedelta
+
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="DISCUSS-DOT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        self.client.post(reverse("tutoring:flag_class_review_discussion", args=[session.pk]), {"action": "flag"})
+
+        dashboard = reverse("accounts:dashboard")
+        self.assertNotContains(self.client.get(dashboard), 'class="discussion-updated-dot"')
+
+        record = session.class_records.first()
+        ClassRecord.objects.filter(pk=record.pk).update(
+            updated_at=ClassReview.objects.get(session=session).discussion_flagged_at + timedelta(minutes=5)
+        )
+        response = self.client.get(dashboard)
+        self.assertContains(response, 'class="discussion-updated-dot"')
+        sections = {row["status"]: row for row in response.context["class_review_sections"]}
+        self.assertEqual(sections["DISCUSSION"]["page"].paginator.count, 1)
+        self.assertEqual(sections[ClassReviewStatus.PENDING]["page"].paginator.count, 0)
+
     def test_discussion_flag_is_cleared_when_a_decision_is_made_and_rejects_non_pending(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="DISCUSS-ADMIN2", password="Admin-password-2026")

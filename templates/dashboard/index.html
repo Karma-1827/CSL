@@ -375,7 +375,7 @@
                       <span class="review-row-participants"><a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutor_id %}">{{ review.session.pairing.tutor.bilingual_name }}</a> × <a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutee_id %}">{{ review.session.pairing.tutee.bilingual_name }}</a></span>
                     </div>
                     <div class="review-row-badges">
-                      {% if section.status == 'DISCUSSION' %}<i class="status-badge status-discussion">待討論 <small>For discussion</small></i>{% else %}<i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>{% endif %}
+                      {% if section.status == 'DISCUSSION' %}<i class="status-badge status-discussion">待討論 <small>For discussion</small></i>{% if review.discussion_updated %}<span class="discussion-updated-dot" role="img" aria-label="移入後有更新 / Updated since flagged" title="移入待討論後，老師或學生有更新課堂紀錄 / Record updated after being flagged"></span>{% endif %}{% else %}<i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>{% endif %}
                       <b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b>
                     </div>
                   </article>

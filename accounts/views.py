@@ -1102,6 +1102,12 @@ def dashboard(request):
             # WAITING/PENDING 時會被清空,不能再直接拿它當顯示來源。
             decisions = list(review.decisions.all())
             review.latest_decision = decisions[0] if decisions else None
+            # 2026-10-30(使用者要求):待討論中的課程,老師/學生在移入後又更新了課堂紀錄,
+            # 仍留在待討論,只在卡片上多一個紅點提醒管理員有新內容。
+            review.discussion_updated = bool(
+                review.is_on_discussion
+                and any(row.updated_at > review.discussion_flagged_at for row in review.session.class_records.all())
+            )
             has_makeup_attendance = any(row.is_makeup for row in review.session.attendances.all())
             has_makeup_record = any(row.is_makeup for row in review.session.class_records.all())
             if has_makeup_attendance and has_makeup_record:

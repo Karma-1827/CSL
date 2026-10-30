@@ -2378,6 +2378,14 @@ td small {
   color: #5b2a86;
   background: #efe6f7;
 }
+.discussion-updated-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
 .class-review-note {
   margin: 10px 0 0;
   color: var(--navy);
