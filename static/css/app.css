@@ -2378,13 +2378,24 @@ td small {
   color: #5b2a86;
   background: #efe6f7;
 }
+.review-history-row {
+  position: relative;
+}
 .discussion-updated-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  width: 16px;
+  height: 16px;
+  border: 3px solid #fff;
   border-radius: 50%;
   background: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger-soft);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.discussion-updated-dot.is-header {
+  position: static;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 .class-review-note {
   margin: 10px 0 0;

@@ -2792,6 +2792,7 @@ class ClassWorkflowTests(TestCase):
 
         dashboard = reverse("accounts:dashboard")
         self.assertNotContains(self.client.get(dashboard), 'class="discussion-updated-dot"')
+        self.assertNotContains(self.client.get(dashboard), "is-header")
 
         record = session.class_records.first()
         ClassRecord.objects.filter(pk=record.pk).update(
@@ -2799,6 +2800,10 @@ class ClassWorkflowTests(TestCase):
         )
         response = self.client.get(dashboard)
         self.assertContains(response, 'class="discussion-updated-dot"')
+        self.assertContains(response, 'class="discussion-updated-dot is-header"')
+        self.assertTrue(
+            {row["status"]: row for row in response.context["class_review_sections"]}["DISCUSSION"]["has_updates"]
+        )
         sections = {row["status"]: row for row in response.context["class_review_sections"]}
         self.assertEqual(sections["DISCUSSION"]["page"].paginator.count, 1)
         self.assertEqual(sections[ClassReviewStatus.PENDING]["page"].paginator.count, 0)

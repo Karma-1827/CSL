@@ -1153,6 +1153,8 @@ def dashboard(request):
                 "open": is_open or page_param in request.GET,
                 "page_param": page_param,
                 "page": Paginator(rows, 7).get_page(request.GET.get(page_param)),
+                # 2026-10-30:待討論區塊標題也要有紅點,不必展開(或翻頁)才發現有更新。
+                "has_updates": any(getattr(review, "discussion_updated", False) for review in rows),
             })
         context["class_review_sections"] = class_review_sections
         context["pending_class_reviews"] = [

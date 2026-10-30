@@ -351,10 +351,10 @@
         <div class="review-status-sections">
           {% for section in class_review_sections %}
             <details class="panel review-status-group status-group-{{ section.status|lower }}"{% if section.open %} open{% endif %}>
-              <summary><span><strong>{{ section.label }}</strong><small>{{ section.label_en }}</small></span><em>{{ section.page.paginator.count }}</em></summary>
+              <summary><span><strong>{{ section.label }}</strong><small>{{ section.label_en }}</small></span>{% if section.has_updates %}<i class="discussion-updated-dot is-header" role="img" aria-label="有課程在移入後被更新 / Some classes were updated" title="有課程在移入待討論後被老師或學生更新 / Some classes were updated after being flagged"></i>{% endif %}<em>{{ section.page.paginator.count }}</em></summary>
               <div class="makeup-review-list">
                 {% for review in section.page %}
-                  <article class="makeup-review-row review-history-row">
+                  <article class="makeup-review-row review-history-row">{% if review.discussion_updated %}<span class="discussion-updated-dot" role="img" aria-label="移入後有更新 / Updated since flagged" title="移入待討論後，老師或學生有更新課堂紀錄 / Record updated after being flagged"></span>{% endif %}
                     {% comment %}
                       2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片
                       外做審核」):列表本身不再提供任何審核/撤回動作(通過/待補正/未通過
@@ -375,7 +375,7 @@
                       <span class="review-row-participants"><a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutor_id %}">{{ review.session.pairing.tutor.bilingual_name }}</a> × <a href="{% url 'accounts:admin_user_profile' review.session.pairing.tutee_id %}">{{ review.session.pairing.tutee.bilingual_name }}</a></span>
                     </div>
                     <div class="review-row-badges">
-                      {% if section.status == 'DISCUSSION' %}<i class="status-badge status-discussion">待討論 <small>For discussion</small></i>{% if review.discussion_updated %}<span class="discussion-updated-dot" role="img" aria-label="移入後有更新 / Updated since flagged" title="移入待討論後，老師或學生有更新課堂紀錄 / Record updated after being flagged"></span>{% endif %}{% else %}<i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>{% endif %}
+                      {% if section.status == 'DISCUSSION' %}<i class="status-badge status-discussion">待討論 <small>For discussion</small></i>{% else %}<i class="status-badge status-{{ review.status|lower }}">{{ review.get_status_display }}</i>{% endif %}
                       <b>{{ review.category_label }} <small>{{ review.category_label_en }}</small></b>
                     </div>
                   </article>
