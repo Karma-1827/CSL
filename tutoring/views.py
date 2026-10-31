@@ -33,6 +33,8 @@ from .reporting import (
 )
 from .services import (
     set_class_review_discussion_flag,
+    unlock_class_review,
+    class_review_can_contact_office,
     acknowledge_pairing_release_notice,
     add_incident_report_reply,
     cancel_class,
@@ -662,6 +664,7 @@ def class_detail(request, pk):
         tutee_record_diffs = class_record_revision_diffs(tutee_record) if tutee_record else []
         class_review = getattr(session, "class_review", None)
         class_review_history = list(class_review.decisions.all()) if class_review else []
+        can_contact_office = bool(class_review and class_review_can_contact_office(class_review))
         # 2026-10-02(使用者要求「如果是待補正重新送審后，在審核中多一個標籤：已補正＋
         # 日期時間」):`class_review_history` 依 -created_at 排序,所以第一筆就是「最近一次
         # 真正的審核決定」——如果那筆是「待補正」,但目前的即時狀態已經不是待補正了
@@ -697,6 +700,7 @@ def class_detail(request, pk):
                 # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):
                 # 完整審核歷程,不受 ClassReview 本身重置/撤回影響,見 ClassReviewDecision。
                 "class_review_history": class_review_history,
+                "can_contact_office": can_contact_office,
                 "tutor_record_diffs": tutor_record_diffs,
                 "tutee_record_diffs": tutee_record_diffs,
                 "revise_resubmitted_at": revise_resubmitted_at,
@@ -863,6 +867,7 @@ def review_class(request, pk):
         "approve": ClassReviewStatus.APPROVED,
         "reject": ClassReviewStatus.REJECTED,
         "revise": ClassReviewStatus.REVISE,
+        "contact": ClassReviewStatus.CONTACT_OFFICE,
     }
     try:
         review_class_session(
@@ -877,6 +882,20 @@ def review_class(request, pk):
     if request.POST.get("next") == "detail":
         return redirect("tutoring:class_detail", pk=pk)
     return redirect(f"{reverse('accounts:dashboard')}#class-review")
+
+
+@login_required
+@require_POST
+def unlock_class_review_view(request, pk):
+    # 2026-11-01(使用者要求):解鎖「聯繫管理員」的課堂,老師可補交一次。
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        unlock_class_review(session_id=pk, admin=request.user)
+        messages.success(request, "已解鎖，老師可再補正送審一次。 / Unlocked; the tutor may resubmit once more.")
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    return redirect("tutoring:class_detail", pk=pk)
 
 
 @login_required

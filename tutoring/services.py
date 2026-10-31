@@ -1293,6 +1293,11 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
     # PENDING,鎖定自然解除,不需要另外處理。
     if existing:
         review = getattr(session, "class_review", None)
+        if review and review.status == ClassReviewStatus.CONTACT_OFFICE and author.role == Role.TUTOR:
+            raise ValidationError(
+                "此課堂紀錄已鎖定，須先聯繫管理員預約諮詢後才能再次補正送審。 / "
+                "This record is locked — contact the administrator for a consultation before resubmitting."
+            )
         if review and review.status == ClassReviewStatus.APPROVED:
             raise ValidationError(
                 "審核通過的課堂紀錄無法再修改,如需更正請聯絡系辦撤回審核結果。 / "
@@ -1408,7 +1413,9 @@ def _sync_class_review(session):
         status=ConfirmationStatus.CONFIRMED, attendance_confirmed=True, record_confirmed=True
     ).count() == 2
     target = ClassReviewStatus.PENDING if confirmed else ClassReviewStatus.WAITING
-    decided_statuses = {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}
+    decided_statuses = {
+        ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE, ClassReviewStatus.CONTACT_OFFICE,
+    }
     if review.status not in decided_statuses and review.status != target:
         review.status = target
         # 離開 PENDING 就不再是「待討論」,避免之後又回到 PENDING 時殘留舊標記。
@@ -1471,7 +1478,25 @@ def class_is_valid(session):
 
 #: 2026-10-01(使用者要求新增「待補正 / Revise」,跟「未通過」區分開來):
 #: Admin 審核課程時可以選擇的三種終局結果。
-CLASS_REVIEW_DECISIONS = {ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}
+CLASS_REVIEW_DECISIONS = {
+    ClassReviewStatus.APPROVED, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE, ClassReviewStatus.CONTACT_OFFICE,
+}
+
+#: 2026-11-01(使用者要求):單堂課累計幾次待補正後,管理員可選「請聯繫系辦」。
+CONTACT_OFFICE_REVISE_THRESHOLD = 5
+CONTACT_OFFICE_NOTE = (
+    "此課堂紀錄經管理員退回補正達5次，須先聯繫管理員預約諮詢（mpts.tcsl2026@gmail.com），"
+    "完成諮詢後，方可再次補正送審。"
+)
+
+
+def class_review_can_contact_office(review):
+    """累計待補正達門檻、且這堂課從未被鎖過(解鎖後的最後一次送審不再出現這個選項)。"""
+    statuses = list(review.decisions.values_list("status", flat=True))
+    return (
+        statuses.count(ClassReviewStatus.REVISE) >= CONTACT_OFFICE_REVISE_THRESHOLD
+        and ClassReviewStatus.CONTACT_OFFICE not in statuses
+    )
 
 
 @transaction.atomic
@@ -1487,6 +1512,10 @@ def review_class_session(*, session_id, admin, decision, note=""):
         raise ValidationError("此課程尚未進入可審核狀態。 / This class is not ready for review.")
     # 2026-10-21(使用者要求審核意見支援粗體/斜體/顏色):前端送來的是 HTML,一律用白名單
     # 重建後才存,不信任前端內容。
+    if decision == ClassReviewStatus.CONTACT_OFFICE:
+        if not class_review_can_contact_office(review):
+            raise ValidationError("此課程尚未達到可請聯繫系辦的條件。 / This class is not eligible for the contact-admin step.")
+        note = CONTACT_OFFICE_NOTE
     note = sanitize_rich_text(note)
     if len(note) > MAX_RICH_NOTE_LENGTH:
         raise ValidationError("審核意見過長。 / Review comments are too long.")
@@ -1701,3 +1730,28 @@ def resolve_incident_report(*, report_id, admin, note=""):
     report.resolution_note = note.strip()
     report.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_note"])
     return report
+
+
+@transaction.atomic
+def unlock_class_review(*, session_id, admin):
+    """2026-11-01(使用者要求):管理員手動解鎖「聯繫管理員」的課堂,回到待補正讓老師補交一次。"""
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以解鎖。 / Only administrators may unlock.")
+    review = ClassReview.objects.select_for_update().select_related(
+        "session__pairing__tutor", "session__pairing__tutee"
+    ).get(session_id=session_id)
+    if review.status != ClassReviewStatus.CONTACT_OFFICE:
+        raise ValidationError("此課程目前沒有被鎖定。 / This class is not locked.")
+    review.status = ClassReviewStatus.REVISE
+    review.reviewed_by = None
+    review.review_note = ""
+    review.reviewed_at = None
+    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    session = review.session
+    AuditLog.record(
+        actor=admin,
+        target_user=session.pairing.tutor,
+        event_type="CLASS_REVIEW_UNLOCKED",
+        description="管理員解鎖課堂紀錄,老師可補交一次 / Admin unlocked the class record for one more resubmission",
+        metadata={"session_id": session.pk, "tutor": session.pairing.tutor.username, "tutee": session.pairing.tutee.username},
+    )

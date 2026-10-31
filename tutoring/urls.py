@@ -69,6 +69,7 @@ urlpatterns = [
         name="add_incident_report_reply",
     ),
     path("classes/<int:pk>/review/", views.review_class, name="review_class"),
+    path("classes/<int:pk>/review/unlock/", views.unlock_class_review_view, name="unlock_class_review"),
     path("classes/<int:pk>/review/discussion/", views.flag_class_review_discussion, name="flag_class_review_discussion"),
     path(
         "classes/review-decisions/<int:decision_pk>/delete/",

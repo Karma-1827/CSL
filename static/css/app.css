@@ -2374,6 +2374,26 @@ td small {
   color: var(--slate-700);
   background: var(--slate-100);
 }
+.status-contact {
+  color: #9a4a00;
+  background: #ffe9d1;
+}
+.class-status.contact {
+  color: #9a4a00;
+  background: #ffe9d1;
+}
+.status-group-contact {
+  border-left: 4px solid #e07b00;
+  background: linear-gradient(100deg, #ffe9d1, #fff 22%);
+}
+.button-contact-office {
+  color: #fff;
+  background: #1d6fb8;
+  border-color: #1d6fb8;
+}
+.button-contact-office:hover {
+  background: #155a96;
+}
 .status-discussion {
   color: #5b2a86;
   background: #efe6f7;

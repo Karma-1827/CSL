@@ -66,6 +66,8 @@
               等送出才看到錯誤訊息。
             {% endcomment %}
             <div class="empty-state">課堂時數已審核通過，紀錄無法再修改；如需更正請聯絡系辦撤回審核結果。<br>Hours for this class have been approved — the record can no longer be edited. Contact the department office to revert the decision first.</div>
+          {% elif own_record and class_review.status == 'CONTACT' and request.user.role == 'TUTOR' %}
+            <div class="empty-state">此課堂紀錄已鎖定：須先聯繫管理員預約諮詢（mpts.tcsl2026@gmail.com），完成諮詢後，方可再次補正送審。<br>This record is locked — contact the administrator (mpts.tcsl2026@gmail.com) for a consultation before resubmitting.</div>
           {% elif own_record or record_window_open %}
             <form method="post" class="stack-form" enctype="multipart/form-data">
               {% csrf_token %}

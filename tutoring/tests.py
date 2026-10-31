@@ -2206,6 +2206,69 @@ class ClassWorkflowTests(TestCase):
         review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="未通過")
         submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("未通過後仍可編輯"), now=now)
 
+    def _revise_n_times(self, session, admin, times):
+        now = self.aware(timezone.localdate(), time(11, 5))
+        for index in range(times):
+            review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REVISE, note=f"補正{index}")
+            submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data(f"補正後{index}"), now=now)
+
+    def test_contact_office_option_only_after_five_revise_decisions(self):
+        """2026-11-01:累計 5 次待補正後,下次送審的審核表單才出現「請聯繫系辦」。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="CONTACT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        url = reverse("tutoring:class_detail", args=[session.pk])
+        self._revise_n_times(session, admin, 4)
+        self.assertNotContains(self.client.get(url), "請聯繫系辦 / Contact office")
+        with self.assertRaises(ValidationError):
+            review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.CONTACT_OFFICE)
+        self._revise_n_times(session, admin, 1)
+        self.assertContains(self.client.get(url), "請聯繫系辦 / Contact office")
+
+    def test_contact_office_locks_tutor_only_and_unlock_allows_one_more_submission(self):
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="CONTACT-LOCK-ADMIN", password="Admin-password-2026")
+        self._revise_n_times(session, admin, 5)
+        self.client.force_login(admin)
+        self.client.post(reverse("tutoring:review_class", args=[session.pk]), {"action": "contact", "note": "自行輸入的不採用"})
+        review = ClassReview.objects.get(session=session)
+        self.assertEqual(review.status, ClassReviewStatus.CONTACT_OFFICE)
+        self.assertIn("mpts.tcsl2026@gmail.com", review.review_note)
+        self.assertNotIn("自行輸入", review.review_note)
+
+        now = self.aware(timezone.localdate(), time(11, 5))
+        with self.assertRaises(ValidationError):
+            submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("鎖定中"), now=now)
+        # 學生仍可編輯,且不會把課程拉出「聯繫管理員」。
+        submit_class_record(session_id=session.pk, author=self.tutee, data=self.record_data("學生編輯"), now=now)
+        review.refresh_from_db()
+        self.assertEqual(review.status, ClassReviewStatus.CONTACT_OFFICE)
+
+        self.client.force_login(self.tutor)
+        tutor_page = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(tutor_page, "此課堂紀錄已鎖定")
+        self.assertNotContains(tutor_page, "更新紀錄 / Update record")
+
+        sections = {}
+        self.client.force_login(admin)
+        sections = {r["status"]: r for r in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]}
+        self.assertEqual(sections["CONTACT"]["page"].paginator.count, 1)
+
+        self.client.post(reverse("tutoring:unlock_class_review", args=[session.pk]))
+        review.refresh_from_db()
+        self.assertEqual(review.status, ClassReviewStatus.REVISE)
+        self.assertTrue(AuditLog.objects.filter(event_type="CLASS_REVIEW_UNLOCKED").exists())
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("解鎖後補交"), now=now)
+        review.refresh_from_db()
+        self.assertEqual(review.status, ClassReviewStatus.PENDING)
+        # 最後一次送審:不再提供「請聯繫系辦」,只能通過/待補正/未通過。
+        self.assertNotContains(self.client.get(reverse("tutoring:class_detail", args=[session.pk])), "請聯繫系辦 / Contact office")
+
+    def test_non_admin_cannot_unlock_class_review(self):
+        session = self._confirmed_pending_session()
+        self.client.force_login(self.tutor)
+        self.assertEqual(self.client.post(reverse("tutoring:unlock_class_review", args=[session.pk])).status_code, 404)
+
     def test_submit_class_record_allows_edit_again_after_approval_is_reverted(self):
         session = self._confirmed_pending_session()
         admin = User.objects.create_superuser(username="REVERT-UNLOCKS-ADMIN", password="Admin-password-2026")
@@ -2766,7 +2829,7 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(sections["DISCUSSION"]["page"].paginator.count, 1)
         self.assertEqual(sections[ClassReviewStatus.PENDING]["page"].paginator.count, 0)
         order = [row["status"] for row in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]]
-        self.assertEqual(order[-2:], [ClassReviewStatus.REVISE, "DISCUSSION"])
+        self.assertEqual(order[-3:], [ClassReviewStatus.REVISE, "DISCUSSION", ClassReviewStatus.CONTACT_OFFICE])
 
         # 老師看到的仍是「等待管理員核准」,頁面上完全沒有待討論字樣。
         self.client.force_login(session.pairing.tutor)

@@ -478,7 +478,7 @@ def dashboard(request):
             if session.active_alert_count:
                 reasons.append("課堂通報待處理 / Active class alert")
             review = getattr(session, "class_review", None)
-            if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
+            if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE, ClassReviewStatus.CONTACT_OFFICE}:
                 reasons.append(f"課程審核：{review.get_status_display()}")
             session.anomaly_reasons = reasons
             if reasons:
@@ -1135,6 +1135,8 @@ def dashboard(request):
             # 2026-10-21(使用者要求):Admin 專屬放置區,放在待補正下方。不是真正的審核狀態,
             # 底層仍是 PENDING + discussion_flagged_at,老師/學生端看不到這個分類。
             ("DISCUSSION", "待討論", "For discussion", False),
+            # 2026-11-01(使用者要求):累計 5 次待補正後被鎖定、等老師聯繫系辦的課堂(橘色)。
+            (ClassReviewStatus.CONTACT_OFFICE, "聯繫管理員", "Contact admin", False),
         )
         # 2026-10-02(使用者要求「比數會越來越多，每個區塊只7筆就換第二頁」):五個狀態
         # 區塊各自獨立分頁,比照 roster_page/pairing_page 既有慣例,用各自的查詢參數
@@ -1234,7 +1236,7 @@ def admin_tutor_schedule(request, user_id):
         if any(row.status == ClassAlertStatus.ACTIVE for row in session.class_alerts.all()):
             reasons.append("課堂通報待處理 / Active class alert")
         review = getattr(session, "class_review", None)
-        if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE}:
+        if review and review.status in {ClassReviewStatus.WAITING, ClassReviewStatus.PENDING, ClassReviewStatus.REJECTED, ClassReviewStatus.REVISE, ClassReviewStatus.CONTACT_OFFICE}:
             reasons.append(f"補登：{review.get_status_display()}")
         session.anomaly_reasons = reasons
         exception_count += bool(reasons)

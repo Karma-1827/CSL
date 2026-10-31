@@ -110,6 +110,17 @@
       </section>
     {% endif %}
 
+    {% if class_review.status == 'CONTACT' %}
+      <section class="panel class-review-block contact-office-box">
+        <div class="panel-heading"><div><span class="eyebrow">LOCKED</span><h2>聯繫管理員 <small>Contact admin</small></h2></div></div>
+        <form action="{% url 'tutoring:unlock_class_review' session.pk %}" method="post" class="discussion-flag-box">
+          {% csrf_token %}
+          <span><strong>老師端已鎖定，不能再送審 / Tutor record is locked</strong><small>老師完成諮詢後，由管理員解鎖；解鎖後老師可補交最後一次，若仍未依要求修正，請選「未通過」。<br>After the consultation, unlock it so the tutor can resubmit once more; if still not fixed, mark it Rejected.</small></span>
+          <button class="button button-primary" type="submit">解鎖 / Unlock</button>
+        </form>
+      </section>
+    {% endif %}
+
     {% if class_review.status == 'PENDING' %}
       <section class="panel class-review-block admin-review-decision">
         {% comment %}
@@ -142,7 +153,8 @@
         {% if class_review_history.0.note %}<div class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|rich_note }}</div>{% endif %}
         <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
           {% csrf_token %}<input type="hidden" name="next" value="detail"><div class="rich-note-field"><span class="rich-note-label">審核意見 / Review comments</span><textarea name="note" rows="3" data-rich-note></textarea></div>
-          <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button></div>
+          <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button>{% if can_contact_office %}<button class="button button-contact-office" name="action" value="contact">請聯繫系辦 / Contact office</button>{% endif %}</div>
+          {% if can_contact_office %}<p class="help-text">此課堂已累計 5 次待補正，可選「請聯繫系辦」：老師端鎖定不能再送審（學生仍可編輯），審核意見固定。<br>5 revise requests reached — "Contact office" locks the tutor's record; the comment is fixed.</p>{% endif %}
         </form>
       </section>
     {% endif %}

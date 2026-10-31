@@ -763,6 +763,9 @@ class ClassReviewStatus(models.TextChoices):
     # 互相確認流程**(只有第一次送出才需要雙方確認,見 `tutoring/services.py::
     # submit_class_record()`),補正後會直接退回 PENDING 讓管理員重新審核最新內容。
     REVISE = "REVISE", "待補正 / Revise"
+    # 2026-11-01(使用者要求):單堂課累計 5 次待補正後,管理員下一次審核可選「請聯繫系辦」,
+    # 老師端鎖定不能再送審(學生仍可編輯),管理員解鎖後回到 REVISE 讓老師補交最後一次。
+    CONTACT_OFFICE = "CONTACT", "聯繫管理員 / Contact admin"
 
 
 class ClassReview(models.Model):
