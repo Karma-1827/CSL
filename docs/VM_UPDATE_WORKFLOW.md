@@ -293,6 +293,7 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-11-01(一百五十六)**:操作者 Claude Code(依使用者指示執行)。上一版 `becaf4e` → 新版 `25c9c79`(「聯繫管理員」解鎖:審核意見固定為「已完成諮詢，請依諮詢結果補正課堂紀錄後再次送審。」並寫入審核紀錄;解鎖後課程留在該區塊,老師/學生補交後顯示紅點,直到下一次審核決定)。有 migration `tutoring/0047_classreview_contact_unlocked_at`(新增可空欄位)已套用。部署前已執行備份腳本(結束碼 0),`makemigrations --check` 無差異、`nginx -t` 通過、首頁 200。
 - **2026-11-01(一百五十五)**:操作者 Claude Code(依使用者指示執行)。上一版 `cfa7312` → 新版 `becaf4e`(課程審核頁移除「請聯繫系辦」旁兩行說明文字)。純 template,無 migration。部署前已執行備份腳本(結束碼 0),`collectstatic` 無變更、`makemigrations --check` 無差異、`nginx -t` 通過、首頁 200。同日另在正式站為 NTNU-OIA 測試配對(配對 18)建立測試課 session 842(累計 5 次待補正後再次送審,AuditLog `TEST_CLASS_CREATED`),供驗證審核畫面,測完可清除。
 - **2026-11-01(一百五十四)**:操作者 Claude Code(依使用者指示執行)。上一版 `819a1a7` → 新版 `cfa7312`(課程審核「請聯繫系辦」:單堂課累計 5 次待補正後,Admin 審核表單多藍色按鈕;按下後審核意見固定、老師端鎖定不能送審(學生仍可編輯)、課程進橘色「聯繫管理員」區塊,Admin 可解鎖讓老師補交一次;詳見 `CLAUDE.md` 第 4.6 節)。含 1 個 migration:`tutoring/0046_classreview_contact_office_status`(僅 AlterField 欄位選項,以 mpts 身分 `migrate` 成功)。部署前備份:`/var/backups/mpts/20261101-003656`。驗收:首頁 200,`makemigrations --check` 無變更,`nginx -t` 通過,`collectstatic` 複製 1 檔;未在正式站實際按下新按鈕(避免動到真實審核資料)。
 - **2026-10-31(一百五十三)**:操作者 Claude Code(依使用者指示執行)。上一版 `ac6aef3` → 新版 `819a1a7`(Admin 課程審核卡片:單堂課累計 5 次(含)以上待補正時底色變淡灰)。純 view/template/CSS,無 migration。部署前備份:`/var/backups/mpts/20261031-014135`。驗收:首頁 200,`makemigrations --check` 無變更,`migrate --plan` 無操作,`nginx -t` 通過。部署後唯讀查詢:累計 5 次待補正的課程僅課程 423 一筆。
