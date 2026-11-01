@@ -789,8 +789,18 @@ class ClassReview(models.Model):
     discussion_flagged_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
+    # 2026-11-01(使用者要求):管理員解鎖「聯繫管理員」後,課程仍留在該區塊直到下一次審核決定,
+    # 老師補交後在卡片上顯示紅點(比照待討論)。底層 status 照常流轉(REVISE→PENDING)。
+    contact_unlocked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_in_contact_block(self):
+        return self.status == ClassReviewStatus.CONTACT_OFFICE or (
+            self.contact_unlocked_at is not None
+            and self.status in {ClassReviewStatus.REVISE, ClassReviewStatus.PENDING, ClassReviewStatus.WAITING}
+        )
 
     @property
     def is_on_discussion(self):

@@ -2258,9 +2258,27 @@ class ClassWorkflowTests(TestCase):
         review.refresh_from_db()
         self.assertEqual(review.status, ClassReviewStatus.REVISE)
         self.assertTrue(AuditLog.objects.filter(event_type="CLASS_REVIEW_UNLOCKED").exists())
+        self.assertEqual(review.review_note, "已完成諮詢，請依諮詢結果補正課堂紀錄後再次送審。")
+        self.assertEqual(review.decisions.first().note, review.review_note)
+        sections = {r["status"]: r for r in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]}
+        self.assertEqual(sections["CONTACT"]["page"].paginator.count, 1)
+        self.assertFalse(sections["CONTACT"]["has_updates"])
         submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("解鎖後補交"), now=now)
         review.refresh_from_db()
         self.assertEqual(review.status, ClassReviewStatus.PENDING)
+        # 送審後仍留在「聯繫管理員」區塊並顯示紅點,不回到「等待管理員核准」。
+        sections = {r["status"]: r for r in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]}
+        self.assertEqual(sections["CONTACT"]["page"].paginator.count, 1)
+        self.assertTrue(sections["CONTACT"]["has_updates"])
+        self.assertEqual(sections["PENDING"]["page"].paginator.count, 0)
+        # 管理員做出下一次決定後離開該區塊。
+        review_class_session(session_id=session.pk, admin=admin, decision=ClassReviewStatus.REJECTED, note="未通過")
+        sections = {r["status"]: r for r in self.client.get(reverse("accounts:dashboard")).context["class_review_sections"]}
+        self.assertEqual(sections["CONTACT"]["page"].paginator.count, 0)
+        review.refresh_from_db()
+        self.assertEqual(review.status, ClassReviewStatus.REJECTED)
+        review.status = ClassReviewStatus.PENDING
+        review.save()
         # 最後一次送審:不再提供「請聯繫系辦」,只能通過/待補正/未通過。
         self.assertNotContains(self.client.get(reverse("tutoring:class_detail", args=[session.pk])), "請聯繫系辦 / Contact office")
 

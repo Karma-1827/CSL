@@ -1112,6 +1112,11 @@ def dashboard(request):
                 review.is_on_discussion
                 and any(row.updated_at > review.discussion_flagged_at for row in review.session.class_records.all())
             )
+            # 2026-11-01(使用者要求):解鎖後留在「聯繫管理員」區塊的課程,老師/學生補交後也顯示紅點。
+            if review.contact_unlocked_at and review.is_in_contact_block and review.status != ClassReviewStatus.CONTACT_OFFICE:
+                review.discussion_updated = any(
+                    row.updated_at > review.contact_unlocked_at for row in review.session.class_records.all()
+                )
             has_makeup_attendance = any(row.is_makeup for row in review.session.attendances.all())
             has_makeup_record = any(row.is_makeup for row in review.session.class_records.all())
             if has_makeup_attendance and has_makeup_record:
@@ -1148,10 +1153,15 @@ def dashboard(request):
             page_param = f"{status.lower()}_page"
             if status == "DISCUSSION":
                 rows = [review for review in class_reviews if review.is_on_discussion]
+            elif status == ClassReviewStatus.CONTACT_OFFICE:
+                rows = [review for review in class_reviews if review.is_in_contact_block]
             elif status == ClassReviewStatus.PENDING:
-                rows = [review for review in class_reviews if review.status == status and not review.is_on_discussion]
+                rows = [
+                    review for review in class_reviews
+                    if review.status == status and not review.is_on_discussion and not review.is_in_contact_block
+                ]
             else:
-                rows = [review for review in class_reviews if review.status == status]
+                rows = [review for review in class_reviews if review.status == status and not review.is_in_contact_block]
             class_review_sections.append({
                 "status": status,
                 "label": label,

@@ -1488,6 +1488,7 @@ CONTACT_OFFICE_NOTE = (
     "此課堂紀錄經管理員退回補正達5次，須先聯繫管理員預約諮詢（mpts.tcsl2026@gmail.com），"
     "完成諮詢後，方可再次補正送審。"
 )
+CONTACT_OFFICE_UNLOCK_NOTE = "已完成諮詢，請依諮詢結果補正課堂紀錄後再次送審。"
 
 
 def class_review_can_contact_office(review):
@@ -1525,9 +1526,10 @@ def review_class_session(*, session_id, admin, decision, note=""):
     review.reviewed_at = timezone.now()
     review.discussion_flagged_at = None
     review.discussion_flagged_by = None
+    review.contact_unlocked_at = None
     review.save(update_fields=[
         "status", "reviewed_by", "review_note", "reviewed_at",
-        "discussion_flagged_at", "discussion_flagged_by", "updated_at",
+        "discussion_flagged_at", "discussion_flagged_by", "contact_unlocked_at", "updated_at",
     ])
     # 2026-10-01(使用者要求「如果是通過/待補正也要接列出所有審核紀錄」):額外寫入一筆
     # 不受後續重置/撤回影響的歷史快照,讓畫面能列出這堂課完整的審核歷程(例如先被要求
@@ -1612,7 +1614,8 @@ def delete_class_review_decision(*, decision_id, admin):
         review.reviewed_by = None
         review.review_note = ""
         review.reviewed_at = None
-        review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+        review.contact_unlocked_at = None
+        review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "contact_unlocked_at", "updated_at"])
     AuditLog.record(
         actor=admin,
         target_user=tutee,
@@ -1742,11 +1745,18 @@ def unlock_class_review(*, session_id, admin):
     ).get(session_id=session_id)
     if review.status != ClassReviewStatus.CONTACT_OFFICE:
         raise ValidationError("此課程目前沒有被鎖定。 / This class is not locked.")
+    # 2026-11-01(使用者要求):解鎖視同一筆「待補正」決定,意見固定為諮詢完成的提醒,
+    # 並寫入審核紀錄;課程繼續留在「聯繫管理員」區塊直到下一次審核決定。
+    now = timezone.now()
     review.status = ClassReviewStatus.REVISE
-    review.reviewed_by = None
-    review.review_note = ""
-    review.reviewed_at = None
-    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "updated_at"])
+    review.reviewed_by = admin
+    review.review_note = CONTACT_OFFICE_UNLOCK_NOTE
+    review.reviewed_at = now
+    review.contact_unlocked_at = now
+    review.save(update_fields=["status", "reviewed_by", "review_note", "reviewed_at", "contact_unlocked_at", "updated_at"])
+    ClassReviewDecision.objects.create(
+        review=review, status=ClassReviewStatus.REVISE, note=CONTACT_OFFICE_UNLOCK_NOTE, reviewed_by=admin
+    )
     session = review.session
     AuditLog.record(
         actor=admin,
