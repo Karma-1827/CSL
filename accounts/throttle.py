@@ -15,6 +15,7 @@ answer, or any other secret.
 """
 
 from django.core.cache import cache
+from django.db import connection, transaction
 
 THROTTLE_TIMEOUT_SECONDS = 900  # 15 minutes, matches every throttle message in the UI
 
@@ -28,7 +29,19 @@ def any_throttled(keys_with_limits):
 
 
 def register_failure(key, timeout=THROTTLE_TIMEOUT_SECONDS):
-    cache.set(key, cache.get(key, 0) + 1, timeout)
+    """Increment the failure counter for `key` without losing concurrent updates.
+
+    DatabaseCache.incr() is the inherited BaseCache implementation (a plain get followed by
+    a set, no row lock), so it is no safer than the get/set pair that used to be here:
+    parallel failed logins could all read the same count and write back count + 1, letting
+    a burst of simultaneous guesses stay under the limit. A PostgreSQL transaction-scoped
+    advisory lock keyed on the counter serialises the read-modify-write per key across every
+    Gunicorn worker, and is released automatically when the transaction ends.
+    """
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", [f"throttle:{key}"])
+        cache.set(key, cache.get(key, 0) + 1, timeout)
 
 
 def register_failures(keys, timeout=THROTTLE_TIMEOUT_SECONDS):

@@ -5041,7 +5041,10 @@ class PartnerProgramCertificateTests(TestCase):
             self.assertIn("於民國115年7月1日至8月31日期間", compact)
             self.assertNotIn("日至民國", compact)
             body_line = next(line for line in text.splitlines() if "於民國" in line.replace(" ", ""))
-            self.assertTrue(body_line.startswith("於"))
+            # pypdf >= 6.21 prefixes some extracted lines with a space even though the rendered
+            # page is pixel-identical to the one produced under 6.16 (verified by rasterising
+            # both), so only the extracted text's leading whitespace is normalised here.
+            self.assertTrue(body_line.lstrip().startswith("於"))
 
     def test_certificate_single_name_shows_no_dangling_slash_in_both_languages(self):
         from pypdf import PdfReader

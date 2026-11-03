@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import transaction
+from django.db import connections, transaction
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -897,6 +897,44 @@ class SharedCacheBackendTests(TestCase):
             settings.CACHES["default"]["BACKEND"],
             "django.core.cache.backends.db.DatabaseCache",
         )
+
+
+class ThrottleConcurrencyTests(TestCase):
+    """register_failure() must not lose updates when failed attempts arrive in parallel
+    (DatabaseCache has no atomic increment, so a naive get-then-set lets a burst of
+    simultaneous guesses stay under the limit). Deliberately a plain TestCase, not a
+    TransactionTestCase: the latter flushes every table afterwards, which would wipe the
+    data-migration rows (e.g. PartnerProgram) out of a --keepdb test database. The worker
+    threads open their own connections and commit cache rows directly (outside this test's
+    wrapping transaction), so the key is unique per run instead of being cleared up front:
+    a cache.clear() inside the wrapping transaction would hold row locks on leftovers from
+    an earlier run and deadlock against the threads. Leftover rows expire on their own."""
+
+    def test_parallel_failures_are_all_counted(self):
+        import threading
+        import uuid
+        from .throttle import register_failure
+
+        workers, key = 12, f"throttle-concurrency-{uuid.uuid4()}"
+        barrier = threading.Barrier(workers)
+        errors = []
+
+        def hit():
+            try:
+                barrier.wait()
+                register_failure(key)
+            except Exception as exc:  # pragma: no cover - surfaced via assertion below
+                errors.append(exc)
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=hit) for _ in range(workers)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(cache.get(key), workers)
 
 
 class RosterLookupThrottleTests(TestCase):

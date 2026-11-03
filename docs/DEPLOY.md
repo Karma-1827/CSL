@@ -77,7 +77,7 @@
 
 - `/system-admin/` 的一般校內網段(目前只有 VPN 網段 `140.122.57.0/24` 有資訊中心書面確認,`deploy/nginx/mpts.conf.example` 對應那行仍是刻意會讓 `nginx -t` 失敗的 TODO 佔位,取得後才能加回去)。
 - 正式 RPO、RTO、每日/每週備份頻率、備份保留週期與復原責任人(待系辦/資訊中心確認,見 `docs/MEETING_CHANGE_REQUIREMENTS_2026-08-04.md` 第 20 項;資訊中心信件僅提到「每季系統完整備份乙次」,遠低於本文件件先前規劃的每日備份,需另外確認是否需要自建更高頻率的 `pg_dump`/`media` 備份,不能只依賴資訊中心的季備份)。
-- 個資、口語能力證明文件、課堂紀錄附件、稽核 log、對話紀錄與正式證明 PDF 的保存/刪除政策,同樣待系辦/資訊中心確認,系統不會自行寫死刪除年限。異常回報目前不提供附件上傳,不列入附件保存範圍。
+- 個資、口語能力證明文件、課堂紀錄附件、稽核 log、對話紀錄與正式證明 PDF 的保存/刪除政策,同樣待系辦/資訊中心確認,系統不會自行寫死刪除年限。異常回報支援單一私有附件上傳(`IncidentReport.attachment`),同樣列入上述附件保存/刪除政策的待確認範圍。
 - VM 目前有待套用的核心更新(需重開機),尚未安排維護窗口。
 - `/protected-media/` 的 `X-Accel-Redirect` 尚未在三個受保護下載 view 中實際串接(見上方第 12 項),目前私人檔案下載仍全部經由 Django `FileResponse` 直接串流,不是本次部署的阻斷項,但正式上線後應找時間補上以降低 WSGI worker 負擔。
 
@@ -108,7 +108,7 @@ DJANGO_DEBUG=0 DJANGO_SECRET_KEY='deployment-check-only-secret-key-that-is-long-
 
 ### 初次部署
 
-1. 建立服務帳號(`useradd --system --home-dir /opt/mpts --shell /usr/sbin/nologin --create-home mpts`)、Python virtualenv(`python -m venv /opt/mpts/.venv`),`pip install -r requirements.txt`。repo 目前是 **public**,可直接 `git clone https://github.com/Karma-1827/CSL.git` 到 `/opt/mpts`,不需要 deploy key/PAT;若之後改回 private 才需要另外處理認證。
+1. 建立服務帳號(`useradd --system --home-dir /opt/mpts --shell /usr/sbin/nologin --create-home mpts`)、Python virtualenv(`python -m venv /opt/mpts/.venv`)，先執行 `python -m pip install --upgrade "pip>=26.2"`，再執行 `python -m pip install -r requirements.txt`。repo 目前是 **public**,可直接 `git clone https://github.com/Karma-1827/CSL.git` 到 `/opt/mpts`,不需要 deploy key/PAT;若之後改回 private 才需要另外處理認證。
 2. 依 `deploy/.env.production.example` 建立 `/opt/mpts/.env`,權限設為 `600`,擁有者是 `mpts`(不是操作用的管理帳號)。**機密值不要交給任何 agent 填進版控裡的範本檔**,應另外產生一份不進 git 的真實 `.env` 再用 `scp`/`install` 送上機,範本檔只留 `TODO` 佔位。
 3. `python manage.py migrate`、`python manage.py collectstatic --noinput`。
 4. 複製 `deploy/systemd/*.service`、`deploy/systemd/*.timer` 到 `/etc/systemd/system/`,`deploy/nginx/*.conf*` 到 `/etc/nginx/`(依上方各節填好 TODO)。
@@ -152,7 +152,7 @@ INPUT chain 預設政策是 `DROP`,任何沒被前面規則放行的封包都會
 
 1. 部署前先確認 `docs/PROGRESS.md`/`CLAUDE.md` 是否有需要人工介入的 migration 或資料調整(例如新增必填欄位的資料回填)。
 2. `git fetch` + `git checkout <目標版本>`(或直接 pull,依實際 branch 策略而定)。
-3. `pip install -r requirements.txt`(套件版本可能變動)。
+3. `python -m pip install --upgrade "pip>=26.2"`，再執行 `python -m pip install -r requirements.txt`(套件版本可能變動)。`pip` 本身不在 `requirements.txt` 內，不能只更新應用程式套件；2026-09-08 的稽核曾發現 `pip 26.1.2` 受 `PYSEC-2026-3721` 影響，正式 VM 已升級至 26.2.1，且 `pip check` 正常；`pip-audit -r requirements.txt` 於 2026-11-03 曾回報 Pillow 12.3.0 與 pypdf 6.16.1 共 65 項已知漏洞,已升級為 Pillow 13.0.0、pypdf 6.21.4 後重跑為無已知漏洞(此結論隨時間會變,部署前請重跑)。
 4. `python manage.py migrate`——**先在有正式資料副本的 staging 環境跑過一次**,確認沒有預期外的鎖表時間或資料遺失,再對正式環境執行。
 5. `python manage.py collectstatic --noinput`。
 6. `systemctl restart mpts-gunicorn.service`(Gunicorn 沒有做到 zero-downtime reload,重啟期間會有短暫無法回應;若之後要做到不中斷,需要改用多台 Gunicorn 輪替或加上 `--reload`/graceful worker 替換機制,目前規模與流量尚不需要這個複雜度)。
