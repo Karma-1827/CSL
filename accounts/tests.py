@@ -4472,3 +4472,14 @@ class PairingReleaseHistoryPageTests(TestCase):
         content = response.content.decode()
         self.assertIn("請補充更多細節再提出申請。", content)
         self.assertNotIn("其他敏感細節", content)
+
+
+class PublicFooterContactTests(TestCase):
+    def test_login_and_register_pages_show_contact_email_between_copyright_and_english_name(self):
+        for name in ("accounts:login", "accounts:register"):
+            html = self.client.get(reverse(name)).content.decode()
+            copyright_at = html.index("© 2026 國立臺灣師範大學華語文教學系")
+            email_at = html.index("聯繫信箱：mpts.tcsl2026@gmail.com")
+            english_at = html.rindex("NTNU Department of Chinese as a Second Language")
+            self.assertLess(copyright_at, email_at)
+            self.assertLess(email_at, english_at)
