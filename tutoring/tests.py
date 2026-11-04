@@ -81,6 +81,7 @@ from .services import (
     respond_to_invitation,
     revoke_matching_exclusion,
     resolve_class_alert,
+    revert_class_alert_resolution,
     resolve_incident_report,
     review_class_session,
     set_class_review_discussion_flag,
@@ -3817,6 +3818,49 @@ class ClassWorkflowTests(TestCase):
             resolve_class_alert(alert_id=alert.pk, admin=self.tutee, note="")
         self.client.force_login(self.tutor)
         response = self.client.post(reverse("tutoring:resolve_alert", args=[alert.pk]), {"note": ""})
+        self.assertEqual(response.status_code, 404)
+
+    def test_admin_can_revert_resolved_class_alert(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        alert = report_class_alert(
+            session_id=session.pk, reporter=self.tutor, reason=ClassAlertReason.OTHER,
+            note="其他狀況", now=self.aware(class_date, time(10, 15)),
+        )
+        admin = User.objects.create_superuser(username="ALERT-REVERT-ADMIN", password="Admin-password-2026")
+        resolve_class_alert(alert_id=alert.pk, admin=admin, note="誤按")
+        self.client.force_login(admin)
+        response = self.client.post(reverse("tutoring:revert_alert", args=[alert.pk]))
+        self.assertEqual(response.status_code, 302)
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, ClassAlertStatus.ACTIVE)
+        self.assertIsNone(alert.resolved_by)
+        self.assertIsNone(alert.resolved_at)
+        self.assertEqual(alert.resolution_note, "")
+        self.assertTrue(AuditLog.objects.filter(event_type="CLASS_ALERT_RESOLUTION_REVERTED").exists())
+        # 未處於已紀錄狀態時不能撤回
+        with self.assertRaises(ValidationError):
+            revert_class_alert_resolution(alert_id=alert.pk, admin=admin)
+
+    def test_non_admin_cannot_revert_class_alert(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        alert = report_class_alert(
+            session_id=session.pk, reporter=self.tutor, reason=ClassAlertReason.OTHER,
+            note="其他狀況", now=self.aware(class_date, time(10, 15)),
+        )
+        admin = User.objects.create_superuser(username="ALERT-REVERT-ADMIN2", password="Admin-password-2026")
+        resolve_class_alert(alert_id=alert.pk, admin=admin, note="")
+        with self.assertRaises(ValidationError):
+            revert_class_alert_resolution(alert_id=alert.pk, admin=self.tutee)
+        self.client.force_login(self.tutor)
+        response = self.client.post(reverse("tutoring:revert_alert", args=[alert.pk]))
         self.assertEqual(response.status_code, 404)
 
     def test_incident_report_is_not_restricted_to_class_time_window(self):

@@ -53,6 +53,7 @@ from .services import (
     reschedule_class,
     report_class_alert,
     resolve_class_alert,
+    revert_class_alert_resolution,
     resolve_incident_report,
     review_pairing_release_request,
     revert_pairing_release_decision,
@@ -987,6 +988,26 @@ def resolve_alert(request, alert_id):
             metadata={"alert_id": alert.pk},
         )
         messages.success(request, "課堂通報已標記為已紀錄。 / Class alert marked as logged.")
+    return redirect(f"{reverse('accounts:dashboard')}#class-alerts")
+
+
+@login_required
+@require_POST
+def revert_alert(request, alert_id):
+    if request.user.role != Role.ADMIN:
+        raise Http404
+    try:
+        alert = revert_class_alert_resolution(alert_id=alert_id, admin=request.user)
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        AuditLog.record(
+            actor=request.user,
+            event_type="CLASS_ALERT_RESOLUTION_REVERTED",
+            description="課堂通報紀錄已撤回 / Class alert log reverted",
+            metadata={"alert_id": alert.pk},
+        )
+        messages.success(request, "已撤回，通報回到待處理。 / Reverted; the alert is active again.")
     return redirect(f"{reverse('accounts:dashboard')}#class-alerts")
 
 

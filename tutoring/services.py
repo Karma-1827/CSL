@@ -1680,6 +1680,29 @@ def resolve_class_alert(*, alert_id, admin, note=""):
 
 
 @transaction.atomic
+def revert_class_alert_resolution(*, alert_id, admin):
+    """撤回「已紀錄」:誤按時退回待處理(ACTIVE),清空紀錄人/時間/備註。"""
+    if admin.role != Role.ADMIN:
+        raise ValidationError("只有管理員可以撤回課堂通報紀錄。 / Only administrators may revert class alert logs.")
+    alert = ClassAlert.objects.select_for_update().get(pk=alert_id)
+    if alert.status != ClassAlertStatus.RESOLVED:
+        raise ValidationError("此課堂通報不是已紀錄狀態，無法撤回。 / This class alert is not logged, so it cannot be reverted.")
+    # 部分唯一約束:同一通報者對同一堂課只能有一筆 ACTIVE
+    if ClassAlert.objects.filter(
+        session_id=alert.session_id, reporter_id=alert.reporter_id, status=ClassAlertStatus.ACTIVE
+    ).exists():
+        raise ValidationError(
+            "通報者對這堂課已有另一筆待處理通報，無法撤回。 / The reporter already has another active alert for this class."
+        )
+    alert.status = ClassAlertStatus.ACTIVE
+    alert.resolved_by = None
+    alert.resolved_at = None
+    alert.resolution_note = ""
+    alert.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_note"])
+    return alert
+
+
+@transaction.atomic
 def submit_incident_report(*, reporter, category, content, attachment=None):
     # 2026-09-11(使用者要求):不接受任何課程/對象——跟當堂課有關的問題已有 ClassAlert
     # (課堂通報)可用,異常回報保留給其餘所有情境,完全自由填寫分類與內容。

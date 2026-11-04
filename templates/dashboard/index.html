@@ -307,8 +307,8 @@
           <div class="panel-heading"><div><span class="eyebrow">HISTORY</span><h2>紀錄 <small>Logged alerts</small></h2></div></div>
           {% if class_alert_history %}
             <div class="table-wrap"><table>
-              <thead><tr><th>課程 / Class</th><th>通報者 / Reporter</th><th>原因 / Reason</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th></tr></thead>
-              <tbody>{% for alert in class_alert_history %}<tr><td>{{ alert.session.class_date|date:"Y-m-d" }}</td><td>{{ alert.reporter.bilingual_name }}</td><td>{{ alert.get_reason_display }}</td><td>{{ alert.resolution_note }}</td><td>{{ alert.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ alert.resolved_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+              <thead><tr><th>課程 / Class</th><th>通報者 / Reporter</th><th>原因 / Reason</th><th>紀錄備註 / Note</th><th>紀錄人 / Logged by</th><th class="col-nowrap">紀錄時間 / Logged at</th><th class="col-nowrap">操作 / Action</th></tr></thead>
+              <tbody>{% for alert in class_alert_history %}<tr><td>{{ alert.session.class_date|date:"Y-m-d" }}</td><td>{{ alert.reporter.bilingual_name }}</td><td>{{ alert.get_reason_display }}</td><td>{{ alert.resolution_note }}</td><td>{{ alert.resolved_by.bilingual_name }}</td><td class="col-nowrap">{{ alert.resolved_at|date:"Y-m-d H:i" }}</td><td class="col-nowrap"><form method="post" action="{% url 'tutoring:revert_alert' alert.pk %}" data-confirm="確定要撤回這筆已紀錄的通報嗎？ / Revert this logged alert?">{% csrf_token %}<button class="button button-secondary button-small" type="submit">撤回 / Revert</button></form></td></tr>{% endfor %}</tbody>
             </table></div>
           {% else %}<div class="empty-state">目前沒有已紀錄的通報。 / No logged alerts yet.</div>{% endif %}
         </section>
