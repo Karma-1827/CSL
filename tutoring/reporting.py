@@ -692,10 +692,16 @@ def _export_schema(fields=None):
     return [(key, header, width) for key, header, width in EXPORT_COLUMNS if key in selected]
 
 
+# 這些欄位的值會因每一堂課而不同;一個都沒勾時,匯出改成「一人(每學期)一列」。
+EXPORT_SESSION_FIELD_KEYS = frozenset({"date", "time", "hours", "counterpart_id", "counterpart", "status"})
+
+
 def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=None, roster_entries=()):
     selected_fields = normalize_export_fields(fields)
+    compact = not (set(selected_fields) & EXPORT_SESSION_FIELD_KEYS)
     rows = []
     for user in users:
+        seen_rows = set()
         participant = Q(pairing__tutor=user) if user.role == Role.TUTOR else Q(pairing__tutee=user)
         sessions = ClassSession.objects.filter(participant).select_related(
             "pairing__semester", "pairing__tutor", "pairing__tutee",
@@ -723,7 +729,12 @@ def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=No
                 "counterpart": counterpart.bilingual_name,
                 "status": "有效 / Verified" if class_is_valid(session) else "未成立 / Incomplete",
             }
-            rows.append([values[key] for key in selected_fields])
+            row = [values[key] for key in selected_fields]
+            if compact:
+                if tuple(row) in seen_rows:
+                    continue
+                seen_rows.add(tuple(row))
+            rows.append(row)
         if not sessions.exists():
             values = {key: "" for key in EXPORT_FIELD_KEYS}
             values.update({

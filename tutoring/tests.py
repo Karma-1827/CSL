@@ -4528,6 +4528,31 @@ class V2FeatureTests(TestCase):
         specific = export("unregistered", audience="specific", roster_entry_ids=[entry.pk])
         self.assertEqual([row[0] for row in specific[1:]], ["EXPORT-UNREG-TUTOR"])
 
+    def test_admin_export_collapses_to_one_row_per_person_without_session_fields(self):
+        """沒勾任何課程欄位(日期/時間/時數/對方學號/輔導對象/狀態)時,同一人同一學期只出一列;
+        有勾課程欄位則維持一堂課一列。"""
+        for offset in range(3):
+            ClassSession.objects.create(
+                pairing=self.pairing, class_date=timezone.localdate() - timedelta(days=offset),
+                start_time=time(11, 0), duration=1, created_by=self.tutor,
+            )
+        admin = User.objects.create_superuser(username="EXPORT-COMPACT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+
+        def export(fields):
+            response = self.client.post(reverse("tutoring:export_excel"), {
+                "program_id": self.ntnu_program.pk, "audience": "specific", "user_ids": [self.tutor.pk],
+                "period_mode": "semester", "semester_id": self.semester.pk,
+                "field_selection_present": "1", "export_fields": fields, "file_format": "xlsx",
+            })
+            return list(openpyxl.load_workbook(BytesIO(response.content)).active.iter_rows(values_only=True))[1:]
+
+        compact = export(["student_id", "name_zh", "email", "role", "semester"])
+        self.assertEqual(len(compact), 1)
+        self.assertEqual(compact[0][0], self.tutor.username)
+        self.assertEqual(len(export(["student_id", "semester", "hours"])), 3)
+        self.assertEqual(len(export(["student_id", "date"])), 3)
+
     def test_admin_export_requires_at_least_one_selected_field(self):
         admin = User.objects.create_superuser(username="EXPORT-NO-FIELDS-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
