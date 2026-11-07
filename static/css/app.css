@@ -293,6 +293,11 @@ a {
   font-size: 0.92rem;
   line-height: 1.8;
 }
+.manual-warning {
+  color: var(--danger);
+  font-weight: 800;
+}
+
 .oral-exam-highlight {
   color: var(--danger);
   font-weight: 800;
