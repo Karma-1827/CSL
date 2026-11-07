@@ -324,8 +324,8 @@
             <p>若涉及人身安全或緊急事件，請先使用校方或緊急聯絡方式處理，不要等待系統回覆。</p>
             <p>For personal safety or emergencies, use official or emergency contact channels first — don't wait on a system response.</p>
             <h3>9.4 填寫老師課堂紀錄 <small>Writing your class record (teacher)</small></h3>
-            <p>課程開始後即可填寫。依畫面完成上課地點、教學目標、教學範圍與完整流程、教材、個別學習情形及心得等欄位。畫面會顯示字數計數，請勿超過欄位上限。</p>
-            <p>You can fill this in once class has started. Complete the location, teaching goal, scope and process, materials used, individual progress, and reflections fields as shown. The screen displays a live character count — stay within each field's limit.</p>
+            <p>課程結束後才可填寫（課程結束前不會顯示填寫表單）。依畫面完成上課地點、教學目標、教學範圍與完整流程、教材、個別學習情形及心得等欄位。畫面會顯示字數計數，請勿超過欄位上限。</p>
+            <p>You can fill this in only after class has ended (the form is hidden until then). Complete the location, teaching goal, scope and process, materials used, individual progress, and reflections fields as shown. The screen displays a live character count — stay within each field's limit.</p>
             <p>老師每堂課必須提供 1–5 個 <code>https://</code> 佐證連結，必須包含實際授課照片與詳細教材等，作業或錄影為選填：</p>
             <p>Teachers must provide 1–5 <code>https://</code> evidence links per class, including photos of the actual teaching session and detailed materials; assignments or recordings are optional:</p>
             <ul>
@@ -334,8 +334,13 @@
               <li>作業或學習紀錄（選填）<br>Assignments or learning records (optional)</li>
               <li>上課錄影（選填）<br>Class recordings (optional)</li>
             </ul>
-            <p>請確認連結已開啟共用檢視權限，讓學生與管理員可以直接查看。佐證資料應保留至本次實習或輔導階段結束後至少 10 天；查核時無法開啟，該堂時數可能不予採計。</p>
-            <p>Make sure sharing permissions let your student and administrators view the links directly. Keep the evidence available for at least 10 days after this practicum or tutoring stage ends; if a link can't be opened during an audit, that class's hours may not be counted.</p>
+            <p>佐證連結注意事項：</p>
+            <p>Notes on evidence links:</p>
+            <ol>
+              <li>請開啟連結的共用檢視權限，確保學生與管理員可直接查看。查核時若無法開啟，該堂課程時數可能不予採計。<br>Turn on sharing permissions so your student and administrators can view the links directly. If a link can't be opened during an audit, that class's hours may not be counted.</li>
+              <li>連結應僅包含該次課堂的佐證資料，請勿提供全學期資料。若無法辨識資料是否屬於該次課堂，該堂課程時數可能不予採計。<br>Each link should contain evidence for that class only, not the whole semester's materials. If the evidence can't be identified as belonging to that class, its hours may not be counted.</li>
+              <li>佐證資料及連結存取權限，應保留至本學期實習或輔導階段結束後至少 10 天。<br>Keep the evidence and link access available for at least 10 days after this semester's practicum or tutoring stage ends.</li>
+            </ol>
             <img src="{% static 'img/handbook/teacher/class-record.png' %}" alt="老師課堂紀錄頁 / Teacher class record page">
             <h3>9.5 確認學生資料 <small>Confirming your student's record</small></h3>
             <p>學生完成簽到與課堂紀錄後，老師可查看並選擇：</p>
@@ -345,8 +350,8 @@
               <li>需要修改：填寫原因，請學生修正。<br>Needs revision: enter a reason and ask the student to fix it.</li>
               <li>回報問題：填寫問題內容，交由管理員查看。<br>Report an issue: describe the problem for an administrator to review.</li>
             </ul>
-            <p>學生修改紀錄後，原確認會失效，老師需要重新檢查及確認。</p>
-            <p>If the student edits their record afterward, any existing confirmation is cleared, and the teacher must review and confirm it again.</p>
+            <p>雙方只需在對方「第一次」提交紀錄時確認；之後若對方更新紀錄，不需要重新確認，直接由管理員依最新內容審核。</p>
+            <p>Confirmation is only needed when the other side first submits their record. If they update it afterward, no re-confirmation is needed; an administrator reviews the latest version directly.</p>
             <h3>9.6 有效時數成立條件 <small>Conditions for verified hours</small></h3>
             <p>一堂課必須同時符合下列條件，才會列入有效時數：</p>
             <p>A class only counts as verified hours once all of the following are true:</p>
@@ -354,10 +359,12 @@
               <li>老師與學生都完成簽到。<br>Both the teacher and student have checked in.</li>
               <li>老師與學生都提交課堂紀錄。<br>Both have submitted a class record.</li>
               <li>雙方都確認對方的簽到與紀錄。<br>Each side has confirmed the other's check-in and record.</li>
-              <li>若有補簽到或補課堂紀錄，該筆補登已通過管理員審核。<br>If there's a late check-in or late record, an administrator has approved it.</li>
+              <li>管理員審核結果為「通過」（每堂課都需審核，補簽到或補課堂紀錄也一樣）。<br>An administrator has marked the class "approved" (every class is reviewed, including those with late check-ins or late records).</li>
             </ol>
-            <p>只完成單方資料、仍待對方確認或補登未通過，都不會列入有效時數。</p>
-            <p>A class with only one side's data, still awaiting confirmation, or with an unapproved late entry, is not counted as verified hours.</p>
+            <p>只完成單方資料、仍待對方確認、審核中、待補正或未通過，都不會列入有效時數。</p>
+            <p>A class with only one side's data, still awaiting confirmation, under review, needing revision, or not approved is not counted as verified hours.</p>
+            <p>課堂紀錄經管理員審核通過後即鎖定，無法再修改或變更確認結果。</p>
+            <p>Once an administrator approves a class, its record is locked and can no longer be edited or its confirmation changed.</p>
           </section>
 
           <section class="profile-card manual-section" id="t10">
@@ -707,14 +714,14 @@
             <p>若涉及人身安全或緊急事件，請先使用校方或緊急聯絡方式處理，不要等待系統回覆。</p>
             <p>For personal safety or emergencies, use official or emergency contact channels first — don't wait on a system response.</p>
             <h3>8.4 填寫學生課堂紀錄 <small>Writing your class record (student)</small></h3>
-            <p>課程開始後即可填寫。依畫面完成上課地點、學習內容、教材、個別學習情形及心得等欄位。畫面會顯示字數計數，請勿超過欄位上限。</p>
-            <p>You can fill this in once class has started. Complete the location, what was learned, materials used, individual progress, and reflections fields as shown. The screen displays a live character count — stay within each field's limit.</p>
+            <p>課程結束後才可填寫（課程結束前不會顯示填寫表單）。依畫面完成上課地點、學習內容、教材、個別學習情形及心得等欄位。畫面會顯示字數計數，請勿超過欄位上限。</p>
+            <p>You can fill this in only after class has ended (the form is hidden until then). Complete the location, what was learned, materials used, individual progress, and reflections fields as shown. The screen displays a live character count — stay within each field's limit.</p>
             <p>學生可選擇提供 0–5 個 <code>https://</code> 佐證連結，必須上傳實際授課照片、詳細教材等，作業或錄影可選填。若提供連結：</p>
             <p>Students may optionally provide 0–5 <code>https://</code> evidence links — photos of the actual teaching session and detailed materials are required, while assignments or recordings are optional. If you provide any:</p>
             <ol>
-              <li>開啟共用檢視權限，讓老師與管理員可以直接查看。<br>Turn on sharing permissions so your teacher and administrators can view them directly.</li>
-              <li>不要分享密碼或設定需要另外申請權限的連結。<br>Don't share links that require a password or a separate access request.</li>
-              <li>保留至本次實習或輔導階段結束後至少 10 天。<br>Keep them available for at least 10 days after this practicum or tutoring stage ends.</li>
+              <li>請開啟連結的共用檢視權限，確保老師與管理員可直接查看。查核時若無法開啟，該堂課程時數可能不予採計。<br>Turn on sharing permissions so your teacher and administrators can view the links directly. If a link can't be opened during an audit, that class's hours may not be counted.</li>
+              <li>連結應僅包含該次課堂的佐證資料，請勿提供全學期資料。若無法辨識資料是否屬於該次課堂，該堂課程時數可能不予採計。<br>Each link should contain evidence for that class only, not the whole semester's materials. If the evidence can't be identified as belonging to that class, its hours may not be counted.</li>
+              <li>佐證資料及連結存取權限，應保留至本學期實習或輔導階段結束後至少 10 天。<br>Keep the evidence and link access available for at least 10 days after this semester's practicum or tutoring stage ends.</li>
             </ol>
             <img src="{% static 'img/handbook/student/class-record.png' %}" alt="學生課堂紀錄頁 / Student class record page">
             <h3>8.5 確認老師資料 <small>Confirming your teacher's record</small></h3>
@@ -725,8 +732,8 @@
               <li>需要修改：填寫原因，請老師修正。<br>Needs revision: enter a reason and ask the teacher to fix it.</li>
               <li>回報問題：填寫問題內容，交由管理員查看。<br>Report an issue: describe the problem for an administrator to review.</li>
             </ul>
-            <p>老師修改紀錄後，原確認會失效，學生需要重新檢查及確認。</p>
-            <p>If the teacher edits their record afterward, any existing confirmation is cleared, and the student must review and confirm it again.</p>
+            <p>雙方只需在對方「第一次」提交紀錄時確認；之後若對方更新紀錄，不需要重新確認，直接由管理員依最新內容審核。</p>
+            <p>Confirmation is only needed when the other side first submits their record. If they update it afterward, no re-confirmation is needed; an administrator reviews the latest version directly.</p>
             <h3>8.6 有效時數成立條件 <small>Conditions for verified hours</small></h3>
             <p>一堂課必須同時符合下列條件，才會列入有效紀錄與時數：</p>
             <p>A class only counts as a verified record and hours once all of the following are true:</p>
@@ -734,10 +741,12 @@
               <li>老師與學生都完成簽到。<br>Both the teacher and student have checked in.</li>
               <li>老師與學生都提交課堂紀錄。<br>Both have submitted a class record.</li>
               <li>雙方都確認對方的簽到與紀錄。<br>Each side has confirmed the other's check-in and record.</li>
-              <li>若有補簽到或補課堂紀錄，該筆補登已通過管理員審核。<br>If there's a late check-in or late record, an administrator has approved it.</li>
+              <li>管理員審核結果為「通過」（每堂課都需審核，補簽到或補課堂紀錄也一樣）。<br>An administrator has marked the class "approved" (every class is reviewed, including those with late check-ins or late records).</li>
             </ol>
-            <p>只完成單方資料、仍待對方確認或補登未通過，都不會列入有效紀錄與時數。</p>
-            <p>A class with only one side's data, still awaiting confirmation, or with an unapproved late entry, is not counted as a verified record or hours.</p>
+            <p>只完成單方資料、仍待對方確認、審核中、待補正或未通過，都不會列入有效紀錄與時數。</p>
+            <p>A class with only one side's data, still awaiting confirmation, under review, needing revision, or not approved is not counted as a verified record or hours.</p>
+            <p>課堂紀錄經管理員審核通過後即鎖定，無法再修改或變更確認結果。</p>
+            <p>Once an administrator approves a class, its record is locked and can no longer be edited or its confirmation changed.</p>
           </section>
 
           <section class="profile-card manual-section" id="s9">
