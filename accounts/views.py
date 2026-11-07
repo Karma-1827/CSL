@@ -562,7 +562,12 @@ def dashboard(request):
         if roster_role in {Role.TUTOR, Role.TUTEE}:
             roster_rows = roster_rows.filter(role=roster_role)
         if roster_program:
-            roster_rows = roster_rows.filter(program_id=roster_program)
+            # 一般 Tutor 的 `RosterEntry.program` 留空,慣例上代表 NTNU(見 tutor_can_serve_program()),
+            # 所以選到 NTNU 時要把「計畫留空的老師」一併納入,否則「老師＋師大外籍生」永遠是 0 筆。
+            program_filter = Q(program_id=roster_program)
+            if PartnerProgram.objects.filter(pk=roster_program, code="NTNU").exists():
+                program_filter |= Q(role=Role.TUTOR, program__isnull=True)
+            roster_rows = roster_rows.filter(program_filter)
         if roster_claimed == "yes":
             roster_rows = roster_rows.filter(claimed_at__isnull=False)
         elif roster_claimed == "no":

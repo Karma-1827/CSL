@@ -1700,6 +1700,47 @@ class AdminDashboardNavigationTests(TestCase):
         self.assertContains(by_claimed, "ROSTER-BROWSE-TUTEE")
         self.assertNotContains(by_claimed, "ROSTER-BROWSE-TUTOR")
 
+    def test_roster_program_filter_ntnu_includes_tutors_with_blank_program(self):
+        """一般師大老師的名冊計畫欄留空(隱含 NTNU),但馬里蘭老師有明確計畫。選「師大外籍生」
+        時應列出前者、不列出後者。"""
+        admin = User.objects.create_user(
+            username="TA-ADMIN-PF", password="Admin-password-2026", role=Role.ADMIN,
+        )
+        ntnu = PartnerProgram.objects.get(code="NTNU")
+        maryland = PartnerProgram.objects.get(code="MARYLAND")
+        RosterEntry.objects.create(
+            student_id="PF-BLANK-TUTOR", name_zh="空白計畫老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        RosterEntry.objects.create(
+            student_id="PF-MD-TUTOR", name_zh="馬里蘭老師", role=Role.TUTOR,
+            education_level=EducationLevel.BACHELOR, identity_category=IdentityCategory.LOCAL,
+            program=maryland,
+        )
+        RosterEntry.objects.create(
+            student_id="PF-MD-TUTEE", name_zh="馬里蘭學生", role=Role.TUTEE,
+            education_level=EducationLevel.NOT_APPLICABLE, identity_category=IdentityCategory.INTERNATIONAL,
+            program=maryland,
+        )
+        self.client.force_login(admin)
+
+        response = self.client.get(
+            reverse("accounts:dashboard"), {"roster_role": "TUTOR", "roster_program": ntnu.pk}
+        )
+        self.assertContains(response, "PF-BLANK-TUTOR")
+        self.assertNotContains(response, "PF-MD-TUTOR")
+
+        md_response = self.client.get(
+            reverse("accounts:dashboard"), {"roster_role": "TUTOR", "roster_program": maryland.pk}
+        )
+        self.assertContains(md_response, "PF-MD-TUTOR")
+        self.assertNotContains(md_response, "PF-BLANK-TUTOR")
+
+        tutee_response = self.client.get(
+            reverse("accounts:dashboard"), {"roster_role": "TUTEE", "roster_program": ntnu.pk}
+        )
+        self.assertNotContains(tutee_response, "PF-BLANK-TUTOR")
+
     def test_admin_matching_panel_search_and_pagination_surface_older_pairings(self):
         """2026-09-16(使用者發現真實案例:「阮瓊桂倪的配對不見了？」):「近期配對」原本
         寫死只取最新 8 筆、無搜尋無分頁,配對數量一多,較早建立但仍在輔導中的配對就會從
