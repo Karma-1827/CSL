@@ -6013,6 +6013,8 @@ td small {
   margin: 3px 0 0;
   color: #526d82;
 }
+.export-registration-choice-row { margin-top: 14px; }
+
 .export-choice-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, User
+from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, RosterEntry, User
 
 from .richtext import MAX_RICH_NOTE_LENGTH, sanitize_rich_text
 from .models import (
@@ -181,6 +181,25 @@ def export_users_for_program(program, role=None):
     return users.filter(
         Q(pk__in=tutor_ids) | Q(role=Role.TUTEE, roster_entry__program=program)
     ).distinct()
+
+
+def export_unregistered_roster_for_program(program, role=None):
+    """Roster entries in `program` whose owner hasn't registered yet (no User exists).
+
+    Tutees belong to a program via their roster entry. Ordinary tutors leave the roster
+    program blank, which by convention means NTNU (see tutor_can_serve_program()), so they
+    are included when `program` is NTNU; program-specific tutors match only their own program.
+    """
+    entries = RosterEntry.objects.filter(claimed_at__isnull=True).exclude(role=Role.ADMIN)
+    tutee_q = Q(role=Role.TUTEE, program=program)
+    tutor_q = Q(role=Role.TUTOR, program=program)
+    if program.code == "NTNU":
+        tutor_q |= Q(role=Role.TUTOR, program__isnull=True)
+    if role == Role.TUTEE:
+        return entries.filter(tutee_q).order_by("student_id")
+    if role == Role.TUTOR:
+        return entries.filter(tutor_q).order_by("student_id")
+    return entries.filter(tutee_q | tutor_q).order_by("student_id")
 
 
 def visible_class_document_programs(user):

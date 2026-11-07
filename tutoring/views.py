@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from accounts.models import AuditLog, PartnerProgram, Role
+from accounts.models import AuditLog, PartnerProgram, Role, RosterEntry, User
 
 from .forms import (
     AdminMatchingExclusionForm, AdminPairingForm, ClassAlertForm, ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm,
@@ -47,6 +47,7 @@ from .services import (
     create_admin_pairing,
     create_matching_exclusion,
     delete_class_review_decision,
+    export_unregistered_roster_for_program,
     export_users_for_program,
     respond_to_invitation,
     revoke_matching_exclusion,
@@ -289,14 +290,23 @@ def export_excel(request):
         return redirect(f"{reverse('accounts:dashboard')}#export")
 
     audience = request.POST.get("audience", "tutors")
-    if audience == "tutors":
-        users = export_users_for_program(program, Role.TUTOR)
-    elif audience == "tutees":
-        users = export_users_for_program(program, Role.TUTEE)
+    registration = request.POST.get("registration", "all")
+    if registration not in {"all", "registered", "unregistered"}:
+        registration = "all"
+    include_registered = registration in {"all", "registered"}
+    include_unregistered = registration in {"all", "unregistered"}
+    roster_entries = RosterEntry.objects.none()
+    if audience in {"tutors", "tutees"}:
+        audience_role = Role.TUTOR if audience == "tutors" else Role.TUTEE
+        users = export_users_for_program(program, audience_role)
+        if include_unregistered:
+            roster_entries = export_unregistered_roster_for_program(program, audience_role)
     elif audience == "specific":
-        user_ids = request.POST.getlist("user_ids")
+        user_ids = request.POST.getlist("user_ids") if include_registered else []
+        roster_entry_ids = request.POST.getlist("roster_entry_ids") if include_unregistered else []
         users = export_users_for_program(program).filter(pk__in=user_ids)
-        if not user_ids or not users.exists():
+        roster_entries = export_unregistered_roster_for_program(program).filter(pk__in=roster_entry_ids)
+        if not users.exists() and not roster_entries.exists():
             messages.error(
                 request,
                 "請至少選擇一位屬於此計畫的使用者。 / Select at least one user in this program.",
@@ -305,6 +315,8 @@ def export_excel(request):
     else:
         messages.error(request, "請選擇匯出對象。 / Select an export audience.")
         return redirect(f"{reverse('accounts:dashboard')}#export")
+    if not include_registered:
+        users = User.objects.none()
     period_mode = request.POST.get("period_mode", "semester")
     starts_on = ends_on = None
     semester = None
@@ -339,18 +351,21 @@ def export_excel(request):
     file_format = request.POST.get("file_format", "xlsx")
     if file_format == "csv":
         content = build_export_csv(
-            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program
+            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program,
+            roster_entries=roster_entries,
         )
         content_type = "text/csv"
     elif file_format == "pdf":
         content = build_export_pdf(
-            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program
+            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program,
+            roster_entries=roster_entries,
         )
         content_type = "application/pdf"
     else:
         file_format = "xlsx"
         content = build_excel_xlsx(
-            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program
+            users, starts_on=starts_on, ends_on=ends_on, fields=export_fields, program=program,
+            roster_entries=roster_entries,
         )
         content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     response = HttpResponse(content, content_type=content_type)
@@ -359,7 +374,8 @@ def export_excel(request):
         actor=request.user, event_type="ADMIN_EXCEL_EXPORTED",
         description="匯出輔導資料 / Tutoring data exported", metadata={
             "program_id": program.pk, "program_code": program.code,
-            "audience": audience, "users": users.count(), "period_mode": period_mode,
+            "audience": audience, "registration": registration, "users": users.count(),
+            "unregistered_roster_entries": roster_entries.count(), "period_mode": period_mode,
             "semester_id": semester.pk if semester else None,
             "starts_on": str(starts_on), "ends_on": str(ends_on), "file_format": file_format,
             "fields": export_fields,

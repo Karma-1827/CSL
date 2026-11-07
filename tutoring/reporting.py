@@ -642,6 +642,7 @@ EXPORT_COLUMNS = (
     ("student_id", "學號 Student ID", 13),
     ("name_zh", "中文姓名", 13),
     ("name_en", "英文姓名", 16),
+    ("email", "Email", 28),
     ("role", "身分 Role", 14),
     ("semester", "學期 Semester", 14),
     ("date", "日期 Date", 12),
@@ -691,7 +692,7 @@ def _export_schema(fields=None):
     return [(key, header, width) for key, header, width in EXPORT_COLUMNS if key in selected]
 
 
-def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=None):
+def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=None, roster_entries=()):
     selected_fields = normalize_export_fields(fields)
     rows = []
     for user in users:
@@ -712,6 +713,7 @@ def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=No
                 "student_id": user.username,
                 "name_zh": user.name_zh,
                 "name_en": user.name_en,
+                "email": user.email,
                 "role": user.get_role_display(),
                 "semester": session.pairing.semester.name_zh,
                 "date": str(session.class_date),
@@ -728,14 +730,26 @@ def _export_rows(users, *, starts_on=None, ends_on=None, fields=None, program=No
                 "student_id": user.username,
                 "name_zh": user.name_zh,
                 "name_en": user.name_en,
+                "email": user.email,
                 "role": user.get_role_display(),
                 "status": "尚無課程 / No classes",
             })
             rows.append([values[key] for key in selected_fields])
+    # 尚未註冊的名冊人員沒有帳號,也沒有 Email 與課程,只能列出名冊上已知的資料。
+    for entry in roster_entries:
+        values = {key: "" for key in EXPORT_FIELD_KEYS}
+        values.update({
+            "student_id": entry.student_id,
+            "name_zh": entry.name_zh,
+            "name_en": entry.name_en,
+            "role": entry.get_role_display(),
+            "status": "尚未註冊 / Not registered",
+        })
+        rows.append([values[key] for key in selected_fields])
     return rows
 
 
-def build_excel_xlsx(users, *, starts_on=None, ends_on=None, fields=None, program=None):
+def build_excel_xlsx(users, *, starts_on=None, ends_on=None, fields=None, program=None, roster_entries=()):
     """Create a real .xlsx workbook (openpyxl) with the same columns as build_excel_xml()."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -746,6 +760,7 @@ def build_excel_xlsx(users, *, starts_on=None, ends_on=None, fields=None, progra
     rows = _export_rows(
         users, starts_on=starts_on, ends_on=ends_on,
         fields=[key for key, _header, _width in schema], program=program,
+        roster_entries=roster_entries,
     )
     workbook = Workbook()
     worksheet = workbook.active
@@ -771,7 +786,7 @@ def build_excel_xlsx(users, *, starts_on=None, ends_on=None, fields=None, progra
     return buffer.getvalue()
 
 
-def build_export_csv(users, *, starts_on=None, ends_on=None, fields=None, program=None):
+def build_export_csv(users, *, starts_on=None, ends_on=None, fields=None, program=None, roster_entries=()):
     """Create a CSV export with the same columns as build_excel_xlsx().
 
     Written with a UTF-8 BOM so Excel on Windows opens the Chinese headers/content correctly.
@@ -784,6 +799,7 @@ def build_export_csv(users, *, starts_on=None, ends_on=None, fields=None, progra
     rows = _export_rows(
         users, starts_on=starts_on, ends_on=ends_on,
         fields=[key for key, _header, _width in schema], program=program,
+        roster_entries=roster_entries,
     )
     buffer = StringIO()
     writer = csv_module.writer(buffer)
@@ -792,7 +808,7 @@ def build_export_csv(users, *, starts_on=None, ends_on=None, fields=None, progra
     return codecs.BOM_UTF8 + buffer.getvalue().encode("utf-8")
 
 
-def build_export_pdf(users, *, starts_on=None, ends_on=None, fields=None, program=None):
+def build_export_pdf(users, *, starts_on=None, ends_on=None, fields=None, program=None, roster_entries=()):
     """Administrative report with the same columns as build_excel_xlsx()/build_export_csv().
 
     This is a plain data table for internal review, not a personal certificate — it reuses the
@@ -813,6 +829,7 @@ def build_export_pdf(users, *, starts_on=None, ends_on=None, fields=None, progra
     rows = _export_rows(
         users, starts_on=starts_on, ends_on=ends_on,
         fields=[key for key, _header, _width in schema], program=program,
+        roster_entries=roster_entries,
     )
     header_style = ParagraphStyle("ExportHeader", fontName=font_name, fontSize=8.5, leading=11, textColor=colors.white)
     cell_style = ParagraphStyle("ExportCell", fontName=font_name, fontSize=8, leading=10)

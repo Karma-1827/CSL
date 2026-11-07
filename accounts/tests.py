@@ -1683,22 +1683,27 @@ class AdminDashboardNavigationTests(TestCase):
         )
         self.client.force_login(non_superuser_admin)
 
-        response = self.client.get(reverse("accounts:dashboard"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "ROSTER-BROWSE-TUTOR")
-        self.assertContains(response, "ROSTER-BROWSE-TUTEE")
+        def roster_ids(params=None):
+            # 匯出頁籤的名單挑選器也會列出未註冊名冊,所以改檢查名冊頁籤的查詢結果本身。
+            response = self.client.get(reverse("accounts:dashboard"), params or {})
+            self.assertEqual(response.status_code, 200)
+            return {entry.student_id for entry in response.context["roster_page"]}
 
-        by_role = self.client.get(reverse("accounts:dashboard"), {"roster_role": "TUTOR"})
-        self.assertContains(by_role, "ROSTER-BROWSE-TUTOR")
-        self.assertNotContains(by_role, "ROSTER-BROWSE-TUTEE")
+        ids = roster_ids()
+        self.assertIn("ROSTER-BROWSE-TUTOR", ids)
+        self.assertIn("ROSTER-BROWSE-TUTEE", ids)
 
-        by_search = self.client.get(reverse("accounts:dashboard"), {"roster_q": "瀏覽測試學生"})
-        self.assertContains(by_search, "ROSTER-BROWSE-TUTEE")
-        self.assertNotContains(by_search, "ROSTER-BROWSE-TUTOR")
+        by_role = roster_ids({"roster_role": "TUTOR"})
+        self.assertIn("ROSTER-BROWSE-TUTOR", by_role)
+        self.assertNotIn("ROSTER-BROWSE-TUTEE", by_role)
 
-        by_claimed = self.client.get(reverse("accounts:dashboard"), {"roster_claimed": "no"})
-        self.assertContains(by_claimed, "ROSTER-BROWSE-TUTEE")
-        self.assertNotContains(by_claimed, "ROSTER-BROWSE-TUTOR")
+        by_search = roster_ids({"roster_q": "瀏覽測試學生"})
+        self.assertIn("ROSTER-BROWSE-TUTEE", by_search)
+        self.assertNotIn("ROSTER-BROWSE-TUTOR", by_search)
+
+        by_claimed = roster_ids({"roster_claimed": "no"})
+        self.assertIn("ROSTER-BROWSE-TUTEE", by_claimed)
+        self.assertNotIn("ROSTER-BROWSE-TUTOR", by_claimed)
 
     def test_roster_program_filter_ntnu_includes_tutors_with_blank_program(self):
         """一般師大老師的名冊計畫欄留空(隱含 NTNU),但馬里蘭老師有明確計畫。選「師大外籍生」
@@ -1724,22 +1729,20 @@ class AdminDashboardNavigationTests(TestCase):
         )
         self.client.force_login(admin)
 
-        response = self.client.get(
-            reverse("accounts:dashboard"), {"roster_role": "TUTOR", "roster_program": ntnu.pk}
-        )
-        self.assertContains(response, "PF-BLANK-TUTOR")
-        self.assertNotContains(response, "PF-MD-TUTOR")
+        def roster_ids(params):
+            response = self.client.get(reverse("accounts:dashboard"), params)
+            return {entry.student_id for entry in response.context["roster_page"]}
 
-        md_response = self.client.get(
-            reverse("accounts:dashboard"), {"roster_role": "TUTOR", "roster_program": maryland.pk}
-        )
-        self.assertContains(md_response, "PF-MD-TUTOR")
-        self.assertNotContains(md_response, "PF-BLANK-TUTOR")
+        ntnu_ids = roster_ids({"roster_role": "TUTOR", "roster_program": ntnu.pk})
+        self.assertIn("PF-BLANK-TUTOR", ntnu_ids)
+        self.assertNotIn("PF-MD-TUTOR", ntnu_ids)
 
-        tutee_response = self.client.get(
-            reverse("accounts:dashboard"), {"roster_role": "TUTEE", "roster_program": ntnu.pk}
-        )
-        self.assertNotContains(tutee_response, "PF-BLANK-TUTOR")
+        md_ids = roster_ids({"roster_role": "TUTOR", "roster_program": maryland.pk})
+        self.assertIn("PF-MD-TUTOR", md_ids)
+        self.assertNotIn("PF-BLANK-TUTOR", md_ids)
+
+        tutee_ids = roster_ids({"roster_role": "TUTEE", "roster_program": ntnu.pk})
+        self.assertNotIn("PF-BLANK-TUTOR", tutee_ids)
 
     def test_admin_matching_panel_search_and_pagination_surface_older_pairings(self):
         """2026-09-16(使用者發現真實案例:「阮瓊桂倪的配對不見了？」):「近期配對」原本

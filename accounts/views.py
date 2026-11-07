@@ -72,6 +72,7 @@ from tutoring.services import (
     tutor_has_approved_qualification,
     class_is_valid,
     active_semester,
+    export_unregistered_roster_for_program,
     export_users_for_program,
     user_program,
     visible_class_document_programs,
@@ -537,6 +538,15 @@ def dashboard(request):
         for program in export_programs:
             for user_id in export_users_for_program(program).values_list("pk", flat=True):
                 export_program_ids_by_user.setdefault(user_id, []).append(str(program.pk))
+        export_roster_rows = []
+        export_program_ids_by_entry = {}
+        for program in export_programs:
+            for entry_id in export_unregistered_roster_for_program(program).values_list("pk", flat=True):
+                export_program_ids_by_entry.setdefault(entry_id, []).append(str(program.pk))
+        for entry in RosterEntry.objects.filter(pk__in=export_program_ids_by_entry).order_by("student_id"):
+            export_roster_rows.append(
+                {"entry": entry, "program_ids": " ".join(export_program_ids_by_entry[entry.pk])}
+            )
         for user in User.objects.exclude(role=Role.ADMIN).select_related(
             "roster_entry", "roster_entry__program"
         ).order_by("username"):
@@ -690,6 +700,7 @@ def dashboard(request):
                 "anomaly_class_sessions": incomplete_classes[:5],
                 "export_programs": export_programs,
                 "export_user_rows": export_user_rows,
+                "export_roster_rows": export_roster_rows,
                 "export_semesters": overview_semesters,
                 "roster_import_form": RosterImportForm(),
                 "quick_import_programs": PartnerProgram.objects.filter(is_active=True).order_by("name_zh"),

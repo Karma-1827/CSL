@@ -117,8 +117,9 @@
   <div class="view-heading"><span>DATA EXPORT</span><h2>資料匯出 <small>Data export</small></h2></div>
   <form class="data-export-form" action="{% url 'tutoring:export_excel' %}" method="post">{% csrf_token %}
     <section class="panel export-config-card export-program-card">
-      <div class="export-card-heading"><span>1</span><div><h2>選擇計畫 <small>Select program</small></h2><p>先選擇要匯出的合作計畫，後續名單與期間會自動更新。</p></div></div>
+      <div class="export-card-heading"><span>1</span><div><h2>選擇計畫 <small>Select program</small></h2><p>先選擇要匯出的合作計畫與註冊狀態，後續名單與期間會自動更新。未註冊者只匯出名冊上的資料（無 Email 與課程）。</p></div></div>
       <div class="export-program-select"><label>合作計畫 / Partner program<select name="program_id" required data-export-program>{% for program in export_programs %}<option value="{{ program.pk }}"{% if overview_semester.program_id == program.pk %} selected{% endif %}>{{ program.name_zh }} / {{ program.name_en }}{% if not program.is_active %}（已停用 / Inactive）{% endif %}</option>{% endfor %}</select></label></div>
+      <div class="export-choice-row export-registration-choice-row"><label><input type="radio" name="registration" value="all" checked> <span><strong>全部</strong><small>All</small></span></label><label><input type="radio" name="registration" value="registered"> <span><strong>已註冊</strong><small>Registered</small></span></label><label><input type="radio" name="registration" value="unregistered"> <span><strong>未註冊</strong><small>Not registered</small></span></label></div>
     </section>
     <section class="panel export-config-card export-audience-card">
       <div class="export-card-heading"><span>2</span><div><h2>選擇對象 <small>Select audience</small></h2><p>匯出計畫內的全部老師、全部學生，或自行勾選特定使用者。</p></div></div>
@@ -126,7 +127,7 @@
       <details class="export-user-picker" data-export-user-picker open>
         <summary><span><strong>使用者名單</strong><small>User list</small></span><em data-selected-user-count>0 位已選取 / selected</em></summary>
         <div class="export-user-tools"><label>搜尋 / Search<input type="search" placeholder="姓名或學號 / Name or student ID" data-export-user-search></label><div><button type="button" class="button button-secondary button-small" data-select-visible-users>選取顯示名單 / Select visible</button><button type="button" class="button button-ghost button-small" data-clear-export-users>清除 / Clear</button></div></div>
-        <div class="export-user-grid">{% for row in export_user_rows %}{% with user=row.user %}<label data-export-user-row data-program-ids="{{ row.program_ids }}" data-role="{{ user.role }}" data-search-text="{{ user.bilingual_name }} {{ user.username }} {{ user.get_role_display }}"><input type="checkbox" name="user_ids" value="{{ user.pk }}"><span><strong>{{ user.bilingual_name }}</strong><small>{{ user.username }} · {{ user.get_role_display }}</small></span></label>{% endwith %}{% endfor %}</div>
+        <div class="export-user-grid">{% for row in export_user_rows %}{% with user=row.user %}<label data-export-user-row data-registration="registered" data-program-ids="{{ row.program_ids }}" data-role="{{ user.role }}" data-search-text="{{ user.bilingual_name }} {{ user.username }} {{ user.get_role_display }}"><input type="checkbox" name="user_ids" value="{{ user.pk }}"><span><strong>{{ user.bilingual_name }}</strong><small>{{ user.username }} · {{ user.get_role_display }}</small></span></label>{% endwith %}{% endfor %}{% for row in export_roster_rows %}{% with entry=row.entry %}<label data-export-user-row data-registration="unregistered" data-program-ids="{{ row.program_ids }}" data-role="{{ entry.role }}" data-search-text="{{ entry.name_zh }} {{ entry.name_en }} {{ entry.student_id }} {{ entry.get_role_display }}"><input type="checkbox" name="roster_entry_ids" value="{{ entry.pk }}"><span><strong>{{ entry.name_zh|default:entry.student_id }}</strong><small>{{ entry.student_id }} · {{ entry.get_role_display }} · 未註冊 / Not registered</small></span></label>{% endwith %}{% endfor %}</div>
       </details>
     </section>
     <section class="panel export-config-card export-period-card">
@@ -138,11 +139,12 @@
     <section class="panel export-config-card export-fields-card">
       <div class="export-card-heading"><span>4</span><div><h2>選擇欄位 <small>Select fields</small></h2><p>勾選要顯示在匯出檔案中的使用者與課程資料。</p></div></div>
       <input type="hidden" name="field_selection_present" value="1">
-      <div class="export-field-toolbar"><strong data-selected-field-count>11 / 11 欄已選取</strong><div><button class="button button-secondary button-small" type="button" data-select-all-export-fields>全選 / Select all</button><button class="button button-ghost button-small" type="button" data-clear-export-fields>清除 / Clear</button></div></div>
+      <div class="export-field-toolbar"><strong data-selected-field-count>12 / 12 欄已選取</strong><div><button class="button button-secondary button-small" type="button" data-select-all-export-fields>全選 / Select all</button><button class="button button-ghost button-small" type="button" data-clear-export-fields>清除 / Clear</button></div></div>
       <div class="export-field-grid">
         <label><input type="checkbox" name="export_fields" value="student_id" checked><span><strong>學號</strong><small>Student ID</small></span></label>
         <label><input type="checkbox" name="export_fields" value="name_zh" checked><span><strong>中文姓名</strong><small>Chinese name</small></span></label>
         <label><input type="checkbox" name="export_fields" value="name_en" checked><span><strong>英文姓名</strong><small>English name</small></span></label>
+        <label><input type="checkbox" name="export_fields" value="email" checked><span><strong>Email</strong><small>Email</small></span></label>
         <label><input type="checkbox" name="export_fields" value="role" checked><span><strong>身分</strong><small>Role</small></span></label>
         <label><input type="checkbox" name="export_fields" value="semester" checked><span><strong>學期</strong><small>Semester</small></span></label>
         <label><input type="checkbox" name="export_fields" value="date" checked><span><strong>日期</strong><small>Date</small></span></label>

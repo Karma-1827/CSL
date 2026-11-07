@@ -118,6 +118,7 @@
     const userChecks = userRows.map((row) => row.querySelector('input[type="checkbox"]'));
     const selectedCount = exportForm.querySelector("[data-selected-user-count]");
     const audienceRadios = Array.from(exportForm.querySelectorAll('input[name="audience"]'));
+    const registrationRadios = Array.from(exportForm.querySelectorAll('input[name="registration"]'));
     const userSearch = exportForm.querySelector("[data-export-user-search]");
     const periodRadios = Array.from(exportForm.querySelectorAll('input[name="period_mode"]'));
     const periodPanels = Array.from(exportForm.querySelectorAll("[data-export-period-panel]"));
@@ -128,6 +129,11 @@
     const selectedFieldCount = exportForm.querySelector("[data-selected-field-count]");
 
     const currentAudience = () => audienceRadios.find((item) => item.checked)?.value || "tutors";
+    const currentRegistration = () => registrationRadios.find((item) => item.checked)?.value || "all";
+    const matchesRegistration = (row) => {
+      const registration = currentRegistration();
+      return registration === "all" || row.dataset.registration === registration;
+    };
     const isInSelectedProgram = (row) => {
       const programId = programSelect?.value || "";
       return (row.dataset.programIds || "").split(/\s+/).includes(programId);
@@ -146,7 +152,7 @@
       const query = userSearch?.value.trim().toLocaleLowerCase() || "";
       userRows.forEach((row) => {
         const input = row.querySelector('input[type="checkbox"]');
-        const inProgram = isInSelectedProgram(row);
+        const inProgram = isInSelectedProgram(row) && matchesRegistration(row);
         const inAudience = matchesAudience(row, audience);
         const matchesSearch = !query || row.dataset.searchText.toLocaleLowerCase().includes(query);
         row.hidden = !inProgram || !inAudience || !matchesSearch;
@@ -181,6 +187,7 @@
       if (semesterEmpty) semesterEmpty.hidden = matchingOptions.length > 0;
     };
     audienceRadios.forEach((radio) => radio.addEventListener("change", updateAudience));
+    registrationRadios.forEach((radio) => radio.addEventListener("change", updateAudience));
     userChecks.forEach((input) => input.addEventListener("change", () => {
       const specific = audienceRadios.find((item) => item.value === "specific");
       if (specific) specific.checked = true;

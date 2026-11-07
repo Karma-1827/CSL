@@ -4483,6 +4483,51 @@ class V2FeatureTests(TestCase):
         self.assertEqual(rows[0], ("日期 Date", "時數 Hours"))
         self.assertEqual(rows[1], (str(session.class_date), "1.0"))
 
+    def test_admin_export_includes_email_and_can_filter_by_registration(self):
+        """匯出新增 Email 欄位與「全部/已註冊/未註冊」篩選:未註冊者來自名冊(無帳號、無 Email)。"""
+        self.tutor.email = "tutor-export@example.com"
+        self.tutor.save(update_fields=["email"])
+        RosterEntry.objects.create(
+            student_id="EXPORT-UNREG-TUTOR", name_zh="未註冊老師", role=Role.TUTOR,
+            education_level=EducationLevel.MASTER, identity_category=IdentityCategory.LOCAL,
+        )
+        admin = User.objects.create_superuser(username="EXPORT-REG-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        dashboard = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(dashboard, 'name="registration" value="unregistered"', html=False)
+        self.assertContains(dashboard, 'name="export_fields" value="email" checked', html=False)
+        self.assertContains(dashboard, 'name="roster_entry_ids"', html=False)
+
+        def export(registration, **extra):
+            response = self.client.post(reverse("tutoring:export_excel"), {
+                "program_id": self.ntnu_program.pk, "audience": "tutors", "registration": registration,
+                "period_mode": "semester", "semester_id": self.semester.pk,
+                "field_selection_present": "1", "export_fields": ["student_id", "email", "status"],
+                "file_format": "xlsx", **extra,
+            })
+            self.assertEqual(response.status_code, 200)
+            return list(openpyxl.load_workbook(BytesIO(response.content)).active.iter_rows(values_only=True))
+
+        registered = export("registered")
+        self.assertEqual(registered[0], ("學號 Student ID", "Email", "狀態 Status"))
+        self.assertIn(self.tutor.username, [row[0] for row in registered])
+        self.assertIn("tutor-export@example.com", [row[1] for row in registered])
+        self.assertNotIn("EXPORT-UNREG-TUTOR", [row[0] for row in registered])
+
+        unregistered = export("unregistered")
+        unregistered_by_id = {row[0]: row for row in unregistered[1:]}
+        self.assertIn("EXPORT-UNREG-TUTOR", unregistered_by_id)
+        self.assertEqual(unregistered_by_id["EXPORT-UNREG-TUTOR"][1:], (None, "尚未註冊 / Not registered"))
+        self.assertNotIn("tutor-export@example.com", [row[1] for row in unregistered[1:]])
+
+        everyone = [row[0] for row in export("all")[1:]]
+        self.assertIn(self.tutor.username, everyone)
+        self.assertIn("EXPORT-UNREG-TUTOR", everyone)
+
+        entry = RosterEntry.objects.get(student_id="EXPORT-UNREG-TUTOR")
+        specific = export("unregistered", audience="specific", roster_entry_ids=[entry.pk])
+        self.assertEqual([row[0] for row in specific[1:]], ["EXPORT-UNREG-TUTOR"])
+
     def test_admin_export_requires_at_least_one_selected_field(self):
         admin = User.objects.create_superuser(username="EXPORT-NO-FIELDS-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
