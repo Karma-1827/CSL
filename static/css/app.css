@@ -293,6 +293,10 @@ a {
   font-size: 0.92rem;
   line-height: 1.8;
 }
+.exam-schedule-actions {
+  margin-top: 18px;
+}
+
 .arrange-dialog {
   width: min(92vw, 420px);
   border: 1px solid var(--line, #d9d2da);
