@@ -293,6 +293,13 @@ a {
   font-size: 0.92rem;
   line-height: 1.8;
 }
+.payment-proof-filename {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
 .manual-warning {
   color: var(--danger);
   font-weight: 800;

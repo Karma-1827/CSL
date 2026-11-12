@@ -496,6 +496,23 @@ def _oral_exam_try_assign(reg_pk, candidates_by_registration, minute_to_slot_ind
     return False
 
 
+def renumber_oral_exam_order(exam_date):
+    """依已填寫的考試時間重新編號考試順序(1 起算)。
+
+    助教手動填考試時間後呼叫:只有已登記且有 `exam_time` 的人有順序,依時間排序(同一時間再依報名時間);
+    已登記但還沒填時間的人 `exam_order` 留空。
+    """
+    confirmed = OralExamRegistration.objects.filter(
+        exam_date=exam_date, review_status=OralExamRegistrationReviewStatus.CONFIRMED
+    )
+    confirmed.filter(exam_time__isnull=True).exclude(exam_order__isnull=True).update(exam_order=None)
+    scheduled = confirmed.filter(exam_time__isnull=False).order_by("exam_time", "submitted_at", "pk")
+    for index, registration in enumerate(scheduled, start=1):
+        if registration.exam_order != index:
+            registration.exam_order = index
+            registration.save(update_fields=["exam_order"])
+
+
 def schedule_oral_exam_registrations(exam_date, *, exam_minutes=10, step_minutes=15):
     """2026-10-07 新增(使用者要求「下方新增一個卡片「考試名單」，會先有一個按鈕
     「按排考試」，然後把已登記的tutor，根據他們的時間組合排列...考試順序，每位只有

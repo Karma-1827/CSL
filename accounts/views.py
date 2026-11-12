@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 import hashlib
 import random
@@ -131,6 +131,7 @@ from .services import (
     import_roster_ids,
     roster_template_csv_bytes,
     roster_template_xlsx_bytes,
+    renumber_oral_exam_order,
     schedule_oral_exam_registrations,
 )
 from .throttle import any_throttled, clear_throttles, register_failures
@@ -429,12 +430,15 @@ def dashboard(request):
         # `revert_oral_exam_registration()`),但這裡還是多一道防呆——萬一有舊資料
         # 在欄位改版(`review_status` 取代 `confirmed_at`)過程中殘留不一致的
         # `exam_order`,不會因此誤把「其實已經不是已登記狀態」的人留在考試名單裡。
+        # 2026-11-12(助教要求手動排考試時間,不用系統自動排):「考試名單」列出這一輪全部「已登記」的
+        # 報名,讓助教逐人填考試時間;已填時間的依時間排在前面(順序由時間自動編號),還沒填的排在後面。
         oral_exam_scheduled_registrations = (
-            list(
+            sorted(
                 OralExamRegistration.objects.filter(
-                    exam_date=oral_exam_announcement.exam_date, exam_order__isnull=False,
+                    exam_date=oral_exam_announcement.exam_date,
                     review_status=OralExamRegistrationReviewStatus.CONFIRMED,
-                ).select_related("tutor").order_by("exam_order")
+                ).select_related("tutor"),
+                key=lambda row: (row.exam_time is None, row.exam_time or time(0, 0), row.submitted_at),
             )
             if oral_exam_announcement else []
         )
@@ -2034,6 +2038,7 @@ def revert_oral_exam_registration(request, pk):
     registration.save(
         update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at", "exam_time", "exam_order"],
     )
+    renumber_oral_exam_order(registration.exam_date)
     log_event(
         request, "ORAL_EXAM_REGISTRATION_REVERTED", "線上口語考試報名核對已撤回 / Oral exam registration review reverted",
         target_user=registration.tutor,
@@ -2070,6 +2075,51 @@ def schedule_oral_exam(request):
         )
     else:
         messages.success(request, f"已安排 {len(scheduled)} 位的考試順序。 / Scheduled {len(scheduled)} exam slots.")
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def save_oral_exam_time(request, pk):
+    """助教手動填寫某位已登記老師的口試時間(2026-11-12 新增,取代系統自動排)。
+
+    留空代表清除。只有「已登記」的報名可以填;存好後依時間重新編號順序。兩位老師填成同一個時間時
+    仍然允許(助教可能刻意安排),但會跳出提醒。
+    """
+    registration = get_object_or_404(OralExamRegistration, pk=pk)
+    redirect_target = reverse("accounts:dashboard") + "#oral-exam"
+    if not registration.is_confirmed:
+        messages.error(request, "只有已登記的報名可以安排考試時間。 / Only confirmed registrations can be scheduled.")
+        return redirect(redirect_target)
+    raw = request.POST.get("exam_time", "").strip()
+    exam_time = None
+    if raw:
+        try:
+            exam_time = datetime.strptime(raw, "%H:%M").time()
+        except ValueError:
+            messages.error(request, "請輸入有效的時間（例如 09:30）。 / Enter a valid time (e.g. 09:30).")
+            return redirect(redirect_target)
+    registration.exam_time = exam_time
+    registration.save(update_fields=["exam_time"])
+    renumber_oral_exam_order(registration.exam_date)
+    log_event(
+        request, "ORAL_EXAM_TIME_SET", "線上口語考試時間已設定 / Oral exam time set", target_user=registration.tutor,
+        metadata={"registration_id": registration.pk, "exam_time": raw},
+    )
+    if exam_time is None:
+        messages.success(request, "已清除考試時間。 / Exam time cleared.")
+    else:
+        clash = OralExamRegistration.objects.filter(
+            exam_date=registration.exam_date, review_status=OralExamRegistrationReviewStatus.CONFIRMED,
+            exam_time=exam_time,
+        ).exclude(pk=registration.pk).exists()
+        if clash:
+            messages.warning(
+                request,
+                "已儲存，但已有其他老師也安排在同一個時間，請確認。 / Saved, but another teacher is already scheduled at the same time.",
+            )
+        else:
+            messages.success(request, "考試時間已儲存。 / Exam time saved.")
     return redirect(redirect_target)
 
 

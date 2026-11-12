@@ -59,6 +59,7 @@ urlpatterns = [
         name="revert_oral_exam_registration",
     ),
     path("oral-exam-registration/schedule/", views.schedule_oral_exam, name="schedule_oral_exam"),
+    path("oral-exam-registration/<int:pk>/exam-time/", views.save_oral_exam_time, name="save_oral_exam_time"),
     path(
         "oral-exam-registration/<int:pk>/meet-link/save/",
         views.save_oral_exam_meet_link,

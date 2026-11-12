@@ -67,7 +67,7 @@
       <p class="help-text">管理員已完成登記核對，時段與繳費紀錄無法再修改。<br>An administrator has confirmed this registration — the time slots and payment proof can no longer be changed.</p>
       <div class="counterpart-record-grid">
         <div><span>可口試時段 / Available time slots</span><strong>{{ my_oral_exam_registration.time_slot_1|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_2|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_3|time:"H:i" }}</strong></div>
-        <div><span>繳費紀錄 / Payment proof</span><strong>{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
+        <div><span>繳費紀錄 / Payment proof</span><strong class="payment-proof-filename">{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
       </div>
     </section>
   {% elif oral_exam_announcement.is_registration_open and oral_exam_registration_full and not my_oral_exam_registration %}
@@ -119,7 +119,7 @@
       {% endif %}
       <div class="counterpart-record-grid">
         <div><span>可口試時段 / Available time slots</span><strong>{{ my_oral_exam_registration.time_slot_1|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_2|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_3|time:"H:i" }}</strong></div>
-        <div><span>繳費紀錄 / Payment proof</span><strong>{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
+        <div><span>繳費紀錄 / Payment proof</span><strong class="payment-proof-filename">{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
       </div>
     </section>
   {% endif %}

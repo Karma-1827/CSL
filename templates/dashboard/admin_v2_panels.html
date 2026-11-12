@@ -360,7 +360,7 @@
                 <tr>
                   <td><a href="{% url 'accounts:admin_user_profile' registration.tutor_id %}"><strong>{{ registration.tutor.bilingual_name }}</strong></a><small>{{ registration.tutor.username }}</small></td>
                   <td>{% for slot_range in registration.time_slot_ranges %}{{ slot_range }}{% if not forloop.last %}、{% endif %}{% endfor %}</td>
-                  <td><a href="{% url 'accounts:download_oral_exam_payment_proof' registration.pk %}" target="_blank" rel="noopener">{{ registration.payment_proof_filename }}</a></td>
+                  <td><a class="payment-proof-filename" href="{% url 'accounts:download_oral_exam_payment_proof' registration.pk %}" target="_blank" rel="noopener">{{ registration.payment_proof_filename }}</a></td>
                   <td>{{ registration.submitted_at|date:"Y-m-d H:i" }}</td>
                   <td>
                     {% if registration.is_confirmed %}
@@ -392,31 +392,33 @@
       {% endif %}
     </details>
     {% comment %}
-      2026-10-07(使用者要求「下方新增一個卡片「考試名單」，會先有一個按鈕「按排考試」，
-      然後把已登記的tutor，根據他們的時間組合排列...考試順序，每位只有10分鐘考試時間，
-      所以可以抓15分鐘一人這樣排下來」):按「安排考試」後由
-      `accounts/services.py::schedule_oral_exam_registrations()` 把目前所有已登記
-      報名排出互不衝突的考試時間(每人 15 分鐘一格,10 分鐘考試+5 分鐘緩衝),這裡只
-      顯示排出結果,不提供編輯——要調整順序請改時段或重新按一次「安排考試」整批重算。
+      2026-10-07(使用者要求「下方新增一個卡片「考試名單」...」)新增本卡片;2026-11-12 助教要求
+      「手動按排時間,不用系統自動排」,改成列出這一輪全部「已登記」的老師,由助教逐人填寫考試時間
+      (`accounts:save_oral_exam_time`),順序依考試時間自動編號。原本的「安排考試」自動排程按鈕已從畫面移除
+      (後端 `schedule_oral_exam` 與服務函式暫時保留,不再有入口)。
     {% endcomment %}
     <details class="panel collapsible-panel" open>
       <summary class="panel-heading"><div><span class="eyebrow">EXAM SCHEDULE</span><h2>考試名單 <small>Exam schedule</small></h2></div></summary>
-      <form action="{% url 'accounts:schedule_oral_exam' %}" method="post" class="inline-actions">
-        {% csrf_token %}
-        <button class="button button-primary" type="submit">安排考試 / Schedule exam</button>
-      </form>
+      <p class="help-text">請為已登記的老師手動填寫考試時間（可參考對方報名時選的三個時段）；順序會依時間自動編號，時間留空代表尚未安排。<br>Enter each confirmed teacher's exam time manually (refer to their three chosen slots). The order is numbered automatically by time; leave blank if not scheduled yet.</p>
       {% if oral_exam_scheduled_registrations %}
         <div class="table-wrap">
           <table>
-            <thead><tr><th>學號 / Student ID</th><th>姓名 / Name</th><th>Email</th><th>考試時間 / Exam time</th><th>順序 / Order</th><th>視訊連結 / Meeting link</th><th>口語能力審核 / Oral proficiency review</th></tr></thead>
+            <thead><tr><th>學號 / Student ID</th><th>姓名 / Name</th><th>Email</th><th>可口試時段 / Available slots</th><th>考試時間 / Exam time</th><th>順序 / Order</th><th>視訊連結 / Meeting link</th><th>口語能力審核 / Oral proficiency review</th></tr></thead>
             <tbody>
               {% for registration in oral_exam_scheduled_registrations %}
                 <tr>
                   <td>{{ registration.tutor.username }}</td>
                   <td><a href="{% url 'accounts:admin_user_profile' registration.tutor_id %}">{{ registration.tutor.bilingual_name }}</a></td>
                   <td>{{ registration.tutor.email }}</td>
-                  <td>{{ registration.exam_time|time:"H:i" }}</td>
-                  <td>{{ registration.exam_order }}</td>
+                  <td>{% for slot_range in registration.time_slot_ranges %}{{ slot_range }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+                  <td>
+                    <form action="{% url 'accounts:save_oral_exam_time' registration.pk %}" method="post" class="inline-actions">
+                      {% csrf_token %}
+                      <input type="time" name="exam_time" value="{{ registration.exam_time|time:'H:i' }}" step="300">
+                      <button class="button button-small button-secondary" type="submit">儲存 / Save</button>
+                    </form>
+                  </td>
+                  <td>{% if registration.exam_order %}{{ registration.exam_order }}{% else %}—{% endif %}</td>
                   <td>
                     {% if registration.meet_link %}<a href="{{ registration.meet_link }}" target="_blank" rel="noopener">加入會議 / Join</a>{% endif %}
                     <form action="{% url 'accounts:save_oral_exam_meet_link' registration.pk %}" method="post" class="inline-actions">
@@ -453,7 +455,7 @@
           </table>
         </div>
       {% else %}
-        <div class="empty-state">尚未安排考試順序。 / Exam schedule hasn't been arranged yet.</div>
+        <div class="empty-state">目前沒有已登記的報名。 / No confirmed registrations yet.</div>
       {% endif %}
     </details>
   {% endif %}

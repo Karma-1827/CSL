@@ -3965,6 +3965,67 @@ class OralExamRegistrationTests(TestCase):
         self.assertEqual(registration.exam_order, 1)
         self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_SCHEDULED").exists())
 
+    def test_admin_can_set_exam_times_manually_and_order_follows_time(self):
+        """助教手動填考試時間(2026-11-12):順序依時間自動編號,不需要按自動排程。"""
+        late = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        other_user = User.objects.create_user(
+            username="MANUAL-EXAM-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR, name_zh="手動排考老師二",
+        )
+        early = self._create_confirmed_registration(other_user, time(8, 0), time(9, 0), time(10, 0))
+        url = lambda reg: reverse("accounts:save_oral_exam_time", args=[reg.pk])
+
+        self.client.post(url(late), {"exam_time": "14:30"})
+        response = self.client.post(url(early), {"exam_time": "09:05"})
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        late.refresh_from_db()
+        early.refresh_from_db()
+        self.assertEqual(early.exam_time, time(9, 5))
+        self.assertEqual((early.exam_order, late.exam_order), (1, 2))
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_TIME_SET").exists())
+
+        self.client.post(url(early), {"exam_time": ""})
+        early.refresh_from_db()
+        late.refresh_from_db()
+        self.assertIsNone(early.exam_time)
+        self.assertIsNone(early.exam_order)
+        self.assertEqual(late.exam_order, 1)
+
+    def test_set_exam_time_rejects_invalid_value_unconfirmed_and_non_admin(self):
+        confirmed = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:save_oral_exam_time", args=[confirmed.pk]), {"exam_time": "25:99"})
+        confirmed.refresh_from_db()
+        self.assertIsNone(confirmed.exam_time)
+
+        confirmed.review_status = OralExamRegistrationReviewStatus.PENDING
+        confirmed.save(update_fields=["review_status"])
+        self.client.post(reverse("accounts:save_oral_exam_time", args=[confirmed.pk]), {"exam_time": "09:00"})
+        confirmed.refresh_from_db()
+        self.assertIsNone(confirmed.exam_time)
+
+        confirmed.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        confirmed.save(update_fields=["review_status"])
+        self.client.force_login(self.ntnu_tutor)
+        response = self.client.post(reverse("accounts:save_oral_exam_time", args=[confirmed.pk]), {"exam_time": "09:00"})
+        self.assertNotEqual(response.status_code, 200)
+        confirmed.refresh_from_db()
+        self.assertIsNone(confirmed.exam_time)
+
+    def test_exam_schedule_card_lists_all_confirmed_without_auto_schedule_button(self):
+        registration = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        content = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertIn(self.ntnu_tutor.bilingual_name, content)  # 還沒填時間也列出
+        self.assertIn(reverse("accounts:save_oral_exam_time", args=[registration.pk]), content)
+        self.assertNotIn(reverse("accounts:schedule_oral_exam"), content)
+
+    def test_payment_proof_filename_wraps_instead_of_overflowing(self):
+        self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        self.client.force_login(self.admin)
+        content = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertIn('class="payment-proof-filename"', content)
+
     def test_non_admin_cannot_trigger_scheduling(self):
         self.client.force_login(self.ntnu_tutor)
         response = self.client.post(reverse("accounts:schedule_oral_exam"))
