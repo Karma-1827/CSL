@@ -1830,6 +1830,35 @@ class AdminDashboardProfileLinkTests(TestCase):
     def _profile_url(self, user):
         return reverse("accounts:admin_user_profile", args=[user.pk])
 
+    def test_admin_profile_class_overview_lists_all_classes_newest_first_five_per_page(self):
+        """行政檔案最下方的「課程總覽」:全部課程(含已取消)依時間排列(新的在前),每頁 5 筆,可點進課程詳情。"""
+        pairing = Pairing.objects.create(semester=self.semester, tutor=self.tutor, tutee=self.tutee)
+        today = timezone.localdate()
+        sessions = [
+            ClassSession.objects.create(
+                pairing=pairing, class_date=today + timedelta(days=offset), start_time=time(10, 0),
+                duration=1, created_by=self.tutor,
+                status="CANCELLED" if offset == 0 else "SCHEDULED",
+            )
+            for offset in range(-3, 4)  # 7 堂:過去、今天(已取消)、未來
+        ]
+        for subject in (self.tutor, self.tutee):
+            first = self.client.get(self._profile_url(subject))
+            self.assertContains(first, "課程總覽")
+            page = first.context["class_overview_page"]
+            self.assertEqual(page.paginator.count, 7)
+            self.assertEqual(len(page.object_list), 5)
+            dates = [row.class_date for row in page.object_list]
+            self.assertEqual(dates, sorted(dates, reverse=True))
+            self.assertEqual(page.object_list[0].pk, sessions[-1].pk)
+            self.assertContains(first, reverse("tutoring:class_detail", args=[sessions[-1].pk]))
+            self.assertContains(first, "class_page=2#class-list")
+
+            second = self.client.get(self._profile_url(subject), {"class_page": 2})
+            self.assertEqual(len(second.context["class_overview_page"].object_list), 2)
+            self.assertContains(first, "已取消 / Cancelled")  # 今天那堂是已取消,排在第一頁
+            self.assertNotContains(second, "下一頁 / Next")
+
     def test_qualification_review_pending_and_history_link_to_tutor_profile(self):
         document = QualificationDocument.objects.create(
             tutor=self.tutor, file="qualifications/profile-link-test.pdf", original_filename="test.pdf",

@@ -1355,6 +1355,12 @@ def admin_user_profile(request, user_id):
         }
     )
 
+    # 2026-11-12(使用者要求):行政檔案最下方的「課程總覽」,列出此人全部課程(含已取消),
+    # 不分過去/未來,依上課時間排序(新的在前),每頁 5 筆,可點進課程詳情。
+    context["class_overview_page"] = Paginator(list(reversed(sessions)), 5).get_page(
+        request.GET.get("class_page")
+    )
+
     context["class_alerts"] = ClassAlert.objects.filter(
         Q(reporter=subject) | Q(subject=subject)
     ).select_related("session__pairing", "resolved_by").order_by("-created_at")[:20]

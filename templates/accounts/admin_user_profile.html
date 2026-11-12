@@ -120,6 +120,16 @@
         {% empty %}<div class="empty-state compact">目前沒有異常回報紀錄。 / No incident reports.</div>{% endfor %}
       </div>
     </section>
+
+    <section class="panel" id="class-list">
+      <div class="panel-heading"><div><span class="eyebrow">CLASS OVERVIEW</span><h2>課程總覽 <small>Class overview</small></h2></div><p>全部課程依上課時間排列（新的在前），每頁 5 筆。<br>All classes by time, newest first, 5 per page.</p></div>
+      <div class="admin-class-list">
+        {% for session in class_overview_page %}
+          <a href="{% url 'tutoring:class_detail' session.pk %}"><time>{{ session.class_date|date:"Y-m-d" }}<small>{{ session.start_time|time:"H:i" }}</small></time><span><strong>{% if subject.role == 'TUTOR' %}{{ session.pairing.tutee.bilingual_name }}{% else %}{{ session.pairing.tutor.bilingual_name }}{% endif %}</strong><small>{{ session.pairing.semester }} · {{ session.duration }} 小時 / hours</small></span><b>{% if session.status == 'CANCELLED' %}{{ session.get_status_display }}{% elif session.is_official %}有效 / Verified{% else %}{{ session.get_status_display }} · 未成立 / Not verified{% endif %}<small>查看 / View →</small></b></a>
+        {% empty %}<div class="empty-state compact">目前沒有課程紀錄。 / No class history.</div>{% endfor %}
+      </div>
+      {% if class_overview_page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="課程總覽分頁 / Class overview pages">{% if class_overview_page.has_previous %}<a href="?class_page={{ class_overview_page.previous_page_number }}#class-list">← 上一頁 / Previous</a>{% endif %}<span>{{ class_overview_page.number }} / {{ class_overview_page.paginator.num_pages }}</span>{% if class_overview_page.has_next %}<a href="?class_page={{ class_overview_page.next_page_number }}#class-list">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+    </section>
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
