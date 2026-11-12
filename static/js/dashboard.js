@@ -110,6 +110,18 @@
     document.querySelectorAll("[data-info-toggle]").forEach((item) => item.setAttribute("aria-expanded", "false"));
   });
 
+
+  // 2026-11-12:報名清單「安排」按鈕開啟小視窗(原生 <dialog>),「取消」關閉。
+  document.querySelectorAll("[data-open-dialog]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const dialog = document.getElementById(button.dataset.openDialog);
+      if (dialog && typeof dialog.showModal === "function") dialog.showModal();
+    });
+  });
+  document.querySelectorAll("dialog [data-close-dialog]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("dialog").close());
+  });
+
   const exportForm = document.querySelector(".data-export-form");
   if (exportForm) {
     const programSelect = exportForm.querySelector("[data-export-program]");

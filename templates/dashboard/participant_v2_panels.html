@@ -94,6 +94,12 @@
           {% if my_oral_exam_registration.review_note %}<p>{{ my_oral_exam_registration.review_note }}</p>{% endif %}
         </div>
       {% endif %}
+      {% if my_oral_exam_registration.is_other and my_oral_exam_registration.review_note %}
+        <div class="alert-active-box">
+          <span>管理員留言 / Admin note</span>
+          <p>{{ my_oral_exam_registration.review_note }}</p>
+        </div>
+      {% endif %}
       <form action="{% url 'accounts:submit_oral_exam_registration' %}" method="post" enctype="multipart/form-data" class="stack-form">
         {% csrf_token %}
         <div class="oral-exam-attachment-years">
@@ -114,6 +120,11 @@
       {% if my_oral_exam_registration.needs_revision and my_oral_exam_registration.review_note %}
         <div class="alert-active-box">
           <span>管理員要求補件 / Admin requested additional documents</span>
+          <p>{{ my_oral_exam_registration.review_note }}</p>
+        </div>
+      {% elif my_oral_exam_registration.is_other and my_oral_exam_registration.review_note %}
+        <div class="alert-active-box">
+          <span>管理員留言 / Admin note</span>
           <p>{{ my_oral_exam_registration.review_note }}</p>
         </div>
       {% endif %}

@@ -665,6 +665,9 @@ class OralExamRegistrationReviewStatus(models.TextChoices):
     PENDING = "PENDING", "尚未核對 / Pending"
     CONFIRMED = "CONFIRMED", "已登記 / Confirmed"
     NEEDS_REVISION = "NEEDS_REVISION", "補件 / Needs additional documents"
+    # 2026-11-12(助教要求報名清單的按鈕改成「安排/補件/其他」):助教用留言說明其他情形(例如已電話聯絡、
+    # 暫不安排)。與「補件」相同,不鎖定報名,老師仍可更新。
+    OTHER = "OTHER", "其他 / Other"
 
 
 class OralExamRegistration(models.Model):
@@ -756,6 +759,10 @@ class OralExamRegistration(models.Model):
     @property
     def needs_revision(self):
         return self.review_status == OralExamRegistrationReviewStatus.NEEDS_REVISION
+
+    @property
+    def is_other(self):
+        return self.review_status == OralExamRegistrationReviewStatus.OTHER
 
     @property
     def time_slots(self):

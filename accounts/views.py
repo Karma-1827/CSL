@@ -2006,6 +2006,15 @@ def review_oral_exam_registration(request, pk):
         event_type = "ORAL_EXAM_REGISTRATION_NEEDS_REVISION"
         description = "線上口語考試報名要求補件 / Oral exam registration marked as needing additional documents"
         success_message = "已標記為補件，老師會看到您留的訊息。 / Marked as needing additional documents."
+    elif action == "other":
+        # 2026-11-12:「其他」一定要留言說明,否則老師看不出是什麼意思。
+        if not request.POST.get("note", "").strip():
+            messages.error(request, "選擇「其他」時請填寫留言。 / Please enter a note when choosing Other.")
+            return redirect(reverse("accounts:dashboard") + "#oral-exam")
+        registration.review_status = OralExamRegistrationReviewStatus.OTHER
+        event_type = "ORAL_EXAM_REGISTRATION_OTHER"
+        description = "線上口語考試報名標記為其他 / Oral exam registration marked as other"
+        success_message = "已標記為其他，老師會看到您留的訊息。 / Marked as other; the teacher will see your note."
     else:
         raise Http404
     registration.review_note = request.POST.get("note", "").strip()
@@ -2080,46 +2089,61 @@ def schedule_oral_exam(request):
 
 @role_required(Role.ADMIN)
 @require_POST
-def save_oral_exam_time(request, pk):
-    """助教手動填寫某位已登記老師的口試時間(2026-11-12 新增,取代系統自動排)。
+def arrange_oral_exam_registration(request, pk):
+    """助教為某位老師手動安排口試時間與視訊連結(2026-11-12 新增,取代系統自動排)。
 
-    留空代表清除。只有「已登記」的報名可以填;存好後依時間重新編號順序。兩位老師填成同一個時間時
-    仍然允許(助教可能刻意安排),但會跳出提醒。
+    - 報名清單按「安排」→ 小視窗填考試時間(必填)、視訊連結(選填)、留言(選填)→ 這筆報名同時變成「已登記」
+      (鎖定老師修改),並列入下方「考試名單」。
+    - 「考試名單」裡可再次編輯考試時間與視訊連結(已登記者只更新這兩個欄位,不動審核資訊)。
+    存好後依考試時間重新編號順序;兩位老師同一時間仍允許,但會提醒。
     """
     registration = get_object_or_404(OralExamRegistration, pk=pk)
     redirect_target = reverse("accounts:dashboard") + "#oral-exam"
-    if not registration.is_confirmed:
-        messages.error(request, "只有已登記的報名可以安排考試時間。 / Only confirmed registrations can be scheduled.")
+    try:
+        exam_time = datetime.strptime(request.POST.get("exam_time", "").strip(), "%H:%M").time()
+    except ValueError:
+        messages.error(request, "請輸入有效的考試時間（例如 09:30）。 / Enter a valid exam time (e.g. 09:30).")
         return redirect(redirect_target)
-    raw = request.POST.get("exam_time", "").strip()
-    exam_time = None
-    if raw:
+    meet_link = request.POST.get("meet_link", "").strip()
+    if meet_link:
         try:
-            exam_time = datetime.strptime(raw, "%H:%M").time()
-        except ValueError:
-            messages.error(request, "請輸入有效的時間（例如 09:30）。 / Enter a valid time (e.g. 09:30).")
+            URLValidator(schemes=["http", "https"])(meet_link)
+        except ValidationError:
+            messages.error(request, "請輸入有效的網址（需以 http:// 或 https:// 開頭）。 / Please enter a valid URL (starting with http:// or https://).")
             return redirect(redirect_target)
+    newly_confirmed = not registration.is_confirmed
     registration.exam_time = exam_time
-    registration.save(update_fields=["exam_time"])
+    registration.meet_link = meet_link
+    update_fields = ["exam_time", "meet_link"]
+    if newly_confirmed:
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        registration.review_note = request.POST.get("note", "").strip()
+        registration.reviewed_by = request.user
+        registration.reviewed_at = timezone.now()
+        update_fields += ["review_status", "review_note", "reviewed_by", "reviewed_at"]
+    registration.save(update_fields=update_fields)
     renumber_oral_exam_order(registration.exam_date)
+    if newly_confirmed:
+        log_event(
+            request, "ORAL_EXAM_REGISTRATION_CONFIRMED",
+            "線上口語考試報名已登記 / Oral exam registration confirmed", target_user=registration.tutor,
+            metadata={"registration_id": registration.pk, "exam_date": str(registration.exam_date)},
+        )
     log_event(
         request, "ORAL_EXAM_TIME_SET", "線上口語考試時間已設定 / Oral exam time set", target_user=registration.tutor,
-        metadata={"registration_id": registration.pk, "exam_time": raw},
+        metadata={"registration_id": registration.pk, "exam_time": exam_time.strftime("%H:%M"), "has_meet_link": bool(meet_link)},
     )
-    if exam_time is None:
-        messages.success(request, "已清除考試時間。 / Exam time cleared.")
+    clash = OralExamRegistration.objects.filter(
+        exam_date=registration.exam_date, review_status=OralExamRegistrationReviewStatus.CONFIRMED,
+        exam_time=exam_time,
+    ).exclude(pk=registration.pk).exists()
+    if clash:
+        messages.warning(
+            request,
+            "已儲存，但已有其他老師也安排在同一個時間，請確認。 / Saved, but another teacher is already scheduled at the same time.",
+        )
     else:
-        clash = OralExamRegistration.objects.filter(
-            exam_date=registration.exam_date, review_status=OralExamRegistrationReviewStatus.CONFIRMED,
-            exam_time=exam_time,
-        ).exclude(pk=registration.pk).exists()
-        if clash:
-            messages.warning(
-                request,
-                "已儲存，但已有其他老師也安排在同一個時間，請確認。 / Saved, but another teacher is already scheduled at the same time.",
-            )
-        else:
-            messages.success(request, "考試時間已儲存。 / Exam time saved.")
+        messages.success(request, "已安排並列入考試名單。 / Arranged and added to the exam schedule.")
     return redirect(redirect_target)
 
 

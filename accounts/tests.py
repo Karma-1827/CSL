@@ -3965,60 +3965,101 @@ class OralExamRegistrationTests(TestCase):
         self.assertEqual(registration.exam_order, 1)
         self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_SCHEDULED").exists())
 
-    def test_admin_can_set_exam_times_manually_and_order_follows_time(self):
-        """助教手動填考試時間(2026-11-12):順序依時間自動編號,不需要按自動排程。"""
-        late = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
-        self.client.force_login(self.admin)
+    def _pending_registration(self, tutor, slot1=time(8, 0), slot2=time(9, 0), slot3=time(10, 0)):
+        registration = self._create_confirmed_registration(tutor, slot1, slot2, slot3)
+        registration.review_status = OralExamRegistrationReviewStatus.PENDING
+        registration.reviewed_by = None
+        registration.reviewed_at = None
+        registration.save(update_fields=["review_status", "reviewed_by", "reviewed_at"])
+        return registration
+
+    def test_arrange_confirms_registration_sets_time_and_link_and_orders_by_time(self):
+        """報名清單按「安排」(2026-11-12):同時登記、設定考試時間與視訊連結並列入考試名單;順序依時間排。"""
+        late = self._pending_registration(self.ntnu_tutor)
         other_user = User.objects.create_user(
             username="MANUAL-EXAM-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR, name_zh="手動排考老師二",
         )
-        early = self._create_confirmed_registration(other_user, time(8, 0), time(9, 0), time(10, 0))
-        url = lambda reg: reverse("accounts:save_oral_exam_time", args=[reg.pk])
+        early = self._pending_registration(other_user)
+        self.client.force_login(self.admin)
+        url = lambda reg: reverse("accounts:arrange_oral_exam_registration", args=[reg.pk])
 
-        self.client.post(url(late), {"exam_time": "14:30"})
+        self.client.post(url(late), {"exam_time": "14:30", "meet_link": "https://meet.google.com/aaa-bbbb-ccc", "note": "請準時"})
         response = self.client.post(url(early), {"exam_time": "09:05"})
         self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
         late.refresh_from_db()
         early.refresh_from_db()
-        self.assertEqual(early.exam_time, time(9, 5))
+        self.assertTrue(late.is_confirmed and early.is_confirmed)
+        self.assertEqual(late.meet_link, "https://meet.google.com/aaa-bbbb-ccc")
+        self.assertEqual(late.review_note, "請準時")
+        self.assertEqual(late.reviewed_by, self.admin)
         self.assertEqual((early.exam_order, late.exam_order), (1, 2))
         self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_TIME_SET").exists())
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_REGISTRATION_CONFIRMED").exists())
 
-        self.client.post(url(early), {"exam_time": ""})
-        early.refresh_from_db()
+        # 已登記者可再編輯時間與連結,不動審核資訊;順序跟著時間重排
+        self.client.post(url(late), {"exam_time": "08:00", "meet_link": ""})
         late.refresh_from_db()
-        self.assertIsNone(early.exam_time)
-        self.assertIsNone(early.exam_order)
-        self.assertEqual(late.exam_order, 1)
+        early.refresh_from_db()
+        self.assertEqual((late.exam_order, early.exam_order), (1, 2))
+        self.assertEqual(late.meet_link, "")
+        self.assertEqual(late.review_note, "請準時")
 
-    def test_set_exam_time_rejects_invalid_value_unconfirmed_and_non_admin(self):
-        confirmed = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+    def test_arrange_rejects_missing_time_bad_link_and_non_admin(self):
+        registration = self._pending_registration(self.ntnu_tutor)
+        url = reverse("accounts:arrange_oral_exam_registration", args=[registration.pk])
         self.client.force_login(self.admin)
-        self.client.post(reverse("accounts:save_oral_exam_time", args=[confirmed.pk]), {"exam_time": "25:99"})
-        confirmed.refresh_from_db()
-        self.assertIsNone(confirmed.exam_time)
+        self.client.post(url, {"exam_time": ""})
+        self.client.post(url, {"exam_time": "25:99"})
+        self.client.post(url, {"exam_time": "09:00", "meet_link": "not-a-url"})
+        registration.refresh_from_db()
+        self.assertFalse(registration.is_confirmed)
+        self.assertIsNone(registration.exam_time)
 
-        confirmed.review_status = OralExamRegistrationReviewStatus.PENDING
-        confirmed.save(update_fields=["review_status"])
-        self.client.post(reverse("accounts:save_oral_exam_time", args=[confirmed.pk]), {"exam_time": "09:00"})
-        confirmed.refresh_from_db()
-        self.assertIsNone(confirmed.exam_time)
-
-        confirmed.review_status = OralExamRegistrationReviewStatus.CONFIRMED
-        confirmed.save(update_fields=["review_status"])
         self.client.force_login(self.ntnu_tutor)
-        response = self.client.post(reverse("accounts:save_oral_exam_time", args=[confirmed.pk]), {"exam_time": "09:00"})
+        response = self.client.post(url, {"exam_time": "09:00"})
         self.assertNotEqual(response.status_code, 200)
-        confirmed.refresh_from_db()
-        self.assertIsNone(confirmed.exam_time)
+        registration.refresh_from_db()
+        self.assertFalse(registration.is_confirmed)
 
-    def test_exam_schedule_card_lists_all_confirmed_without_auto_schedule_button(self):
-        registration = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+    def test_other_requires_a_note_and_does_not_lock_the_registration(self):
+        registration = self._pending_registration(self.ntnu_tutor)
+        url = reverse("accounts:review_oral_exam_registration", args=[registration.pk])
+        self.client.force_login(self.admin)
+        self.client.post(url, {"action": "other", "note": "  "})
+        registration.refresh_from_db()
+        self.assertEqual(registration.review_status, OralExamRegistrationReviewStatus.PENDING)
+
+        self.client.post(url, {"action": "other", "note": "已電話聯絡，稍後再安排"})
+        registration.refresh_from_db()
+        self.assertEqual(registration.review_status, OralExamRegistrationReviewStatus.OTHER)
+        self.assertEqual(registration.review_note, "已電話聯絡，稍後再安排")
+        self.assertFalse(registration.is_confirmed)
+
+        self.client.force_login(self.ntnu_tutor)
+        dashboard = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertIn("已電話聯絡，稍後再安排", dashboard)
+
+    def test_registration_list_shows_arrange_revise_other_buttons_and_dialog(self):
+        registration = self._pending_registration(self.ntnu_tutor)
         self.client.force_login(self.admin)
         content = self.client.get(reverse("accounts:dashboard")).content.decode()
-        self.assertIn(self.ntnu_tutor.bilingual_name, content)  # 還沒填時間也列出
-        self.assertIn(reverse("accounts:save_oral_exam_time", args=[registration.pk]), content)
+        self.assertIn("安排 / Arrange", content)
+        self.assertIn("補件 / Needs revision", content)
+        self.assertIn("其他 / Other", content)
+        self.assertIn(f'id="arrange-dialog-{registration.pk}"', content)
+        self.assertIn(reverse("accounts:arrange_oral_exam_registration", args=[registration.pk]), content)
+        self.assertNotIn("登記 / Confirm</button>", content)
         self.assertNotIn(reverse("accounts:schedule_oral_exam"), content)
+
+    def test_exam_schedule_card_lists_only_confirmed_and_is_editable(self):
+        confirmed = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
+        pending_user = User.objects.create_user(
+            username="MANUAL-EXAM-TUTOR3", password="Tutor-password-2026", role=Role.TUTOR, name_zh="尚未安排老師",
+        )
+        self._pending_registration(pending_user)
+        self.client.force_login(self.admin)
+        card = self.client.get(reverse("accounts:dashboard")).context["oral_exam_scheduled_registrations"]
+        self.assertEqual([row.pk for row in card], [confirmed.pk])
 
     def test_payment_proof_filename_wraps_instead_of_overflowing(self):
         self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
