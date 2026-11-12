@@ -4061,6 +4061,88 @@ class OralExamRegistrationTests(TestCase):
         card = self.client.get(reverse("accounts:dashboard")).context["oral_exam_scheduled_registrations"]
         self.assertEqual([row.pk for row in card], [confirmed.pk])
 
+    def test_bulk_edit_saves_all_times_and_links_at_once_or_nothing(self):
+        first = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(9, 0), time(10, 0))
+        other_user = User.objects.create_user(
+            username="BULK-EXAM-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR, name_zh="批次編輯老師二",
+        )
+        second = self._create_confirmed_registration(other_user, time(8, 0), time(9, 0), time(10, 0))
+        self.client.force_login(self.admin)
+        url = reverse("accounts:save_oral_exam_schedule")
+        content = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertIn(f'name="exam_time_{first.pk}"', content)
+        self.assertIn("編輯 / Edit", content)
+
+        response = self.client.post(url, {
+            f"exam_time_{first.pk}": "10:00", f"meet_link_{first.pk}": "https://meet.google.com/aaa",
+            f"exam_time_{second.pk}": "09:00", f"meet_link_{second.pk}": "",
+        })
+        self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual((first.exam_time, second.exam_time), (time(10, 0), time(9, 0)))
+        self.assertEqual((second.exam_order, first.exam_order), (1, 2))
+        self.assertEqual(first.meet_link, "https://meet.google.com/aaa")
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_SCHEDULE_EDITED").exists())
+
+        # 任何一列無效 → 整批不儲存
+        self.client.post(url, {
+            f"exam_time_{first.pk}": "11:00", f"meet_link_{first.pk}": "",
+            f"exam_time_{second.pk}": "bad", f"meet_link_{second.pk}": "",
+        })
+        first.refresh_from_db()
+        self.assertEqual(first.exam_time, time(10, 0))
+
+    def test_publish_makes_exam_time_and_link_visible_to_the_tutor_only_afterwards(self):
+        registration = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(9, 0), time(10, 0))
+        registration.exam_time = time(9, 30)
+        registration.meet_link = "https://meet.google.com/zzz-yyyy-xxx"
+        registration.save(update_fields=["exam_time", "meet_link"])
+        unscheduled_user = User.objects.create_user(
+            username="PUBLISH-EXAM-TUTOR2", password="Tutor-password-2026", role=Role.TUTOR, name_zh="未設時間老師",
+        )
+        no_time = self._create_confirmed_registration(unscheduled_user, time(8, 0), time(9, 0), time(10, 0))
+
+        self.client.force_login(self.ntnu_tutor)
+        before = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertNotIn("meet.google.com/zzz-yyyy-xxx", before)
+        self.assertNotIn("09:30", before)
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:publish_oral_exam_schedule"))
+        registration.refresh_from_db()
+        no_time.refresh_from_db()
+        self.assertTrue(registration.is_schedule_published)
+        self.assertIsNone(no_time.schedule_published_at)
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_SCHEDULE_PUBLISHED").exists())
+
+        self.client.force_login(self.ntnu_tutor)
+        after = self.client.get(reverse("accounts:dashboard")).content.decode()
+        self.assertIn("meet.google.com/zzz-yyyy-xxx", after)
+        self.assertIn("09:30", after)
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:unpublish_oral_exam_schedule"))
+        self.client.force_login(self.ntnu_tutor)
+        self.assertNotIn("meet.google.com/zzz-yyyy-xxx", self.client.get(reverse("accounts:dashboard")).content.decode())
+
+    def test_revert_clears_publication_and_non_admin_cannot_publish_or_edit(self):
+        registration = self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(9, 0), time(10, 0))
+        registration.exam_time = time(9, 0)
+        registration.schedule_published_at = timezone.now()
+        registration.save(update_fields=["exam_time", "schedule_published_at"])
+        self.client.force_login(self.ntnu_tutor)
+        for name in ("publish_oral_exam_schedule", "unpublish_oral_exam_schedule", "save_oral_exam_schedule"):
+            self.assertNotEqual(self.client.post(reverse(f"accounts:{name}")).status_code, 200)
+        registration.refresh_from_db()
+        self.assertTrue(registration.is_schedule_published)
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("accounts:revert_oral_exam_registration", args=[registration.pk]))
+        registration.refresh_from_db()
+        self.assertIsNone(registration.schedule_published_at)
+        self.assertIsNone(registration.exam_time)
+
     def test_payment_proof_filename_wraps_instead_of_overflowing(self):
         self._create_confirmed_registration(self.ntnu_tutor, time(8, 0), time(11, 0), time(12, 0))
         self.client.force_login(self.admin)

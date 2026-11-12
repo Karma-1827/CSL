@@ -418,7 +418,7 @@
     {% endcomment %}
     <details class="panel collapsible-panel" open>
       <summary class="panel-heading"><div><span class="eyebrow">EXAM SCHEDULE</span><h2>考試名單 <small>Exam schedule</small></h2></div></summary>
-      <p class="help-text">在上方報名清單按「安排」並儲存後，老師會列在這裡；考試時間與視訊連結可在此直接修改。順序依考試時間自動編號。<br>Teachers appear here after you click "Arrange" above. You can edit the exam time and meeting link here; the order is numbered automatically by time.</p>
+      <p class="help-text">在上方報名清單按「安排」並儲存後，老師會列在這裡；按下方「編輯」可一次修改全部考試時間與視訊連結，按「公布」後老師才會看到自己的考試時間與連結。順序依考試時間自動編號。<br>Click "Edit" below to change all times and links at once; teachers only see their time and link after you click "Publish". The order is numbered automatically by time.</p>
       {% if oral_exam_scheduled_registrations %}
         <div class="table-wrap">
           <table>
@@ -431,16 +431,18 @@
                   <td>{{ registration.tutor.email }}</td>
                   <td>{% for slot_range in registration.time_slot_ranges %}{{ slot_range }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
                   <td>
-                    <form action="{% url 'accounts:arrange_oral_exam_registration' registration.pk %}" method="post" class="stack-form" id="exam-edit-{{ registration.pk }}">
-                      {% csrf_token %}
-                      <input type="time" name="exam_time" value="{{ registration.exam_time|time:'H:i' }}" step="300" required aria-label="考試時間 / Exam time">
-                    </form>
+                    {% comment %}
+                      2026-11-12:預設是唯讀文字;按表格下方「編輯」後才切換成輸入框,全部改完用「儲存」一次存(輸入框用
+                      `form="exam-bulk-form"` 綁到表格外面那個獨立表單,因為這個表格裡已經有其他表單,HTML 不能巢狀)。
+                    {% endcomment %}
+                    <span data-exam-view>{{ registration.exam_time|time:"H:i" }}</span>
+                    <input type="time" name="exam_time_{{ registration.pk }}" form="exam-bulk-form" value="{{ registration.exam_time|time:'H:i' }}" step="300" required hidden data-exam-input aria-label="考試時間 / Exam time">
+                    {% if registration.is_schedule_published %}<small class="result-text status-approved">已公布 / Published</small>{% endif %}
                   </td>
                   <td>{% if registration.exam_order %}{{ registration.exam_order }}{% else %}—{% endif %}</td>
                   <td>
-                    {% if registration.meet_link %}<a href="{{ registration.meet_link }}" target="_blank" rel="noopener">加入會議 / Join</a>{% endif %}
-                    <input type="url" name="meet_link" form="exam-edit-{{ registration.pk }}" value="{{ registration.meet_link }}" placeholder="https://meet.google.com/..." aria-label="視訊連結 / Meeting link">
-                    <button class="button button-small button-secondary" type="submit" form="exam-edit-{{ registration.pk }}">儲存 / Save</button>
+                    <span data-exam-view>{% if registration.meet_link %}<a href="{{ registration.meet_link }}" target="_blank" rel="noopener">加入會議 / Join</a>{% else %}—{% endif %}</span>
+                    <input type="url" name="meet_link_{{ registration.pk }}" form="exam-bulk-form" value="{{ registration.meet_link }}" placeholder="https://meet.google.com/..." hidden data-exam-input aria-label="視訊連結 / Meeting link">
                   </td>
                   <td>
                     {% comment %}
@@ -468,6 +470,16 @@
               {% endfor %}
             </tbody>
           </table>
+        </div>
+        <form id="exam-bulk-form" action="{% url 'accounts:save_oral_exam_schedule' %}" method="post">{% csrf_token %}</form>
+        <div class="inline-actions exam-schedule-actions">
+          <button class="button button-secondary" type="button" data-exam-edit>編輯 / Edit</button>
+          <button class="button button-primary" type="submit" form="exam-bulk-form" data-exam-save hidden>儲存 / Save</button>
+          <form action="{% url 'accounts:publish_oral_exam_schedule' %}" method="post" data-confirm="公布後，已安排的老師就會在自己的頁面看到考試時間與視訊連結。確定要公布嗎？ / Teachers will see their exam time and meeting link. Publish now?">{% csrf_token %}<button class="button button-success" type="submit">公布 / Publish</button></form>
+          {% if oral_exam_published_count %}
+            <form action="{% url 'accounts:unpublish_oral_exam_schedule' %}" method="post" data-confirm="取消公布後，老師將看不到考試時間與視訊連結。確定嗎？ / Teachers will no longer see their exam time and link. Unpublish?">{% csrf_token %}<button class="button button-secondary" type="submit">取消公布 / Unpublish</button></form>
+          {% endif %}
+          <span class="help-text">已公布 {{ oral_exam_published_count }} / {{ oral_exam_scheduled_registrations|length }} 位 · Published {{ oral_exam_published_count }} / {{ oral_exam_scheduled_registrations|length }}</span>
         </div>
       {% else %}
         <div class="empty-state">目前沒有已登記的報名。 / No confirmed registrations yet.</div>

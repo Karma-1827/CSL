@@ -122,6 +122,19 @@
     button.addEventListener("click", () => button.closest("dialog").close());
   });
 
+
+  // 2026-11-12:「考試名單」按「編輯」後,全部考試時間與視訊連結切換成輸入框,由「儲存」一次送出。
+  const examEditButton = document.querySelector("[data-exam-edit]");
+  if (examEditButton) {
+    examEditButton.addEventListener("click", () => {
+      document.querySelectorAll("[data-exam-view]").forEach((item) => { item.hidden = true; });
+      document.querySelectorAll("[data-exam-input]").forEach((item) => { item.hidden = false; });
+      const save = document.querySelector("[data-exam-save]");
+      if (save) save.hidden = false;
+      examEditButton.hidden = true;
+    });
+  }
+
   const exportForm = document.querySelector(".data-export-form");
   if (exportForm) {
     const programSelect = exportForm.querySelector("[data-export-program]");

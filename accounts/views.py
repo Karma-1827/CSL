@@ -442,6 +442,7 @@ def dashboard(request):
             )
             if oral_exam_announcement else []
         )
+        oral_exam_published_count = sum(1 for row in oral_exam_scheduled_registrations if row.is_schedule_published)
         overview_semesters = semester_rows
         overview_semester_groups = _semester_name_groups(overview_semesters)
         overview_semester, overview_semester_members = _pick_semester_group(
@@ -717,6 +718,7 @@ def dashboard(request):
                 "oral_exam_form": oral_exam_form,
                 "oral_exam_registrations": oral_exam_registrations,
                 "oral_exam_scheduled_registrations": oral_exam_scheduled_registrations,
+                "oral_exam_published_count": oral_exam_published_count,
                 "roster_q": roster_q,
                 "roster_role": roster_role,
                 "roster_program": roster_program,
@@ -2044,8 +2046,12 @@ def revert_oral_exam_registration(request, pk):
     registration.reviewed_at = None
     registration.exam_time = None
     registration.exam_order = None
+    registration.schedule_published_at = None
     registration.save(
-        update_fields=["review_status", "review_note", "reviewed_by", "reviewed_at", "exam_time", "exam_order"],
+        update_fields=[
+            "review_status", "review_note", "reviewed_by", "reviewed_at", "exam_time", "exam_order",
+            "schedule_published_at",
+        ],
     )
     renumber_oral_exam_order(registration.exam_date)
     log_event(
@@ -2145,6 +2151,110 @@ def arrange_oral_exam_registration(request, pk):
     else:
         messages.success(request, "已安排並列入考試名單。 / Arranged and added to the exam schedule.")
     return redirect(redirect_target)
+
+
+def _confirmed_oral_exam_registrations():
+    announcement = OralExamAnnouncement.objects.first()
+    if not announcement:
+        raise Http404
+    return OralExamRegistration.objects.filter(
+        exam_date=announcement.exam_date, review_status=OralExamRegistrationReviewStatus.CONFIRMED
+    )
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def save_oral_exam_schedule(request):
+    """「考試名單」按「編輯」後一次儲存全部考試時間與視訊連結(2026-11-12,助教要求不用每個小欄位各自儲存)。
+
+    全部驗證通過才會寫入,任何一列的時間或連結有問題就整批不存,避免只存到一半。
+    """
+    redirect_target = reverse("accounts:dashboard") + "#oral-exam"
+    registrations = list(_confirmed_oral_exam_registrations())
+    updates = []
+    for registration in registrations:
+        raw_time = request.POST.get(f"exam_time_{registration.pk}", "").strip()
+        meet_link = request.POST.get(f"meet_link_{registration.pk}", "").strip()
+        try:
+            exam_time = datetime.strptime(raw_time, "%H:%M").time()
+        except ValueError:
+            messages.error(
+                request,
+                f"{registration.tutor.bilingual_name} 的考試時間無效，未儲存。 / Invalid exam time for {registration.tutor.bilingual_name}; nothing was saved.",
+            )
+            return redirect(redirect_target)
+        if meet_link:
+            try:
+                URLValidator(schemes=["http", "https"])(meet_link)
+            except ValidationError:
+                messages.error(
+                    request,
+                    f"{registration.tutor.bilingual_name} 的視訊連結無效，未儲存。 / Invalid meeting link for {registration.tutor.bilingual_name}; nothing was saved.",
+                )
+                return redirect(redirect_target)
+        updates.append((registration, exam_time, meet_link))
+    for registration, exam_time, meet_link in updates:
+        registration.exam_time = exam_time
+        registration.meet_link = meet_link
+        registration.save(update_fields=["exam_time", "meet_link"])
+    if registrations:
+        renumber_oral_exam_order(registrations[0].exam_date)
+    log_event(
+        request, "ORAL_EXAM_SCHEDULE_EDITED", "線上口語考試名單已編輯 / Oral exam schedule edited",
+        metadata={"registrations": len(updates)},
+    )
+    times = [exam_time for _reg, exam_time, _link in updates]
+    if len(times) != len(set(times)):
+        messages.warning(request, "已儲存，但有老師被安排在同一個時間，請確認。 / Saved, but some teachers share the same time.")
+    else:
+        messages.success(request, "考試名單已儲存。 / Exam schedule saved.")
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def publish_oral_exam_schedule(request):
+    """「公布」:已登記且已設定考試時間的老師,才看得到自己的考試時間與視訊連結(2026-11-12)。"""
+    redirect_target = reverse("accounts:dashboard") + "#oral-exam"
+    registrations = list(_confirmed_oral_exam_registrations().select_related("tutor"))
+    ready = [row for row in registrations if row.exam_time is not None]
+    now = timezone.now()
+    newly = 0
+    for registration in ready:
+        if registration.schedule_published_at is None:
+            registration.schedule_published_at = now
+            registration.save(update_fields=["schedule_published_at"])
+            newly += 1
+    log_event(
+        request, "ORAL_EXAM_SCHEDULE_PUBLISHED", "線上口語考試名單已公布 / Oral exam schedule published",
+        metadata={"published": len(ready), "newly_published": newly},
+    )
+    missing = len(registrations) - len(ready)
+    if missing:
+        messages.warning(
+            request,
+            f"已公布 {len(ready)} 位；另有 {missing} 位尚未設定考試時間，不會公布。 / Published {len(ready)}; {missing} without an exam time were skipped.",
+        )
+    elif not ready:
+        messages.error(request, "目前沒有可公布的考試安排。 / Nothing to publish yet.")
+    else:
+        messages.success(request, f"已公布 {len(ready)} 位老師的考試時間與視訊連結。 / Published to {len(ready)} teachers.")
+    return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def unpublish_oral_exam_schedule(request):
+    """取消公布(誤按時使用):老師端重新看不到考試時間與連結。"""
+    count = _confirmed_oral_exam_registrations().filter(schedule_published_at__isnull=False).update(
+        schedule_published_at=None
+    )
+    log_event(
+        request, "ORAL_EXAM_SCHEDULE_UNPUBLISHED", "線上口語考試名單已取消公布 / Oral exam schedule unpublished",
+        metadata={"unpublished": count},
+    )
+    messages.success(request, "已取消公布。 / Unpublished.")
+    return redirect(reverse("accounts:dashboard") + "#oral-exam")
 
 
 @role_required(Role.ADMIN)

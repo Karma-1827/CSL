@@ -733,6 +733,10 @@ class OralExamRegistration(models.Model):
     # 通過就代表口語能力證明直接通過」,語意上這就是口語能力審核本身,不是口試這個報名
     # 紀錄自己的狀態,所以不在這裡新增欄位。
     meet_link = models.URLField("Google Meet 連結 / Google Meet link", blank=True)
+    # 2026-11-12(助教要求「公布」按鈕):助教按「公布」後,老師端才看得到自己的考試時間與視訊連結。
+    # 用每筆報名自己的時間戳記(而不是全域開關),因為報名本來就是依 `exam_date` 一輪一輪各自獨立;
+    # 公布後再修改時間/連結,老師看到的是最新值(欄位是即時讀取,不是公布當下的快照)。
+    schedule_published_at = models.DateTimeField("考試資訊公布時間 / Schedule published at", null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -759,6 +763,10 @@ class OralExamRegistration(models.Model):
     @property
     def needs_revision(self):
         return self.review_status == OralExamRegistrationReviewStatus.NEEDS_REVISION
+
+    @property
+    def is_schedule_published(self):
+        return self.schedule_published_at is not None and self.exam_time is not None
 
     @property
     def is_other(self):

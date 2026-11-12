@@ -68,6 +68,11 @@
       <div class="counterpart-record-grid">
         <div><span>可口試時段 / Available time slots</span><strong>{{ my_oral_exam_registration.time_slot_1|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_2|time:"H:i" }}、{{ my_oral_exam_registration.time_slot_3|time:"H:i" }}</strong></div>
         <div><span>繳費紀錄 / Payment proof</span><strong class="payment-proof-filename">{{ my_oral_exam_registration.payment_proof_filename }}</strong></div>
+        {% comment %}2026-11-12:助教按「公布」後(`is_schedule_published`)才顯示自己的考試時間與視訊連結。{% endcomment %}
+        {% if my_oral_exam_registration.is_schedule_published %}
+          <div><span>考試時間 / Exam time</span><strong>{{ my_oral_exam_registration.exam_date|date:"Y-m-d" }} {{ my_oral_exam_registration.exam_time|time:"H:i" }}</strong></div>
+          <div><span>視訊連結 / Meeting link</span><strong>{% if my_oral_exam_registration.meet_link %}<a href="{{ my_oral_exam_registration.meet_link }}" target="_blank" rel="noopener">加入會議 / Join meeting</a>{% else %}尚未提供 / Not provided yet{% endif %}</strong></div>
+        {% endif %}
       </div>
     </section>
   {% elif oral_exam_announcement.is_registration_open and oral_exam_registration_full and not my_oral_exam_registration %}
