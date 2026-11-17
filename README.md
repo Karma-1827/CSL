@@ -138,7 +138,7 @@ git clone https://github.com/Karma-1827/CSL.git
 cd CSL
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
+python -m pip install --upgrade "pip>=26.2"
 pip install -r requirements-dev.txt
 ```
 
