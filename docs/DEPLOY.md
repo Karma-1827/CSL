@@ -83,11 +83,47 @@
 
 ## 本機常用指令
 
+**每次開新的終端機,執行任何 `manage.py` 指令前,都要先把 `.env` 載入 shell。** `config/settings.py` 只用 `os.getenv()` 讀系統環境變數,不會自動讀取 `.env` 檔(專案沒有用 python-dotenv);沒載入就會連到預設的 Unix socket,出現 `connection to server on socket "/tmp/.s.PGSQL.5432" failed`。
+
 ```bash
+cd /Users/qiangqiang/Desktop/CSL
+set -a && . ./.env && set +a      # 載入 .env(必做,每個新終端機一次)
 source .venv/bin/activate
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8001
 ```
+
+### 本機資料庫(Docker)
+
+2026-11-18 系統還原後,本機 PostgreSQL 改用 Docker 容器 `csl_db`(`postgres:18`,對外 5433 埠,資料存在具名 volume `csl_pgdata`,不會因刪除容器而遺失)。`.env` 對應填 `POSTGRES_HOST=localhost`、`POSTGRES_PORT=5433`;`POSTGRES_PASSWORD` 為建立容器時自行設定的值,**不要寫進版控或貼進對話**。使用前要先開著 Docker Desktop,容器才會跑:
+
+```bash
+docker start csl_db                # 容器停止時重新啟動
+docker ps --filter name=csl_db     # 確認狀態
+```
+
+首次建立容器(只需一次;密碼請自行替換):
+
+```bash
+docker run -d --name csl_db \
+  -e POSTGRES_DB=qiangqiang -e POSTGRES_USER=qiangqiang \
+  -e POSTGRES_PASSWORD='<自訂本機密碼>' \
+  -p 5433:5432 -v csl_pgdata:/var/lib/postgresql \
+  postgres:18
+```
+
+避免用 `docker system prune --volumes` 或在 Docker Desktop 清理磁碟時誤刪 `csl_pgdata`;若資料真的遺失,可用下方 seed 指令重建 demo 資料。
+
+### 重建 demo 資料
+
+demo seed 需要 `DEBUG=True` 與 `ALLOW_DEMO_SEED=1` 同時成立(`accounts/management/commands/_demo_guard.py`),且**必須先跑 `seed_demo` 再跑 `seed_admin_demo`**——後者預設 `DEMO-ADMIN` 已存在(只更新密碼,不建立帳號),順序反了會因 `HourAdjustment.created_by` 為 NULL 而整批回滾。兩者都可重複執行。密碼只用在本機 demo 帳號,不可沿用於任何真實帳號:
+
+```bash
+ALLOW_DEMO_SEED=1 python manage.py seed_demo --password '<本機demo密碼>'
+ALLOW_DEMO_SEED=1 python manage.py seed_admin_demo --password '<本機demo密碼>'
+```
+
+指令必須寫在同一行(`manage.py` 與子指令之間不可換行),否則 shell 會把子指令當成獨立指令執行而失敗。
 
 `.vscode/launch.json` 已改為與日常人工驗收一致的 8001;請勿同時啟動兩個不必要的 server(過去曾發生舊 server process 沒關掉、改完程式碼卻由舊 process 回應請求的情況,`ps aux | grep runserver` 確認後再啟動新的)。
 

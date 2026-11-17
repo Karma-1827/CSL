@@ -166,6 +166,24 @@ export POSTGRES_PORT='5432'
 
 The repository includes [`.env.example`](.env.example) as a reference, but Django does not automatically load `.env` files. Export the values in the shell or load them through your local process manager.
 
+If you keep the values in a local `.env` file (copied from `.env.example`; it is git-ignored), load it into the current shell **every time you open a new terminal**, before running any `manage.py` command:
+
+```bash
+set -a && . ./.env && set +a
+```
+
+Without this step Django falls back to the default Unix socket and fails with `connection to server on socket "/tmp/.s.PGSQL.5432" failed`.
+
+Docker is a convenient alternative to installing PostgreSQL locally (set `POSTGRES_HOST=localhost` and `POSTGRES_PORT=5433` to match):
+
+```bash
+docker run -d --name csl_db \
+  -e POSTGRES_DB=mpts_dev -e POSTGRES_USER=mpts_dev \
+  -e POSTGRES_PASSWORD='replace-this-local-password' \
+  -p 5433:5432 -v csl_pgdata:/var/lib/postgresql \
+  postgres:18
+```
+
 ### 3. Initialize and run
 
 ```bash
