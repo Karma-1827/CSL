@@ -996,6 +996,22 @@ a {
   gap: 8px;
   margin-bottom: 20px;
 }
+/* 2026-11-18:操作送出後會回到原本的捲動位置(static/js/page-memory.js),頁面最上方的提示
+   訊息若跟著捲出視窗,使用者就看不到「已儲存」或錯誤原因;固定在頁首(高 82px)下方,
+   可點擊關閉,成功訊息會自動消失。只限有頁首的頁面(.app-shell):登入/註冊頁沒有固定頁首,
+   套用 top: 94px 會把訊息往下推。 */
+.app-shell .message-list {
+  position: sticky;
+  top: 94px;
+  z-index: 60;
+}
+.app-shell .message-list .message {
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(31, 31, 31, 0.14);
+}
+.app-shell .message-list .message.is-dismissed {
+  display: none;
+}
 .message {
   padding: 11px 13px;
   border-radius: 8px;

@@ -59,6 +59,11 @@ class BackNavigationMiddlewareTests(SimpleTestCase):
         response = self.run_middleware("post", {"back": self.BACK}, "/dashboard/#hours")
         self.assertEqual(response["Location"], "/dashboard/#hours")
 
+    def test_dashboard_redirect_with_its_own_query_string_is_left_alone(self):
+        """view 刻意帶了 query string 就不覆寫,以免把它丟掉。"""
+        response = self.run_middleware("post", {"back": self.BACK}, "/dashboard/?class_status=ALL#class-review")
+        self.assertEqual(response["Location"], "/dashboard/?class_status=ALL#class-review")
+
     def test_redirect_to_another_page_carries_back_along(self):
         response = self.run_middleware("post", {"back": self.BACK}, "/matching/classes/1/")
         self.assertEqual(

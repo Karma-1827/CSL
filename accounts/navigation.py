@@ -7,6 +7,7 @@
 
 做法(前端 `static/js/page-memory.js` 與這裡搭配):
 1. 前端點擊站內連結時,自動在連結後面附上 `?back=<目前完整網址>`(含分頁參數與頁籤 hash)。
+   dashboard 上的 POST 表單(審核、儲存、取消…)送出時也一樣附上,所以操作後回到同一頁碼。
 2. 詳情頁的「← 返回」讀取 `nav_back`(`back_navigation()` context processor),有值就用它,
    沒有才退回原本寫死的預設網址,所以沒有 JS、直接用網址列開啟時行為與以前完全相同。
 3. 詳情頁上的表單送出時,前端也把 `back` 帶進表單 action;`BackNavigationMiddleware` 看到 POST
@@ -73,7 +74,12 @@ class BackNavigationMiddleware:
         dashboard_path = reverse("accounts:dashboard")
         if location.path == dashboard_path:
             back_parts = urlsplit(back)
-            if back_parts.path == dashboard_path and back_parts.fragment == location.fragment:
+            # view 自己帶了 query string(刻意指定的篩選等)時不覆寫,以免把它丟掉。
+            if (
+                not location.query
+                and back_parts.path == dashboard_path
+                and back_parts.fragment == location.fragment
+            ):
                 response["Location"] = back
             return response
 

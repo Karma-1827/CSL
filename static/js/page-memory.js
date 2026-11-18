@@ -3,7 +3,9 @@
  * 與後端 accounts/navigation.py 搭配,詳細設計見該檔案開頭說明。這支 JS 做四件事:
  *   1. 點擊站內連結時,自動附上 ?back=<目前完整網址>(含分頁參數與頁籤 hash),
  *      詳情頁的「← 返回」就能回到原本的頁碼。
- *   2. 目前網址已帶 back 時,頁面上的 POST 表單也帶上 back,操作後導向才回得到原位置。
+ *   2. 目前網址已帶 back 時,頁面上的 POST 表單也帶上 back;在 dashboard 上直接按按鈕的操作
+ *      (審核、儲存、取消…)送出時,同樣附上目前網址,操作後導向才回得到原頁碼與捲動位置。
+ *      另外讓頂端的提示訊息固定在視窗內、可點擊關閉,還原捲動後才看得到操作結果。
  *   3. 離開頁面時記下捲動位置與 <details> 的展開狀態(sessionStorage,只存數字與布林值)。
  *   4. 用瀏覽器「上一頁」或「← 返回」回來時,等頁籤顯示完畢後還原上述狀態。
  * 站台 CSP 啟用 Trusted Types:這裡不寫入任何 HTML(沒有 innerHTML 等),只讀寫網址與捲動位置。
@@ -140,9 +142,41 @@
     const link = target ? target.closest("a.back-link") : null;
     if (link) setRestoreNext(link.href);
   }, true);
+  const onDashboard = window.location.pathname === DASHBOARD_PATH;
   document.addEventListener("submit", (event) => {
-    if (pageBack && event.target instanceof HTMLFormElement) setRestoreNext(pageBack);
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if ((form.getAttribute("method") || "get").toLowerCase() !== "post") return;
+    if (pageBack) {
+      setRestoreNext(pageBack);
+      return;
+    }
+    // dashboard 上的操作(審核、儲存、取消…):送出時才取目前網址,因為使用者可能已切換過頁籤。
+    if (!onDashboard || form.target === "_blank") return;
+    const rawAction = form.getAttribute("action");
+    if (!rawAction) return;
+    let url;
+    try {
+      url = new URL(rawAction, window.location.href);
+    } catch (error) {
+      return;
+    }
+    if (url.origin !== window.location.origin || isSkippedPath(url.pathname)) return;
+    const key = currentKey();
+    if (!key) return;
+    url.searchParams.set(BACK_PARAM, key);
+    if (url.pathname.length + url.search.length + url.hash.length > MAX_URL_LENGTH) return;
+    form.setAttribute("action", url.pathname + url.search + url.hash);
+    setRestoreNext(key);
   }, true);
+
+  // ---- 提示訊息:點擊關閉;成功訊息數秒後自動消失,錯誤/警告留著直到使用者關閉 ------------------
+  document.querySelectorAll(".message-list .message").forEach((message) => {
+    message.addEventListener("click", () => message.classList.add("is-dismissed"));
+    if (message.classList.contains("message-success")) {
+      window.setTimeout(() => message.classList.add("is-dismissed"), 8000);
+    }
+  });
 
   // ---- 4. 還原 ----------------------------------------------------------------------------
   if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
