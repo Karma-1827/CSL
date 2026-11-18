@@ -6,7 +6,7 @@
 <div class="app-shell">
   {% include "components/app_header.html" %}
   <main id="main-content" class="message-page-main">
-    <a class="back-link" href="{% url 'accounts:dashboard' %}#messages">← 返回私訊 / Back to messages</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}#messages{% endif %}">← 返回私訊 / Back to messages</a>
     {% include "components/messages.html" %}
     <div class="message-layout">
       <aside class="conversation-list">

@@ -8,7 +8,7 @@
   {% include "components/app_header.html" %}
   <main id="main-content" class="class-detail-main tutor-schedule-main">
     {% include "components/messages.html" %}
-    <a class="back-link" href="{% url 'accounts:dashboard' %}#class-overview">← 返回全系課程總覽 / Back to class overview</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}#class-overview{% endif %}">← 返回全系課程總覽 / Back to class overview</a>
     <header class="tutor-schedule-hero">
       <div><span class="section-kicker">TUTOR SCHEDULE</span><h1>{{ tutor.bilingual_name }}</h1><p>{{ tutor.username }}</p></div>
       <form method="get"><label>檢視學期 / Semester<select name="semester" data-auto-submit-select>{% for semester in semesters %}<option value="{{ semester.pk }}"{% if selected_semester.pk == semester.pk %} selected{% endif %}>{{ semester.name_zh }} / {{ semester.name_en }}</option>{% endfor %}</select></label></form>

@@ -7,7 +7,7 @@
   {% include "components/app_header.html" %}
   <main id="main-content" class="class-detail-main tutor-schedule-main">
     {% include "components/messages.html" %}
-    <a class="back-link" href="{% url 'accounts:dashboard' %}#class-overview">← 返回全系課程總覽 / Back to class overview</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}#class-overview{% endif %}">← 返回全系課程總覽 / Back to class overview</a>
     <header class="tutor-schedule-hero">
       <div><span class="section-kicker">ADMIN PROFILE</span><h1>{{ subject.bilingual_name }}</h1><p>{{ subject.username }} · {{ subject.get_role_display }}</p></div>
       <a class="button button-secondary" href="{% url 'admin:accounts_rosterentry_change' roster.pk %}" target="_blank" rel="noopener">Django Admin 編輯 / Edit in Django Admin</a>

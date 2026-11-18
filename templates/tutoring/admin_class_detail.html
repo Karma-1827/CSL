@@ -8,7 +8,7 @@
   {% include "components/app_header.html" %}
   <main id="main-content" class="class-detail-main admin-class-detail">
     {% include "components/messages.html" %}
-    <a class="back-link" href="{% url 'accounts:dashboard' %}#class-review">← 返回課程審核 / Back to class review</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}#class-review{% endif %}">← 返回課程審核 / Back to class review</a>
 
     <header class="class-detail-hero">
       <div><span class="section-kicker">CLASS REVIEW DETAILS</span><h1>{{ session.class_date|date:"Y 年 m 月 d 日" }}</h1><p>{{ session.start_time|time:"H:i" }}–{{ session.ends_at|time:"H:i" }} · {{ session.duration }} 小時 / hours</p></div>

@@ -6,7 +6,7 @@
 <div class="app-shell">
   {% include "components/app_header.html" %}
   <main id="main-content" class="guide-page-main">
-    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}{% endif %}">← 返回我的首頁 / Back to dashboard</a>
     <section class="guide-hero">
       <div><span class="section-kicker">CLASS DOCUMENTS</span><h1>上課文件 <small>Class documents</small></h1><p>系辦依合作計畫上傳的課程文件，僅顯示您有資格參與計畫的已啟用文件。<br>Documents uploaded by the department for your partner program. Only active documents for programs you're eligible for are shown.</p></div>
     </section>

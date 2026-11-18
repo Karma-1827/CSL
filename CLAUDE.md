@@ -443,6 +443,17 @@ Tutor、NTNU Tutee、Maryland Tutee 現在採**完全相同流程**:
 - 目前的 5 則公告內容是透過這個新介面由 Admin 手動輸入,不是寫死在程式碼或 migration 資料遷移裡;之後系辦要新增/修改/下架公告都直接在「公告欄管理」頁籤操作即可。
 - 測試見 `accounts/tests.py::AnnouncementTests`(Admin 建立/編輯/刪除、非 Admin 被拒、Tutor/Tutee dashboard 皆能看到依 `display_order` 排序的啟用中公告、已隱藏的公告不顯示、新增公告欄連結後預設進入分頁仍是 overview、從未查看過的使用者看到全部公告皆為新、已查看過的時間點之前的公告不算新、側邊欄未讀徽章正確顯示與隱藏、`mark_announcements_read` 端點更新已讀時間且需要登入與 POST、卡片正確顯示日期與 NEW 徽章、缺英文內容會被表單擋下、卡片同時顯示中英文內容)。
 
+### 4.12 返回原本位置(頁碼、頁籤、捲動位置)
+
+2026-11-18(使用者回報「回到上一頁都不會留在原本的位置,例如我在「等待管理員核准」卡片的第二頁,點擊某一筆時數,回到上一頁,又變回第一頁」,並確認頁面上的「← 返回」與瀏覽器的上一頁都有這個問題,範圍先做課程審核再一併處理全站):
+
+- **兩個獨立原因,要分開處理**。①9 個詳情頁的「← 返回」連結寫死成 `dashboard#<頁籤>`,不帶 `?pending_page=2` 這類分頁參數,所以一定回第 1 頁;審核等操作送出後的 redirect 同樣只導回 `#<頁籤>`。②瀏覽器上一頁:登入後所有頁面都有 `Cache-Control: private, no-store`(`accounts/middleware.py::PrivateNoStoreMiddleware`,資安整改加的),瀏覽器不能用 bfcache 原樣還原頁面,且 dashboard 的頁籤要等 JS 執行後才顯示,瀏覽器還原捲動時內容還沒出現,位置因此跑掉。**刻意不放寬 `no-store`**(那是防止登出後按上一頁看到敏感資料),改由 JS 自己存取還原。
+- **後端**(`accounts/navigation.py`):`safe_back_url()` 驗證 `?back=` 只接受單一 `/` 開頭的站內相對路徑(外部網址、`//`、反斜線、控制字元、超過 1800 字元一律視為空,避免 open redirect);`back_navigation()` context processor 提供 `nav_back`;`BackNavigationMiddleware` 處理「請求網址帶合格 `back` 的 POST」之後的導向——導向 dashboard 且 hash 與 `back` 相同才改導回 `back`(hash 不同代表 view 刻意把人帶去別的頁籤,尊重 view),導向其他站內頁面且尚未帶 `back` 就把 `back` 接著帶下去(例如審核撤回後導回同一個詳情頁,「← 返回」仍回得到原頁碼)。**這樣不必逐一修改約 60 個 `redirect(f"{reverse('accounts:dashboard')}#...")`**。9 個模板的 `.back-link` 改為 `{% if nav_back %}{{ nav_back }}{% else %}<原本寫死的預設網址>{% endif %}`,沒有 JS 或直接用網址列開啟時行為與以前完全相同。
+- **前端**(`static/js/page-memory.js`,載入於 `templates/base.html`,全站共用):①點擊站內連結時(`click`/`auxclick`/`contextmenu`,涵蓋左鍵、Enter、中鍵、右鍵開新分頁)自動附上 `?back=<目前完整網址含 hash>`;排除同一頁(分頁/頁籤/錨點)、dashboard 本身、`target=_blank`、下載連結、`/static/`、`/media/`、`/system-admin/`、`/logout/`,可用 `data-no-back` 個別排除。②目前網址已帶 `back` 時,頁面上有明確 `action` 的 POST 表單一併帶上(沒有 `action` 的表單本來就送回含 `back` 的目前網址)。③離開頁面(`pagehide`/`visibilitychange`)時把捲動位置與每個 `<details>` 的展開狀態存進 `sessionStorage`(只存數字與布林,上限 40 筆,依網址為 key);用瀏覽器上一頁、重新整理,或按「← 返回」/帶 `back` 的表單送出後回到列表時還原(後兩者是新的導覽,瀏覽器不會自動還原,所以先記下 `restore-next` 網址)。`<details>` 數量與存檔不同時不還原展開狀態,避免頁面內容改變後套錯。還原等到 `DOMContentLoaded` 之後(`dashboard.js` 已依 hash 顯示頁籤),並在 `load` 與 300ms 後補一次;使用者開始捲動就停止。站台 CSP 啟用 Trusted Types,腳本不寫入任何 HTML(`tests_navigation.py::PageMemoryScriptTests` 靜態檢查)。
+- **已知取捨**:①詳情頁再往下點進另一個詳情頁時 `back` 會巢狀(長度超過 1800 字元就不附加,退回預設連結)。②從未存過狀態的舊歷史紀錄(部署前造訪的頁面)沒有可還原的捲動位置,會停在頂端,之後新造訪的頁面才有。③`history.scrollRestoration` 全站設為 `manual`。
+- **驗證**:除 Django 測試外,用真實 Chrome(Playwright `channel="chrome"`)端對端驗證過——Admin 課程審核待核准第 2 頁→詳情→上一頁/「← 返回」/審核送出後返回,頁碼、頁籤、捲動位置皆還原(17/17);老師輔導紀錄、帳號選單的個人資料與使用手冊、Admin 行政檔案返回原頁籤(8/8)。**前端 JS 一定要在套用同一份 CSP 的真實瀏覽器跑過,不能只測伺服器端渲染**(見 4.6 節富文字編輯器的教訓)。
+- 測試:`accounts/tests_navigation.py`(驗證函式、middleware、JS 靜態檢查,14 項)、`tutoring/tests.py::ClassWorkflowTests` 的 `test_admin_class_detail_back_link_*`、`test_review_decision_returns_admin_to_the_same_page_of_the_list`、`test_redirect_back_to_the_detail_page_keeps_the_back_param`(4 項)。657 項測試全數通過,`ruff`、`makemigrations --check --dry-run` 皆乾淨,無 model/migration 變更。
+
 ## 5. 技術架構
 
 ### Runtime
@@ -463,6 +474,7 @@ config/                 Django settings、root URL、WSGI/ASGI
 accounts/               User/名冊/註冊/登入/恢復/Profile/Admin dashboard
 accounts/services.py    名冊匯入(分類卡片快速匯入 + 進階完整欄位匯入,CSV/Excel 解析、驗證、範本產生)
 accounts/context_processors.py 全站共用的 template context(目前只有上課文件選單顯示與否)
+accounts/navigation.py  「返回原本位置」的 back 網址驗證、context processor 與 POST 導向 middleware(見 4.12 節)
 accounts/management/    本機 demo 帳號 seed
 tutoring/               配對、排課、簽到、紀錄、互認、補登、報表
 tutoring/services.py    核心業務規則;新規則優先放這裡而非 view/template

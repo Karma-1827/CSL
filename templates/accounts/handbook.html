@@ -7,7 +7,7 @@
 <div class="app-shell">
   {% include "components/app_header.html" %}
   <main id="main-content" class="guide-page-main">
-    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}{% endif %}">← 返回我的首頁 / Back to dashboard</a>
     <section class="guide-hero">
       <div><span class="section-kicker">USER GUIDE · V3.1</span><h1>使用手冊 <small>User guide</small></h1><p>依照您的使用身分，整理目前系統可使用的主要功能。<br>A role-based guide to the features currently available in the system.</p></div>
       <span class="guide-role">{{ request.user.get_role_display }}</span>

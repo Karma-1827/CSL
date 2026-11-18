@@ -3,6 +3,7 @@ from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 import openpyxl
 
@@ -4151,6 +4152,74 @@ class ClassWorkflowTests(TestCase):
             reverse("tutoring:resolve_incident_report", args=[report.pk]), {"note": ""}
         )
         self.assertEqual(response.status_code, 404)
+
+
+    # --- 2026-11-18 返回原本位置(accounts/navigation.py) -------------------------------------
+    def test_admin_class_detail_back_link_returns_to_the_page_the_admin_came_from(self):
+        """使用者回報:在「等待管理員核准」第 2 頁點進某一堂課,按「← 返回」卻回到第 1 頁。
+        帶有合格 `back` 時,返回連結必須指向原本的頁碼;沒有 `back` 時維持舊的預設連結。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="BACK-LINK-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        detail_url = reverse("tutoring:class_detail", args=[session.pk])
+        back = "/dashboard/?pending_page=2#class-review"
+
+        with_back = self.client.get(detail_url, {"back": back})
+        self.assertContains(with_back, f'class="back-link" href="{back}"')
+
+        without_back = self.client.get(detail_url)
+        self.assertContains(without_back, 'class="back-link" href="/dashboard/#class-review"')
+
+    def test_admin_class_detail_back_link_ignores_external_back_urls(self):
+        """`back` 是使用者可控的輸入,外部網址不可被當成返回目標(open redirect)。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="BACK-EVIL-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        detail_url = reverse("tutoring:class_detail", args=[session.pk])
+        for evil in ("https://evil.example/steal", "//evil.example/steal", "javascript:alert(1)"):
+            response = self.client.get(detail_url, {"back": evil})
+            self.assertContains(response, 'class="back-link" href="/dashboard/#class-review"')
+            self.assertNotContains(response, "evil.example")
+
+    def test_review_decision_returns_admin_to_the_same_page_of_the_list(self):
+        """審核送出後,導向要回到原本在看的頁碼,不是一律第 1 頁。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="BACK-REVIEW-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        back = "/dashboard/?pending_page=2#class-review"
+        response = self.client.post(
+            reverse("tutoring:review_class", args=[session.pk]) + "?" + urlencode({"back": back}),
+            {"action": "approve", "note": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], back)
+
+        # 沒有 back 時行為與以前完全相同
+        session2 = self._confirmed_pending_session(class_date=timezone.localdate() - timedelta(days=1))
+        response = self.client.post(
+            reverse("tutoring:review_class", args=[session2.pk]), {"action": "approve", "note": ""}
+        )
+        self.assertEqual(response["Location"], "/dashboard/#class-review")
+
+    def test_redirect_back_to_the_detail_page_keeps_the_back_param(self):
+        """在詳情頁撤回審核紀錄後會導回同一個詳情頁——`back` 要接著帶下去,
+        否則撤回之後再按「← 返回」又會回到第 1 頁。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="BACK-KEEP-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        back = "/dashboard/?pending_page=2#class-review"
+        self.client.post(
+            reverse("tutoring:review_class", args=[session.pk]), {"action": "revise", "note": "請補充"}
+        )
+        decision = session.class_review.decisions.first()
+        response = self.client.post(
+            reverse("tutoring:delete_class_review_decision", args=[decision.pk]) + "?" + urlencode({"back": back})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            reverse("tutoring:class_detail", args=[session.pk]) + "?" + urlencode({"back": back}),
+        )
 
 
 class V2FeatureTests(TestCase):

@@ -8,7 +8,7 @@
   {% include "components/app_header.html" %}
   <main id="main-content" class="class-detail-main">
     {% include "components/messages.html" %}
-    <a class="back-link" href="{% url 'accounts:dashboard' %}#schedule">← 返回課表 / Back to schedule</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}#schedule{% endif %}">← 返回課表 / Back to schedule</a>
 
     <header class="class-detail-hero">
       <div><span class="section-kicker">CLASS SESSION</span><h1>{{ session.class_date|date:"Y 年 m 月 d 日" }}</h1><p>{{ session.start_time|time:"H:i" }}–{{ session.ends_at|time:"H:i" }} · {{ session.duration }} 小時 / hours · 台灣時間 / Taiwan time</p></div>

@@ -6,7 +6,7 @@
 <div class="app-shell">
   {% include "components/app_header.html" %}
   <main id="main-content" class="profile-page-main matched-profile-page">
-    <a class="back-link" href="{% url 'accounts:dashboard' %}">← 返回我的首頁 / Back to dashboard</a>
+    <a class="back-link" href="{% if nav_back %}{{ nav_back }}{% else %}{% url 'accounts:dashboard' %}{% endif %}">← 返回我的首頁 / Back to dashboard</a>
 
     <section class="profile-hero matched-profile-hero">
       <div class="profile-avatar-large" aria-hidden="true">{{ counterpart.bilingual_name|slice:":1" }}</div>
