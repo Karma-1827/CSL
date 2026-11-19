@@ -18,20 +18,20 @@
           {% if request.user.role == 'ADMIN' %}
             <a class="sidebar-link is-active" href="#overview" data-dashboard-target="overview"><span aria-hidden="true">⌂</span><b>系統總覽<small>Overview</small></b></a>
             <a class="sidebar-link" href="#announcements" data-dashboard-target="announcements"><span aria-hidden="true">★</span><b>公告欄管理<small>Announcements</small></b></a>
-            <a class="sidebar-link" href="#oral-exam" data-dashboard-target="oral-exam"><span aria-hidden="true">♪</span><b>線上口語考試<small>Oral exam</small></b></a>
+            <a class="sidebar-link" href="#roster" data-dashboard-target="roster"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
             <a class="sidebar-link" href="#qualifications" data-dashboard-target="qualifications"><span aria-hidden="true">✓</span><b>口語能力審核<small>Oral proficiency</small></b>{% if pending_qualifications %}<em>{{ pending_qualifications|length }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#matching" data-dashboard-target="matching"><span aria-hidden="true">↔</span><b>配對管理<small>Matching</small></b></a>
-            <a class="sidebar-link" href="#matching-exclusions" data-dashboard-target="matching-exclusions"><span aria-hidden="true">⊘</span><b>配對排除<small>Matching exclusions</small></b></a>
-            <a class="sidebar-link" href="#pairing-releases" data-dashboard-target="pairing-releases"><span aria-hidden="true">⌁</span><b>解除審核<small>Pairing releases</small></b>{% if pending_pairing_releases %}<em>{{ pending_pairing_releases|length }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#class-review" data-dashboard-target="class-review"><span aria-hidden="true">↺</span><b>課程審核<small>Class review</small></b>{% if pending_class_reviews %}<em>{{ pending_class_reviews|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-alerts" data-dashboard-target="class-alerts"><span aria-hidden="true">!</span><b>課堂通報<small>Class alerts</small></b>{% if active_class_alerts %}<em>{{ active_class_alerts|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b>{% if pending_incident_reports %}<em>{{ pending_incident_reports|length }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#class-review" data-dashboard-target="class-review"><span aria-hidden="true">↺</span><b>課程審核<small>Class review</small></b>{% if pending_class_reviews %}<em>{{ pending_class_reviews|length }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#matching" data-dashboard-target="matching"><span aria-hidden="true">↔</span><b>配對管理<small>Matching</small></b></a>
+            <a class="sidebar-link" href="#pairing-releases" data-dashboard-target="pairing-releases"><span aria-hidden="true">⌁</span><b>解除配對<small>Pairing releases</small></b>{% if pending_pairing_releases %}<em>{{ pending_pairing_releases|length }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#matching-exclusions" data-dashboard-target="matching-exclusions"><span aria-hidden="true">⊘</span><b>配對排除<small>Matching exclusions</small></b></a>
+            <a class="sidebar-link" href="#oral-exam" data-dashboard-target="oral-exam"><span aria-hidden="true">♪</span><b>線上口語考試<small>Oral exam</small></b></a>
             <a class="sidebar-link" href="#semesters" data-dashboard-target="semesters"><span aria-hidden="true">▣</span><b>學期設定<small>Semesters</small></b></a>
-            <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
-            <a class="sidebar-link" href="#export" data-dashboard-target="export"><span aria-hidden="true">⇩</span><b>資料匯出<small>Data export</small></b></a>
-            <a class="sidebar-link" href="#roster" data-dashboard-target="roster"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
-            <a class="sidebar-link" href="#roster-import" data-dashboard-target="roster-import"><span aria-hidden="true">⇧</span><b>名冊匯入<small>Roster import</small></b></a>
             <a class="sidebar-link" href="#class-documents" data-dashboard-target="class-documents"><span aria-hidden="true">▤</span><b>上課文件<small>Class documents</small></b></a>
+            <a class="sidebar-link" href="#roster-import" data-dashboard-target="roster-import"><span aria-hidden="true">⇧</span><b>名冊匯入<small>Roster import</small></b></a>
+            <a class="sidebar-link" href="#export" data-dashboard-target="export"><span aria-hidden="true">⇩</span><b>資料匯出<small>Data export</small></b></a>
             <a class="sidebar-link" href="#activity" data-dashboard-target="activity"><span aria-hidden="true">◷</span><b>系統紀錄<small>Activity</small></b></a>
           {% elif request.user.role == 'TUTOR' %}
             <a class="sidebar-link" href="#announcements" data-dashboard-target="announcements" data-mark-read-url="{% url 'accounts:mark_announcements_read' %}"><span aria-hidden="true">★</span><b>公告欄<small>Announcements</small></b>{% if unread_announcement_count %}<em>{{ unread_announcement_count }}</em>{% endif %}</a>
