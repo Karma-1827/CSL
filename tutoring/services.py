@@ -57,6 +57,7 @@ ALLOWED_DURATIONS = {Decimal("0.5"), Decimal("1.0"), Decimal("1.5"), Decimal("2.
 MAX_WEEKLY_PAIRING_HOURS = Decimal("2.0")
 MAX_SEMESTER_PAIRING_HOURS = Decimal("32.0")
 MAX_SEMESTER_TUTOR_HOURS = Decimal("64.0")
+# 2026-11-19(使用者要求):補簽到/補課堂紀錄的學期次數上限只套用在老師,學生不限次數。
 MAX_MAKEUP_PER_TYPE = 5
 PAIRING_AUTO_RELEASE_HOURS = 48
 
@@ -1286,7 +1287,7 @@ def check_in(*, session_id, participant, reason="", now=None):
     if is_makeup:
         if not reason.strip():
             raise ValidationError("補簽到請填寫原因。 / A reason is required for makeup check-in.")
-        if _makeup_count(user=participant, semester=session.pairing.semester, model=Attendance) >= MAX_MAKEUP_PER_TYPE:
+        if participant.role == Role.TUTOR and _makeup_count(user=participant, semester=session.pairing.semester, model=Attendance) >= MAX_MAKEUP_PER_TYPE:
             raise ValidationError("本學期補簽到已達 5 次上限。 / The semester limit of five makeup check-ins has been reached.")
     attendance = Attendance.objects.create(
         session=session, participant=participant, signed_at=now, is_makeup=is_makeup, makeup_reason=reason.strip()
@@ -1361,7 +1362,7 @@ def submit_class_record(*, session_id, author, data, reason="", now=None):
     if is_makeup and not existing:
         if not reason.strip():
             raise ValidationError("補課堂紀錄請填寫原因。 / A reason is required for a makeup record.")
-        if _makeup_count(user=author, semester=session.pairing.semester, model=ClassRecord) >= MAX_MAKEUP_PER_TYPE:
+        if author.role == Role.TUTOR and _makeup_count(user=author, semester=session.pairing.semester, model=ClassRecord) >= MAX_MAKEUP_PER_TYPE:
             raise ValidationError("本學期補課堂紀錄已達 5 次上限。 / The semester limit of five makeup records has been reached.")
     record, _ = ClassRecord.objects.update_or_create(
         session=session,

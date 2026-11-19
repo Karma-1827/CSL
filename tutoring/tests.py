@@ -3547,6 +3547,42 @@ class ClassWorkflowTests(TestCase):
         )
         self.assertFalse(record.is_makeup)
 
+    def test_makeup_limit_applies_to_tutor_but_not_tutee(self):
+        """2026-11-19(使用者要求):補簽到/補課堂紀錄的每學期 5 次上限只限制老師,學生不限。"""
+        class_date = timezone.localdate()
+        late = self.aware(class_date, time(23, 0))
+        sessions = [
+            ClassSession.objects.create(
+                pairing=self.pairing, class_date=class_date, start_time=time(hour), duration=Decimal("0.5"),
+                created_by=self.tutor,
+            )
+            for hour in range(1, 8)
+        ]
+        for session in sessions[:5]:
+            for person in (self.tutor, self.tutee):
+                Attendance.objects.create(
+                    session=session, participant=person, signed_at=late, is_makeup=True, makeup_reason="補簽",
+                )
+        with self.assertRaises(ValidationError):
+            check_in(session_id=sessions[5].pk, participant=self.tutor, reason="補簽", now=late)
+        attendance = check_in(session_id=sessions[5].pk, participant=self.tutee, reason="補簽", now=late)
+        self.assertTrue(attendance.is_makeup)
+        for session in sessions[:5]:
+            for person in (self.tutor, self.tutee):
+                ClassRecord.objects.create(
+                    session=session, author=person, location="x", topic="x", content="x", reflection="x",
+                    materials_used="x", individual_progress="x", is_makeup=True, makeup_reason="補登",
+                )
+        later = late + timedelta(days=2)
+        with self.assertRaises(ValidationError):
+            submit_class_record(
+                session_id=sessions[5].pk, author=self.tutor, data=self.record_data("第六次"), reason="補登", now=later
+            )
+        record = submit_class_record(
+            session_id=sessions[5].pk, author=self.tutee, data=self.record_data("第六次"), reason="補登", now=later
+        )
+        self.assertTrue(record.is_makeup)
+
     def test_class_record_becomes_makeup_after_24_hours(self):
         class_date = timezone.localdate()
         session = schedule_classes(
