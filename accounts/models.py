@@ -788,3 +788,34 @@ class OralExamRegistration(models.Model):
             f"{slot.strftime('%H:%M')}–{(datetime.combine(date.today(), slot) + timedelta(minutes=30)).strftime('%H:%M')}"
             for slot in self.time_slots
         ]
+
+
+TUTEE_TAG_MAX_LENGTH = 20
+TUTEE_TAG_MAX_PER_TUTEE = 8
+
+
+class TuteeTag(models.Model):
+    """Admin 對學生寫的內部標籤(類似 hashtag,2026-11-19 助教要求)。
+
+    只會出現在 Admin 的「出缺席 > 學生總覽」與老師「尋找學生」的候選卡片上
+    (`tutoring.services.anonymous_tutee_candidates()`)。學生本人、配對後的完整資料頁
+    一律不得帶出這個資料。標籤跟著人,不分學期。
+    """
+
+    tutee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="admin_tags")
+    text = models.CharField("標籤 / Tag", max_length=TUTEE_TAG_MAX_LENGTH)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["tutee", "text"], name="unique_tag_text_per_tutee"),
+        ]
+        verbose_name = "學生標籤 / Student tag"
+        verbose_name_plural = "學生標籤 / Student tags"
+
+    def __str__(self):
+        return f"{self.tutee_id}: {self.text}"

@@ -378,6 +378,42 @@
           {% endfor %}
         </section>
         {% endfor %}
+        {% with so=student_overview %}
+        <section class="panel attendance-card student-overview-card">
+          <div class="panel-heading"><div><span class="eyebrow">STUDENTS</span><h2>學生總覽 <small>Student overview</small></h2></div></div>
+          <p class="help-text bilingual-note">累計全部學期的簽到與課堂紀錄次數（準時／遲交／缺席）。標籤只有管理員與老師（尋找學生時）看得到，學生本人看不到，請勿在標籤寫姓名或學號。<br>All-time counts of check-ins and class records (on time / late / absent). Tags are visible to admins and to teachers browsing students only, never to the student. Do not put names or IDs in tags.</p>
+          <form class="attendance-search" method="get" action="#attendance">
+            {% for key, value in so.hidden_params %}{% if key != so.keys.sort and key != so.keys.dir %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+            <input type="search" name="{{ so.keys.q }}" value="{{ so.query }}" placeholder="搜尋學號或姓名 / Search ID or name" maxlength="60">
+            <select name="{{ so.keys.sort }}" aria-label="排序 / Sort"><option value="person"{% if so.sort == 'person' %} selected{% endif %}>依學號 / By ID</option><option value="late"{% if so.sort == 'late' %} selected{% endif %}>依遲交次數 / By late</option><option value="absent"{% if so.sort == 'absent' %} selected{% endif %}>依缺席次數 / By absent</option></select>
+            <select name="{{ so.keys.dir }}" aria-label="順序 / Order"><option value="asc"{% if so.direction == 'asc' %} selected{% endif %}>遞增 / Asc</option><option value="desc"{% if so.direction == 'desc' %} selected{% endif %}>遞減 / Desc</option></select>
+            <button class="button button-small" type="submit">搜尋 / Search</button>
+            {% if so.query %}<a class="button button-secondary button-small" href="?{{ so.clear_qs }}#attendance">清除 / Clear</a>{% endif %}
+          </form>
+          {% if so.page.object_list %}
+          <div class="table-wrap"><table>
+            <thead><tr><th><a href="?{{ so.sort_links.person }}#attendance">學號姓名 / ID &amp; name{% if so.sort == 'person' %} {% if so.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}</a></th><th>簽到 / Check-in<small>準時 · 遲交 · 缺席</small></th><th>課堂紀錄 / Records<small>準時 · 遲交 · 缺席</small></th><th>標籤 / Tags</th></tr></thead>
+            <tbody>
+            {% for tutee in so.page %}
+              <tr>
+                <td><a href="{% url 'accounts:admin_user_profile' tutee.pk %}"><strong>{{ tutee.bilingual_name }}</strong></a><small>{{ tutee.username }}</small></td>
+                <td class="student-stats"><span class="stat-ok">{{ tutee.stats.checkin_on_time }}</span> · <span class="stat-late">{{ tutee.stats.checkin_late }}</span> · <span class="stat-absent">{{ tutee.stats.checkin_absent }}</span></td>
+                <td class="student-stats"><span class="stat-ok">{{ tutee.stats.record_on_time }}</span> · <span class="stat-late">{{ tutee.stats.record_late }}</span> · <span class="stat-absent">{{ tutee.stats.record_absent }}</span></td>
+                <td class="student-tags-cell">
+                  <div class="student-tag-list">
+                    {% for tag in tutee.admin_tags.all %}<form class="student-tag" action="{% url 'accounts:delete_tutee_tag' tag.pk %}" method="post">{% csrf_token %}<span>#{{ tag.text }}</span><button type="submit" aria-label="移除標籤 {{ tag.text }} / Remove tag" title="移除 / Remove">×</button></form>{% endfor %}
+                  </div>
+                  <form class="student-tag-add" action="{% url 'accounts:add_tutee_tag' tutee.pk %}" method="post">{% csrf_token %}<input type="text" name="text" maxlength="{{ so.tag_max_length }}" list="tutee-tag-suggestions" placeholder="新增標籤 / Add tag" aria-label="新增標籤 / Add tag" autocomplete="off"><button class="button button-small" type="submit">＋</button></form>
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table></div>
+          <datalist id="tutee-tag-suggestions">{% for text in so.tag_suggestions %}<option value="{{ text }}">{% endfor %}</datalist>
+          {% if so.page.paginator.num_pages > 1 %}<nav class="simple-pagination attendance-pager" aria-label="學生總覽分頁 / pages">{% if so.page.has_previous %}<a href="?{{ so.clear_qs }}&amp;{{ so.keys.page }}={{ so.page.previous_page_number }}#attendance">← 上一頁 / Previous</a>{% endif %}<form class="attendance-goto" method="get" action="#attendance">{% for key, value in so.page_hidden_params %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<input type="number" name="{{ so.keys.page }}" min="1" max="{{ so.page.paginator.num_pages }}" value="{{ so.page.number }}" aria-label="頁數 / Page number"><span>/ {{ so.page.paginator.num_pages }}</span></form>{% if so.page.has_next %}<a href="?{{ so.clear_qs }}&amp;{{ so.keys.page }}={{ so.page.next_page_number }}#attendance">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+          {% else %}<div class="empty-state">沒有符合的學生。 / No students found.</div>{% endif %}
+        </section>
+        {% endwith %}
       </section>
       <section class="dashboard-view" data-dashboard-panel="class-review">
         <div class="view-heading"><span>CLASS REVIEW</span><h2>課程審核 <small>Class review</small></h2></div>

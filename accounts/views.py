@@ -70,6 +70,7 @@ from tutoring.services import (
     annotate_conversation_summaries,
     anonymous_tutee_candidates,
     anonymous_tutee_profile,
+    tutee_attendance_summary,
     anonymous_tutor_candidates,
     anonymous_tutor_profile,
     synchronize_matching_state,
@@ -116,6 +117,9 @@ from .models import (
     DashboardSection,
     DepartmentOralExamPass,
     OralExamAnnouncement,
+    TUTEE_TAG_MAX_LENGTH,
+    TUTEE_TAG_MAX_PER_TUTEE,
+    TuteeTag,
     OralExamRegistration,
     ORAL_EXAM_MAX_REGISTRATIONS,
     OralExamRegistrationReviewStatus,
@@ -1288,6 +1292,68 @@ def dashboard(request):
                 for row in item["page"]:
                     row.person = getattr(row, item["user_field"])
         context["attendance_cards"] = attendance_cards
+        # 學生總覽(2026-11-19 助教要求):每位學生的簽到/課堂紀錄 準時、遲交、缺席次數(累計),
+        # 加上 Admin 自由輸入的標籤(老師搜尋學生時的卡片會顯示,學生本人看不到)。
+        stu_keys = {name: f"stu_{name}" for name in ("q", "sort", "dir", "page")}
+        stu_query = request.GET.get(stu_keys["q"], "").strip()[:60]
+        stu_sort = request.GET.get(stu_keys["sort"], "person")
+        if stu_sort not in ("person", "late", "absent"):
+            stu_sort = "person"
+        stu_dir = "desc" if request.GET.get(stu_keys["dir"]) == "desc" else "asc"
+        tutees = User.objects.filter(role=Role.TUTEE).exclude(
+            roster_entry__student_id__startswith="TEST-"
+        ).select_related("roster_entry__program").prefetch_related("admin_tags")
+        if stu_query:
+            tutees = tutees.filter(
+                Q(username__icontains=stu_query) | Q(name_zh__icontains=stu_query) | Q(name_en__icontains=stu_query)
+            )
+        summary = tutee_attendance_summary()
+        empty_stats = {
+            "checkin_on_time": 0, "checkin_late": 0, "checkin_absent": 0,
+            "record_on_time": 0, "record_late": 0, "record_absent": 0,
+        }
+        stu_rows = []
+        for tutee in tutees.order_by("username"):
+            tutee.stats = summary.get(tutee.pk, empty_stats)
+            tutee.late_total = tutee.stats["checkin_late"] + tutee.stats["record_late"]
+            tutee.absent_total = tutee.stats["checkin_absent"] + tutee.stats["record_absent"]
+            stu_rows.append(tutee)
+        if stu_sort == "late":
+            stu_rows.sort(key=lambda t: (t.late_total, t.username), reverse=(stu_dir == "desc"))
+        elif stu_sort == "absent":
+            stu_rows.sort(key=lambda t: (t.absent_total, t.username), reverse=(stu_dir == "desc"))
+        elif stu_dir == "desc":
+            stu_rows.reverse()
+
+        def stu_qs(exclude=(), **overrides):
+            params = {k: v for k, v in request.GET.items() if k not in exclude}
+            params.update(overrides)
+            return urlencode(params)
+
+        stu_sort_links = {}
+        for name in ("person", "late", "absent"):
+            next_dir = "desc" if (stu_sort == name and stu_dir == "asc") else "asc"
+            if name != "person" and stu_sort != name:
+                next_dir = "desc"
+            stu_sort_links[name] = stu_qs(exclude=(stu_keys["page"],), **{stu_keys["sort"]: name, stu_keys["dir"]: next_dir})
+        context["student_overview"] = {
+            "page": Paginator(stu_rows, 10).get_page(request.GET.get(stu_keys["page"])),
+            "total": len(stu_rows),
+            "query": stu_query,
+            "sort": stu_sort,
+            "direction": stu_dir,
+            "keys": stu_keys,
+            "sort_links": stu_sort_links,
+            "clear_qs": stu_qs(exclude=(stu_keys["page"], stu_keys["q"])),
+            "hidden_params": [
+                (k, v) for k, v in request.GET.items() if k not in (stu_keys["q"], stu_keys["page"])
+            ],
+            "page_hidden_params": [(k, v) for k, v in request.GET.items() if k != stu_keys["page"]],
+            "tag_suggestions": list(
+                TuteeTag.objects.values_list("text", flat=True).distinct().order_by("text")[:100]
+            ),
+            "tag_max_length": TUTEE_TAG_MAX_LENGTH,
+        }
         context["active_class_alerts"] = ClassAlert.objects.filter(
             status=ClassAlertStatus.ACTIVE
         ).select_related("session__pairing__semester", "reporter", "subject")
@@ -1930,6 +1996,46 @@ def save_announcement(request, pk=None):
     )
     messages.success(request, "公告已儲存。 / Announcement saved.")
     return redirect(redirect_target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def add_tutee_tag(request, pk):
+    """Admin 為學生新增一個標籤(2026-11-19):自由輸入,同一人不可重複,每人有數量上限。"""
+    target = reverse("accounts:dashboard") + "#attendance"
+    tutee = get_object_or_404(User, pk=pk, role=Role.TUTEE)
+    text = " ".join(request.POST.get("text", "").replace("#", " ").split())
+    if not text:
+        messages.error(request, "請輸入標籤內容。 / Please enter a tag.")
+        return redirect(target)
+    if len(text) > TUTEE_TAG_MAX_LENGTH:
+        messages.error(request, f"標籤最多 {TUTEE_TAG_MAX_LENGTH} 個字。 / Tags are limited to {TUTEE_TAG_MAX_LENGTH} characters.")
+        return redirect(target)
+    if tutee.admin_tags.filter(text__iexact=text).exists():
+        messages.error(request, "這位學生已經有相同的標籤。 / This tag already exists for the student.")
+        return redirect(target)
+    if tutee.admin_tags.count() >= TUTEE_TAG_MAX_PER_TUTEE:
+        messages.error(request, f"每位學生最多 {TUTEE_TAG_MAX_PER_TUTEE} 個標籤。 / Up to {TUTEE_TAG_MAX_PER_TUTEE} tags per student.")
+        return redirect(target)
+    tag = TuteeTag.objects.create(tutee=tutee, text=text, created_by=request.user)
+    log_event(
+        request, "TUTEE_TAG_ADDED", "新增學生標籤 / Student tag added",
+        target_user=tutee, metadata={"tag_id": tag.pk, "text": text},
+    )
+    return redirect(target)
+
+
+@role_required(Role.ADMIN)
+@require_POST
+def delete_tutee_tag(request, pk):
+    tag = get_object_or_404(TuteeTag.objects.select_related("tutee"), pk=pk)
+    tutee, text = tag.tutee, tag.text
+    tag.delete()
+    log_event(
+        request, "TUTEE_TAG_REMOVED", "移除學生標籤 / Student tag removed",
+        target_user=tutee, metadata={"text": text},
+    )
+    return redirect(reverse("accounts:dashboard") + "#attendance")
 
 
 @role_required(Role.ADMIN)

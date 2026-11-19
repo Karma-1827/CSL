@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, RosterEntry, User
+from accounts.models import AuditLog, EducationLevel, PartnerProgram, Role, RosterEntry, TuteeTag, User
 
 from .richtext import MAX_RICH_NOTE_LENGTH, sanitize_rich_text
 from .models import (
@@ -1004,7 +1004,60 @@ def anonymous_tutee_candidates(*, semester, tutor, filters=None):
         and (not days or any(day in profile.preferred_days for day in days))
         and (not time_slots or any(slot in profile.preferred_time_slots for slot in time_slots))
     ]
-    return [anonymous_tutee_profile(profile) for profile in profiles]
+    # 2026-11-19:Admin 寫的學生標籤只在「老師瀏覽候選學生」這一處帶出(配對後不顯示、
+    # 學生本人永遠看不到),所以放在這個候選清單函式,不放進共用的 anonymous_tutee_profile()。
+    tags_by_tutee = {}
+    for tag in TuteeTag.objects.filter(tutee_id__in=[profile.tutee_id for profile in profiles]):
+        tags_by_tutee.setdefault(tag.tutee_id, []).append(tag.text)
+    results = []
+    for profile in profiles:
+        data = anonymous_tutee_profile(profile)
+        data["tags"] = tags_by_tutee.get(profile.tutee_id, [])
+        results.append(data)
+    return results
+
+
+def tutee_attendance_summary(now=None):
+    """每位學生的簽到/課堂紀錄次數(累計全部學期,已取消的課不算)。
+
+    回傳 `{tutee_id: {...}}`,鍵:checkin_on_time/late/absent、record_on_time/late/absent。
+    「缺席」= 課堂已結束、學生沒有簽到(或沒有課堂紀錄);補簽/補登的算遲交,不算缺席。
+    """
+    now = now or timezone.now()
+    summary = {}
+
+    def bucket(tutee_id):
+        return summary.setdefault(tutee_id, {
+            "checkin_on_time": 0, "checkin_late": 0, "checkin_absent": 0,
+            "record_on_time": 0, "record_late": 0, "record_absent": 0,
+        })
+
+    sessions = ClassSession.objects.exclude(status=ClassSessionStatus.CANCELLED).filter(
+        pairing__tutee__role=Role.TUTEE
+    ).only("id", "class_date", "start_time", "duration", "pairing__tutee_id").select_related("pairing")
+    ended = {}
+    for session in sessions:
+        if session.ends_at <= now:
+            ended[session.pk] = session.pairing.tutee_id
+    checked_in = set()
+    for session_id, participant_id, is_makeup in Attendance.objects.filter(
+        participant__role=Role.TUTEE
+    ).exclude(session__status=ClassSessionStatus.CANCELLED).values_list("session_id", "participant_id", "is_makeup"):
+        bucket(participant_id)["checkin_late" if is_makeup else "checkin_on_time"] += 1
+        checked_in.add(session_id)
+    recorded = set()
+    for session_id, author_id, is_makeup in ClassRecord.objects.filter(
+        author__role=Role.TUTEE
+    ).exclude(session__status=ClassSessionStatus.CANCELLED).values_list("session_id", "author_id", "is_makeup"):
+        bucket(author_id)["record_late" if is_makeup else "record_on_time"] += 1
+        recorded.add(session_id)
+    for session_id, tutee_id in ended.items():
+        data = bucket(tutee_id)
+        if session_id not in checked_in:
+            data["checkin_absent"] += 1
+        if session_id not in recorded:
+            data["record_absent"] += 1
+    return summary
 
 
 def _is_test_account(user):

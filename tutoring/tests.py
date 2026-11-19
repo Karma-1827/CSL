@@ -15,7 +15,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import AuditLog, EducationLevel, IdentityCategory, PartnerProgram, Role, RosterEntry, User
+from accounts.models import AuditLog, EducationLevel, TuteeTag, IdentityCategory, PartnerProgram, Role, RosterEntry, User
 from .forms import ClassDocumentUploadForm, ClassRecordForm, HoursDownloadForm, ScheduleClassForm, SemesterCreateForm
 from .reporting import build_excel_xlsx, build_export_csv, build_hours_pdf, tutor_available_programs, user_has_hour_records
 
@@ -69,6 +69,7 @@ from .services import (
     add_incident_report_reply,
     anonymous_tutee_candidates,
     anonymous_tutor_candidates,
+    tutee_attendance_summary,
     archive_expired_semesters,
     cancel_check_in,
     check_in,
@@ -684,6 +685,18 @@ class MatchingTests(MatchingFixtureTestCase):
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertTrue(response.context["is_maryland"])
         self.assertContains(response, "已發送的邀請")
+
+    def test_candidate_cards_carry_admin_tags_for_tutors(self):
+        """2026-11-19:Admin 標籤只出現在老師搜尋學生的候選卡片資料裡。"""
+        TuteeTag.objects.create(tutee=self.tutee, text="需要多提醒")
+        candidate = next(
+            c for c in anonymous_tutee_candidates(semester=self.semester, tutor=self.tutor)
+            if c["user_id"] == self.tutee.pk
+        )
+        self.assertEqual(candidate["tags"], ["需要多提醒"])
+        self.assertNotIn("username", candidate)
+        self.client.force_login(self.tutor)
+        self.assertContains(self.client.get(reverse("accounts:dashboard")), "#需要多提醒")
 
     def test_candidate_list_excludes_test_prefixed_accounts(self):
         """2026-10-03(使用者回報真實學生誤邀到弱點掃描專用帳號「掃描老師乙」,要求
@@ -2809,6 +2822,55 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(response, "準時 / On time")
         self.client.force_login(session.pairing.tutor)
         self.assertNotContains(self.client.get(reverse("accounts:dashboard")), 'data-dashboard-panel="attendance"')
+
+    def test_student_overview_counts_on_time_late_and_absent(self):
+        """學生總覽(2026-11-19):累計準時/遲交/缺席;已結束但沒簽到、沒紀錄算缺席。"""
+        past = timezone.localdate() - timedelta(days=7)
+        session = self._confirmed_pending_session(class_date=past)
+        session.attendances.filter(participant=self.tutee).update(is_makeup=True)
+        # 另一堂已結束的課:學生完全沒簽到、沒填紀錄。
+        schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=past,
+            start_time=time(14), duration="1.0", now=self.aware(past, time(9)),
+        )
+        stats = tutee_attendance_summary()[self.tutee.pk]
+        self.assertEqual(
+            stats,
+            {
+                "checkin_on_time": 0, "checkin_late": 1, "checkin_absent": 1,
+                "record_on_time": 1, "record_late": 0, "record_absent": 1,
+            },
+        )
+
+    def test_admin_tags_students_and_tutor_sees_tags_only_on_candidate_cards(self):
+        admin = User.objects.create_superuser(username="TAG-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        add = reverse("accounts:add_tutee_tag", args=[self.tutee.pk])
+        self.client.post(add, {"text": "  #常遲交 "})
+        self.client.post(add, {"text": "常遲交"})  # 重複
+        self.client.post(add, {"text": "x" * 21})  # 太長
+        self.assertEqual(list(self.tutee.admin_tags.values_list("text", flat=True)), ["常遲交"])
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "#常遲交")
+        self.assertTrue(AuditLog.objects.filter(event_type="TUTEE_TAG_ADDED", target_user=self.tutee).exists())
+        for number in range(8):
+            self.client.post(add, {"text": f"t{number}"})
+        self.assertEqual(self.tutee.admin_tags.count(), 8)  # 上限 8
+        # 學生自己的頁面完全不出現標籤。
+        self.client.force_login(self.tutee)
+        for name in ("accounts:dashboard", "accounts:profile"):
+            self.assertNotContains(self.client.get(reverse(name)), "常遲交")
+        # 非 Admin 不能新增或刪除。
+        tag = self.tutee.admin_tags.first()
+        self.client.force_login(self.tutor)
+        self.client.post(add, {"text": "偷加"})
+        self.client.post(reverse("accounts:delete_tutee_tag", args=[tag.pk]))
+        self.assertFalse(self.tutee.admin_tags.filter(text="偷加").exists())
+        self.assertTrue(self.tutee.admin_tags.filter(pk=tag.pk).exists())
+        # Admin 可移除。
+        self.client.force_login(admin)
+        self.client.post(reverse("accounts:delete_tutee_tag", args=[tag.pk]))
+        self.assertFalse(self.tutee.admin_tags.filter(pk=tag.pk).exists())
 
     def test_admin_attendance_tab_paginates_by_five_and_supports_search_and_sort(self):
         session = self._confirmed_pending_session()

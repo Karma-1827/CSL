@@ -10,6 +10,7 @@
     <div><dt>國籍 / Nationality</dt><dd>{{ candidate.nationality }}</dd></div>
     <div><dt>華語程度 / Chinese level</dt><dd>{{ candidate.overall_level }}</dd></div>
   </dl>
+  {% if candidate.tags %}<div class="candidate-admin-tags" aria-label="管理員標籤 / Admin tags">{% for tag in candidate.tags %}<span>#{{ tag }}</span>{% endfor %}</div>{% endif %}
   <div class="candidate-details-grid">
     <div class="candidate-detail candidate-detail-card">
       <span>加強項目 / Learning focus</span>
