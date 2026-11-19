@@ -1300,9 +1300,10 @@ def dashboard(request):
         if stu_sort not in ("person", "late", "absent"):
             stu_sort = "person"
         stu_dir = "desc" if request.GET.get(stu_keys["dir"]) == "desc" else "asc"
-        tutees = User.objects.filter(role=Role.TUTEE).exclude(
+        # 只列「有配對過」的學生(含已結束的配對,使用者 2026-11-19 決定)。
+        tutees = User.objects.filter(role=Role.TUTEE, tutee_pairings__isnull=False).exclude(
             roster_entry__student_id__startswith="TEST-"
-        ).select_related("roster_entry__program").prefetch_related("admin_tags")
+        ).distinct().select_related("roster_entry__program").prefetch_related("admin_tags")
         if stu_query:
             tutees = tutees.filter(
                 Q(username__icontains=stu_query) | Q(name_zh__icontains=stu_query) | Q(name_en__icontains=stu_query)

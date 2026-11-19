@@ -2845,6 +2845,10 @@ class ClassWorkflowTests(TestCase):
     def test_admin_tags_students_and_tutor_sees_tags_only_on_candidate_cards(self):
         admin = User.objects.create_superuser(username="TAG-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)
+        unpaired = User.objects.create_user(username="UNPAIRED-TUTEE", password="x", role=Role.TUTEE)
+        listed = {t.pk for t in self.client.get(reverse("accounts:dashboard")).context["student_overview"]["page"]}
+        self.assertIn(self.tutee.pk, listed)
+        self.assertNotIn(unpaired.pk, listed)
         add = reverse("accounts:add_tutee_tag", args=[self.tutee.pk])
         self.client.post(add, {"text": "  #常遲交 "})
         self.client.post(add, {"text": "常遲交"})  # 重複
