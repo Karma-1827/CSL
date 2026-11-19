@@ -293,6 +293,9 @@ Git 僅同步程式碼、migration、template、static source、部署範本及�
 
 依第 6.5 節要求，每次正式部署完成後在此追加一筆紀錄（新的在最上面）。
 
+- **2026-11-19(一百六十八)**:操作者 Claude Code(依使用者指示「commit push 跟部署」執行)。上一版 `c198890` → 新版 `8581978`(Admin 側邊欄底部不再顯示「匿名媒合 / Private matching」提示,僅老師/學生顯示,詳見 `CLAUDE.md` 第 2 節)。**無 migration**(`migrate --plan` 無操作)、**無相依套件變更**,純 template 調整。部署前備份 `/var/backups/mpts/20261119-131724`(`db.dump` 3.3 MB、`media.tar.gz` 27.5 MB,確認檔案大小)。`collectstatic` 回報「0 static files copied, 160 unmodified」,`check` 無問題。驗收:`mpts-gunicorn.service`/`mpts-process-matching-state.timer` 皆 active、`nginx -t` 通過、首頁 200;重啟後日誌僅有既有的 `Control server error: Read-only file system`。**未能以正式帳號登入做端到端人工驗收**。
+  - **`git checkout --detach` 殘留舊檔**:`CLAUDE.md` 再次顯示 `M`,用 `sudo -n -u mpts git -C /opt/mpts checkout -- CLAUDE.md` 修復,`git status --short` 確認僅剩既有未追蹤的 `.cache/`、`staticfiles/`。
+  - **臨時 `sudoers.d/90-mpts-deploy-tmp` NOPASSWD 授權部署後刻意保持開啟**:使用者於本次部署時明確指示「不要每次都關起來，都先留著」,比照 2026-09-10 先例(使用者允許整段 session 保持開啟)。之後的 session 不可假設它仍然開著,須先以 `sudo -n true` 確認;使用者表示結束時再關閉(`sudo -n rm -f /etc/sudoers.d/90-mpts-deploy-tmp`)。**目前狀態:開啟中。**
 - **2026-11-19(一百六十七)**:操作者 Claude Code(依使用者指示「好」確認 commit/push/部署後執行)。上一版 `53bb0cf` → 新版 `c198890`(Admin 側邊欄順序調整為 17 項新順序,「解除審核」改名「解除配對」,詳見 `CLAUDE.md` 第 2 節)。**無 migration**(`migrate --plan` 無操作)、**無相依套件變更**,純 template 調整。部署前備份 `/var/backups/mpts/20261119-131419`(`db.dump` 3.3 MB、`media.tar.gz` 27.5 MB,確認檔案大小)。`collectstatic` 回報「0 static files copied, 160 unmodified」,`check` 無問題。驗收:`mpts-gunicorn.service`/`mpts-process-matching-state.timer` 皆 active、`nginx -t` 通過、首頁 200;重啟後日誌僅有既有的 `Control server error: Read-only file system`。**未能以正式帳號登入做端到端人工驗收**,待使用者在正式站確認 Admin 側邊欄順序與名稱。
   - **`git checkout --detach` 殘留舊檔**:`CLAUDE.md` 再次顯示 `M`,用 `sudo -n -u mpts git -C /opt/mpts checkout -- CLAUDE.md` 修復,`git status --short` 確認僅剩既有未追蹤的 `.cache/`、`staticfiles/`。
   - 臨時 `sudoers.d/90-mpts-deploy-tmp` NOPASSWD 授權由使用者於部署前在自己的終端機開設,部署完成後已由我移除,確認 `sudo -n true` 已失效。
