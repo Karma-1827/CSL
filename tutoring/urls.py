@@ -46,6 +46,7 @@ urlpatterns = [
         name="download_class_record_attachment",
     ),
     path("classes/<int:pk>/check-in/", views.class_check_in, name="class_check_in"),
+    path("classes/<int:pk>/check-in/cancel/", views.class_cancel_check_in, name="class_cancel_check_in"),
     path("classes/<int:pk>/confirm/", views.class_confirm, name="class_confirm"),
     path("classes/<int:pk>/cancel/", views.class_cancel, name="class_cancel"),
     path("classes/<int:pk>/reschedule/", views.class_reschedule, name="class_reschedule"),

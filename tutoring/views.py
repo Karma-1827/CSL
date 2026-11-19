@@ -37,6 +37,7 @@ from .services import (
     class_review_can_contact_office,
     acknowledge_pairing_release_notice,
     add_incident_report_reply,
+    cancel_check_in,
     cancel_class,
     cancel_class_alert,
     cancel_invitation,
@@ -812,6 +813,22 @@ def class_check_in(request, pk):
     else:
         label = "補簽到已送出" if attendance.is_makeup else "簽到完成"
         messages.success(request, f"{label}。 / Check-in submitted.")
+    return redirect("tutoring:class_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def class_cancel_check_in(request, pk):
+    session = _session_for_user(request.user, pk)
+    pairing = session.pairing
+    which = request.POST.get("target", "own")
+    target = pairing.tutee if which == "counterpart" else pairing.tutor
+    try:
+        cancel_check_in(session_id=pk, actor=request.user, target=target)
+    except (ValidationError, ObjectDoesNotExist) as error:
+        _show_validation_error(request, error)
+    else:
+        messages.success(request, "已取消簽到。 / Check-in cancelled.")
     return redirect("tutoring:class_detail", pk=pk)
 
 

@@ -28,7 +28,8 @@
         <section class="panel class-action-panel">
           <div class="panel-heading"><div><span class="eyebrow">ATTENDANCE</span><h2>課堂簽到 <small>Class check-in</small></h2></div></div>
           {% if own_attendance %}
-            <div class="completion-box"><strong>已完成簽到 / Checked in</strong><span>{{ own_attendance.signed_at|date:"Y-m-d H:i" }}</span>{% if own_attendance.is_makeup %}<em>補簽到，待雙方確認及管理員審核 / Makeup check-in</em>{% endif %}</div>
+            <div class="completion-box"><strong>已完成簽到 / Checked in</strong><span>{{ own_attendance.signed_at|date:"Y-m-d H:i" }}</span>{% if own_attendance.is_makeup %}<em>補簽到，待雙方確認及管理員審核 / Makeup check-in</em>{% endif %}
+              {% if request.user.role == 'TUTOR' and not own_record and class_review.status != 'APPROVED' %}<form action="{% url 'tutoring:class_cancel_check_in' session.pk %}" method="post" data-confirm="確定取消我的簽到？ / Cancel my check-in?">{% csrf_token %}<input type="hidden" name="target" value="own"><button class="button button-secondary button-small" type="submit">取消我的簽到 / Cancel my check-in</button></form>{% endif %}</div>
           {% else %}
             <form action="{% url 'tutoring:class_check_in' session.pk %}" method="post" class="stack-form">
               {% csrf_token %}
@@ -36,6 +37,10 @@
               <button class="button button-primary" type="submit">{% if checkin_requires_makeup_reason %}補簽到 / Makeup check-in{% else %}確認簽到 / Check in{% endif %}</button>
               <p class="help-text">上課前 10 分鐘開放，一般簽到至課程結束後 30 分鐘。<br>Normal check-in opens 10 minutes before class and closes 30 minutes after.</p>
             </form>
+          {% endif %}
+          {% if request.user.role == 'TUTOR' and counterpart_attendance %}
+            <div class="completion-box"><strong>學生已簽到 / Student checked in</strong><span>{{ counterpart_attendance.signed_at|date:"Y-m-d H:i" }}</span>
+              {% if not counterpart_record and class_review.status != 'APPROVED' %}<form action="{% url 'tutoring:class_cancel_check_in' session.pk %}" method="post" data-confirm="確定取消學生簽到？ / Cancel student's check-in?">{% csrf_token %}<input type="hidden" name="target" value="counterpart"><button class="button button-secondary button-small" type="submit">取消學生簽到 / Cancel student's check-in</button></form>{% endif %}</div>
           {% endif %}
         </section>
 

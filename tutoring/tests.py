@@ -70,6 +70,7 @@ from .services import (
     anonymous_tutee_candidates,
     anonymous_tutor_candidates,
     archive_expired_semesters,
+    cancel_check_in,
     check_in,
     cancel_class_alert,
     cancel_invitation,
@@ -1872,6 +1873,26 @@ class ClassWorkflowTests(TestCase):
         self.assertEqual(form.cleaned_data["start_time"], time(17, 20))
         minute_choices = [value for value, _label in form.fields["start_time"].widget.widgets[1].choices]
         self.assertEqual(minute_choices, [f"{minute:02d}" for minute in range(0, 60, 5)])
+
+    def test_tutor_can_cancel_own_and_tutee_check_in_but_not_after_record(self):
+        class_date = timezone.localdate()
+        session = schedule_classes(
+            tutor=self.tutor, pairing=self.pairing, class_date=class_date,
+            start_time=time(10), duration="1.0", now=self.aware(class_date, time(9)),
+        )[0]
+        now = self.aware(class_date, time(11, 5))
+        check_in(session_id=session.pk, participant=self.tutor, now=now)
+        check_in(session_id=session.pk, participant=self.tutee, now=now)
+        with self.assertRaises(ValidationError):
+            cancel_check_in(session_id=session.pk, actor=self.tutee, target=self.tutee)
+        cancel_check_in(session_id=session.pk, actor=self.tutor, target=self.tutee)
+        self.assertFalse(session.attendances.filter(participant=self.tutee).exists())
+        with self.assertRaises(ValidationError):
+            cancel_check_in(session_id=session.pk, actor=self.tutor, target=self.tutee)
+        submit_class_record(session_id=session.pk, author=self.tutor, data=self.record_data("老師紀錄"), now=now)
+        with self.assertRaises(ValidationError):
+            cancel_check_in(session_id=session.pk, actor=self.tutor, target=self.tutor)
+        self.assertTrue(AuditLog.objects.filter(event_type="CLASS_CHECK_IN_CANCELLED").exists())
 
     def test_mutual_confirmation_alone_no_longer_creates_valid_hours_without_admin_review(self):
         """2026-09-10 (user-requested): every class now needs admin approval on top of

@@ -1295,6 +1295,36 @@ def check_in(*, session_id, participant, reason="", now=None):
 
 
 @transaction.atomic
+def cancel_check_in(*, session_id, actor, target):
+    """老師取消已簽到的紀錄(自己或學生的)。已填課堂紀錄或審核通過後不可取消。"""
+    session = ClassSession.objects.select_for_update().select_related("pairing__semester", "pairing__tutor", "pairing__tutee").get(pk=session_id)
+    if actor.pk != session.pairing.tutor_id:
+        raise ValidationError("只有老師可以取消簽到。 / Only the teacher can cancel a check-in.")
+    if target.pk not in (session.pairing.tutor_id, session.pairing.tutee_id):
+        raise ValidationError("對象不是這堂課的參與者。 / The target is not a participant in this class.")
+    if session.status != ClassSessionStatus.SCHEDULED:
+        raise ValidationError("已取消的課程無法變更簽到。 / A cancelled class cannot be changed.")
+    attendance = Attendance.objects.filter(session=session, participant=target).first()
+    if attendance is None:
+        raise ValidationError("此人尚未簽到。 / This person has not checked in.")
+    if ClassRecord.objects.filter(session=session, author=target).exists():
+        raise ValidationError("已填寫課堂紀錄，無法取消簽到。 / A class record already exists, so the check-in cannot be cancelled.")
+    review = getattr(session, "class_review", None)
+    if review and review.status == ClassReviewStatus.APPROVED:
+        raise ValidationError("審核通過的課堂無法取消簽到。 / An approved class cannot have its check-in cancelled.")
+    attendance_id = attendance.pk
+    was_makeup = attendance.is_makeup
+    attendance.delete()
+    AuditLog.record(
+        actor=actor,
+        target_user=target,
+        event_type="CLASS_CHECK_IN_CANCELLED",
+        description="老師取消簽到 / Teacher cancelled a check-in",
+        metadata={"session_id": session.pk, "attendance_id": attendance_id, "was_makeup": was_makeup, "own": actor.pk == target.pk},
+    )
+
+
+@transaction.atomic
 def submit_class_record(*, session_id, author, data, reason="", now=None):
     now = now or timezone.now()
     session = ClassSession.objects.select_for_update().select_related("pairing__semester", "pairing__tutor", "pairing__tutee").get(pk=session_id)
