@@ -338,5 +338,17 @@
     });
   });
 
+  // 出缺席頁籤:每張卡片內的「簽到 / 課堂紀錄」小分頁切換(純顯示切換)。
+  document.querySelectorAll("[data-subtab-group]").forEach((group) => {
+    const buttons = group.querySelectorAll("[data-subtab]");
+    const panels = group.querySelectorAll("[data-subpanel]");
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((b) => b.classList.toggle("is-active", b === button));
+        panels.forEach((p) => { p.hidden = p.dataset.subpanel !== button.dataset.subtab; });
+      });
+    });
+  });
+
   activate(location.hash.slice(1) || "overview", { updateHistory: false });
 })();

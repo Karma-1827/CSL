@@ -1577,15 +1577,16 @@ class MatchingExclusionTests(MatchingFixtureTestCase):
             response = self.client.get(reverse("accounts:dashboard"))
             self.assertNotContains(response, "內部測試原因")
 
-    def test_admin_navigation_places_exclusions_between_matching_and_releases(self):
+    def test_admin_navigation_places_exclusions_after_matching_and_releases(self):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("accounts:dashboard"))
         content = response.content.decode()
         matching_index = content.index('data-dashboard-target="matching"')
         exclusion_index = content.index('data-dashboard-target="matching-exclusions"')
         release_index = content.index('data-dashboard-target="pairing-releases"')
-        self.assertLess(matching_index, exclusion_index)
-        self.assertLess(exclusion_index, release_index)
+        # 2026-11-19 側邊欄順序:配對管理 → 解除配對 → 配對排除
+        self.assertLess(matching_index, release_index)
+        self.assertLess(release_index, exclusion_index)
         self.assertContains(response, "內部原因不會顯示給使用者")
 
     def test_admin_exclusion_user_fields_support_name_or_student_id_search(self):
@@ -2788,6 +2789,63 @@ class ClassWorkflowTests(TestCase):
         maryland_detail = self.client.get(reverse("tutoring:class_detail", args=[maryland_session.pk]))
         self.assertContains(maryland_detail, '<span class="privacy-chip">馬里蘭大學 <small>MARYLAND</small></span>', html=True)
 
+    def test_admin_attendance_tab_lists_checkins_and_records_with_on_time_or_late_status(self):
+        """出缺席頁籤:老師/學生各一張卡片,各有簽到與課堂紀錄兩份清單,狀態為準時/遲交。"""
+        session = self._confirmed_pending_session()
+        late = session.attendances.filter(participant__role="TUTEE").get()
+        late.is_makeup = True
+        late.save(update_fields=["is_makeup"])
+        admin = User.objects.create_superuser(username="ATTENDANCE-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, 'data-dashboard-panel="attendance"')
+        cards = {card["role"]: card for card in response.context["attendance_cards"]}
+        self.assertEqual(set(cards), {"tutor", "tutee"})
+        tutee_checkin = cards["tutee"]["lists"][0]
+        self.assertEqual((tutee_checkin["total"], tutee_checkin["late"]), (1, 1))
+        self.assertEqual(cards["tutor"]["lists"][0]["late"], 0)
+        self.assertEqual(cards["tutor"]["lists"][1]["total"], 1)
+        self.assertContains(response, "遲交 / Late")
+        self.assertContains(response, "準時 / On time")
+        self.client.force_login(session.pairing.tutor)
+        self.assertNotContains(self.client.get(reverse("accounts:dashboard")), 'data-dashboard-panel="attendance"')
+
+    def test_admin_attendance_tab_paginates_by_five_and_supports_search_and_sort(self):
+        session = self._confirmed_pending_session()
+        tutee = session.pairing.tutee
+        for offset in range(1, 7):
+            extra = self._confirmed_pending_session(class_date=timezone.localdate() + timedelta(days=offset * 7))
+            extra.attendances.filter(participant=extra.pairing.tutee).update(is_makeup=True)
+        admin = User.objects.create_superuser(username="ATTENDANCE-ADMIN2", password="Admin-password-2026")
+        self.client.force_login(admin)
+        url = reverse("accounts:dashboard")
+
+        def tutor_checkin(params=""):
+            response = self.client.get(url + params)
+            card = {c["role"]: c for c in response.context["attendance_cards"]}["tutee"]
+            return card["lists"][0]
+
+        item = tutor_checkin()
+        self.assertEqual(len(item["page"].object_list), 5)
+        self.assertGreater(item["page"].paginator.num_pages, 1)
+        dates = [row.session.class_date for row in item["page"]]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+        asc = tutor_checkin("?att_tutee_checkin_dir=asc")
+        asc_dates = [row.session.class_date for row in asc["page"]]
+        self.assertEqual(asc_dates, sorted(asc_dates))
+        found = tutor_checkin(f"?att_tutee_checkin_q={tutee.username}")
+        self.assertTrue(found["page"].object_list)
+        self.assertTrue(all(r.person.username == tutee.username for r in found["page"]))
+        self.assertEqual(tutor_checkin("?att_tutee_checkin_q=NO-SUCH-PERSON")["page"].paginator.count, 0)
+        by_status = tutor_checkin("?att_tutee_checkin_sort=status&att_tutee_checkin_dir=asc")
+        self.assertFalse(list(by_status["page"])[0].is_makeup)
+        self.assertEqual(tutor_checkin("?att_tutee_checkin_sort=bogus")["sort"], "date")
+        response = self.client.get(url + "?att_tutee_checkin_q=" + tutee.username)
+        self.assertContains(response, 'name="att_tutee_checkin_page" min="1"')
+        self.assertContains(response, 'name="att_tutee_checkin_q" value="' + tutee.username + '"')
+        self.assertEqual(tutor_checkin("?att_tutee_checkin_page=2")["page"].number, 2)
+        self.assertEqual(tutor_checkin("?att_tutee_checkin_page=999")["page"].number, item["page"].paginator.num_pages)
+
     def test_admin_dashboard_class_review_list_has_no_inline_actions(self):
         """2026-10-02(使用者要求「都說審核欄位和三個按鈕可以拿掉了，不會在卡片外做
         審核」):dashboard 課程審核清單的每一列不應該再有任何審核意見輸入框、通過/待補正/
@@ -2959,14 +3017,22 @@ class ClassWorkflowTests(TestCase):
         page1_content = page1.content.decode()
         self.assertIn('aria-label="等待管理員核准分頁', page1_content)
         self.assertEqual(page1_content.count("review-detail-link"), 7)
-        self.assertContains(page1, "下一頁 / Next")
-        self.assertNotContains(page1, "上一頁 / Previous")
+        review1 = self._class_review_panel(page1_content)
+        self.assertIn("下一頁 / Next", review1)
+        self.assertNotIn("上一頁 / Previous", review1)
 
         page2 = self.client.get(reverse("accounts:dashboard"), {"pending_page": 2})
         page2_content = page2.content.decode()
         self.assertEqual(page2_content.count("review-detail-link"), 2)
-        self.assertContains(page2, "上一頁 / Previous")
-        self.assertNotContains(page2, "下一頁 / Next")
+        review2 = self._class_review_panel(page2_content)
+        self.assertIn("上一頁 / Previous", review2)
+        self.assertNotIn("下一頁 / Next", review2)
+
+    @staticmethod
+    def _class_review_panel(content):
+        start = content.index('data-dashboard-panel="class-review"')
+        end = content.find('<section class="dashboard-view"', start)
+        return content[start:end if end != -1 else None]
 
     def test_admin_dashboard_class_review_names_link_to_participant_profiles(self):
         """2026-10-02(使用者要求):Admin dashboard「課程審核」清單的老師/學生姓名要能各自

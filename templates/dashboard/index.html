@@ -21,6 +21,7 @@
             <a class="sidebar-link" href="#roster" data-dashboard-target="roster"><span aria-hidden="true">☷</span><b>學生名冊<small>Student roster</small></b></a>
             <a class="sidebar-link" href="#qualifications" data-dashboard-target="qualifications"><span aria-hidden="true">✓</span><b>口語能力審核<small>Oral proficiency</small></b>{% if pending_qualifications %}<em>{{ pending_qualifications|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-overview" data-dashboard-target="class-overview"><span aria-hidden="true">▦</span><b>課程總覽<small>Classes</small></b>{% if class_overview_totals.exceptions %}<em>{{ class_overview_totals.exceptions }}</em>{% endif %}</a>
+            <a class="sidebar-link" href="#attendance" data-dashboard-target="attendance"><span aria-hidden="true">☑</span><b>出缺席<small>Attendance</small></b></a>
             <a class="sidebar-link" href="#class-review" data-dashboard-target="class-review"><span aria-hidden="true">↺</span><b>課程審核<small>Class review</small></b>{% if pending_class_reviews %}<em>{{ pending_class_reviews|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#class-alerts" data-dashboard-target="class-alerts"><span aria-hidden="true">!</span><b>課堂通報<small>Class alerts</small></b>{% if active_class_alerts %}<em>{{ active_class_alerts|length }}</em>{% endif %}</a>
             <a class="sidebar-link" href="#incident-reports" data-dashboard-target="incident-reports"><span aria-hidden="true">⚑</span><b>異常回報<small>Incident reports</small></b>{% if pending_incident_reports %}<em>{{ pending_incident_reports|length }}</em>{% endif %}</a>
@@ -347,6 +348,37 @@
           {% else %}<div class="empty-state">目前沒有已紀錄的回報。 / No logged reports yet.</div>{% endif %}
         </details>
       </section>
+      <section class="dashboard-view" data-dashboard-panel="attendance">
+        <div class="view-heading"><span>ATTENDANCE</span><h2>出缺席 <small>Attendance</small></h2></div>
+        {% for card in attendance_cards %}
+        <section class="panel attendance-card" data-subtab-group>
+          <div class="panel-heading"><div><span class="eyebrow">{{ card.role|upper }}</span><h2>{{ card.label }} <small>{{ card.label_en }}</small></h2></div></div>
+          <div class="attendance-subtabs" role="tablist">
+            {% for item in card.lists %}<button type="button" class="attendance-subtab{% if item.kind == card.active_kind %} is-active{% endif %}" data-subtab="{{ item.kind }}" role="tab">{{ item.label }} <small>{{ item.label_en }}</small> <em>{{ item.total }}</em></button>{% endfor %}
+          </div>
+          {% for item in card.lists %}
+          <div class="attendance-subpanel" data-subpanel="{{ item.kind }}"{% if item.kind != card.active_kind %} hidden{% endif %}>
+            <p class="help-text">共 {{ item.total }} 筆，遲交 {{ item.late }} 筆。 / {{ item.total }} total, {{ item.late }} late.</p>
+            <form class="attendance-search" method="get" action="#attendance">
+              {% for key, value in item.hidden_params %}{% if key != item.sort_param and key != item.dir_param %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+              <input type="search" name="{{ item.q_param }}" value="{{ item.query }}" placeholder="搜尋學號或姓名 / Search ID or name" maxlength="60">
+              <select name="{{ item.sort_param }}" aria-label="排序 / Sort"><option value="date"{% if item.sort == 'date' %} selected{% endif %}>依日期 / By date</option><option value="person"{% if item.sort == 'person' %} selected{% endif %}>依學號 / By ID</option><option value="status"{% if item.sort == 'status' %} selected{% endif %}>依狀態 / By status</option></select>
+              <select name="{{ item.dir_param }}" aria-label="順序 / Order"><option value="desc"{% if item.direction == 'desc' %} selected{% endif %}>新到舊 / 遞減 Desc</option><option value="asc"{% if item.direction == 'asc' %} selected{% endif %}>舊到新 / 遞增 Asc</option></select>
+              <button class="button button-small" type="submit">搜尋 / Search</button>
+              {% if item.query %}<a class="button button-secondary button-small" href="?{{ item.clear_qs }}#attendance">清除 / Clear</a>{% endif %}
+            </form>
+            {% if item.page.object_list %}
+              <div class="table-wrap"><table>
+                <thead><tr><th><a href="?{{ item.sort_links.date }}#attendance">課堂日期時間 / Class date &amp; time{% if item.sort == 'date' %} {% if item.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}</a></th><th><a href="?{{ item.sort_links.person }}#attendance">學號姓名 / ID &amp; name{% if item.sort == 'person' %} {% if item.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}</a></th><th><a href="?{{ item.sort_links.status }}#attendance">狀態 / Status{% if item.sort == 'status' %} {% if item.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}</a></th></tr></thead>
+                <tbody>{% for row in item.page %}<tr><td><a href="{% url 'tutoring:class_detail' row.session_id %}">{{ row.session.class_date|date:"Y-m-d" }} {{ row.session.start_time|time:"H:i" }}</a></td><td><a href="{% url 'accounts:admin_user_profile' row.person.pk %}">{{ row.person.bilingual_name }}</a><small>{{ row.person.username }}</small></td><td>{% if row.is_makeup %}<span class="result-text status-rejected">遲交 / Late</span>{% else %}<span class="result-text status-approved">準時 / On time</span>{% endif %}</td></tr>{% endfor %}</tbody>
+              </table></div>
+              {% if item.page.paginator.num_pages > 1 %}<nav class="simple-pagination attendance-pager" aria-label="{{ card.label }}{{ item.label }}分頁 / pages">{% if item.page.has_previous %}<a href="?{{ item.base_qs }}{% if item.base_qs %}&amp;{% endif %}{{ item.page_param }}={{ item.page.previous_page_number }}#attendance">← 上一頁 / Previous</a>{% endif %}<form class="attendance-goto" method="get" action="#attendance">{% for key, value in item.page_hidden_params %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<input type="number" name="{{ item.page_param }}" min="1" max="{{ item.page.paginator.num_pages }}" value="{{ item.page.number }}" aria-label="頁數，按 Enter 前往 / Page number, press Enter to go" title="輸入頁數後按 Enter / Type a page number and press Enter"><span>/ {{ item.page.paginator.num_pages }}</span></form>{% if item.page.has_next %}<a href="?{{ item.base_qs }}{% if item.base_qs %}&amp;{% endif %}{{ item.page_param }}={{ item.page.next_page_number }}#attendance">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+            {% else %}<div class="empty-state">目前沒有紀錄。 / No records yet.</div>{% endif %}
+          </div>
+          {% endfor %}
+        </section>
+        {% endfor %}
+      </section>
       <section class="dashboard-view" data-dashboard-panel="class-review">
         <div class="view-heading"><span>CLASS REVIEW</span><h2>課程審核 <small>Class review</small></h2></div>
         <p class="form-note bilingual-note">雙方完成簽到、課堂紀錄與互相確認後，仍須經管理員逐筆核准才會計入有效時數，不論是否為補登。<br>Every class needs admin approval on top of mutual confirmation to count as valid hours, whether it was completed on time or as a makeup.</p>
@@ -580,7 +612,7 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
-<script src="{% static 'js/dashboard.js' %}?v=20261112-exam-actions-spacing" defer></script>
+<script src="{% static 'js/dashboard.js' %}?v=20261119-attendance" defer></script>
 <script src="{% static 'js/profile-options.js' %}" defer></script>
 <script src="{% static 'js/confirm-submit.js' %}?v=20260809-1" defer></script>
 <script src="{% static 'js/file-size-check.js' %}?v=20260906-1" defer></script>

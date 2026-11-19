@@ -10,6 +10,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
+from urllib.parse import urlencode
+
 from django.core.paginator import Paginator
 from django.core.validators import URLValidator
 from django.db import transaction
@@ -21,6 +23,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from tutoring.models import (
+    Attendance,
+    ClassRecord,
     InvitationStatus,
     MatchingExclusion,
     MatchingInvitation,
@@ -1198,6 +1202,92 @@ def dashboard(request):
         context["pending_class_reviews"] = [
             review for review in class_reviews if review.status == ClassReviewStatus.PENDING
         ]
+        # 出缺席:老師/學生各一組,分別列出簽到與課堂紀錄(預設最新課堂在前,每頁 5 筆)。
+        # 狀態:補簽到/補課堂紀錄 = 遲交,其餘 = 準時。取消的課程不列入。
+        # 每份清單各自有搜尋(學號/姓名)、排序(日期/學號姓名/狀態)與分頁參數,互不影響。
+        sort_fields = {
+            "date": ("session__class_date", "session__start_time"),
+            "person": ("{user}__username",),
+            "status": ("is_makeup",),
+        }
+        attendance_cards = []
+        for role, label, label_en in ((Role.TUTOR, "老師", "Teachers"), (Role.TUTEE, "學生", "Students")):
+            lists = []
+            for kind, kind_label, kind_label_en, queryset, user_field in (
+                ("checkin", "簽到", "Check-in", Attendance.objects.filter(participant__role=role), "participant"),
+                ("record", "課堂紀錄", "Class records", ClassRecord.objects.filter(author__role=role), "author"),
+            ):
+                prefix = f"att_{role.lower()}_{kind}"
+                keys = {name: f"{prefix}_{name}" for name in ("q", "sort", "dir", "page")}
+                query = request.GET.get(keys["q"], "").strip()[:60]
+                sort = request.GET.get(keys["sort"], "date")
+                if sort not in sort_fields:
+                    sort = "date"
+                direction = "asc" if request.GET.get(keys["dir"]) == "asc" else "desc"
+                base = queryset.exclude(session__status=ClassSessionStatus.CANCELLED)
+                total = base.count()
+                late = base.filter(is_makeup=True).count()
+                rows = base.select_related(user_field, "session")
+                if query:
+                    rows = rows.filter(
+                        Q(**{f"{user_field}__username__icontains": query})
+                        | Q(**{f"{user_field}__name_zh__icontains": query})
+                        | Q(**{f"{user_field}__name_en__icontains": query})
+                    )
+                ordering = [f.format(user=user_field) for f in sort_fields[sort]]
+                ordering = [("-" if direction == "desc" else "") + f for f in ordering]
+                rows = rows.order_by(*ordering, "pk")
+
+                def build_qs(exclude=(), **overrides):
+                    params = {k: v for k, v in request.GET.items() if k not in exclude}
+                    params.update(overrides)
+                    return urlencode(params)
+
+                sort_links = {}
+                for name in sort_fields:
+                    next_dir = "asc" if (sort == name and direction == "desc") else "desc"
+                    if sort != name and name == "person":
+                        next_dir = "asc"
+                    sort_links[name] = build_qs(
+                        exclude=(keys["page"],), **{keys["sort"]: name, keys["dir"]: next_dir}
+                    )
+                lists.append({
+                    "kind": kind,
+                    "label": kind_label,
+                    "label_en": kind_label_en,
+                    "page_param": keys["page"],
+                    "total": total,
+                    "late": late,
+                    "query": query,
+                    "sort": sort,
+                    "direction": direction,
+                    "q_param": keys["q"],
+                    "sort_param": keys["sort"],
+                    "dir_param": keys["dir"],
+                    "sort_links": sort_links,
+                    "base_qs": build_qs(exclude=(keys["page"],)),
+                    "clear_qs": build_qs(exclude=(keys["page"], keys["q"])),
+                    "page_hidden_params": [
+                        (k, v) for k, v in request.GET.items() if k != keys["page"]
+                    ],
+                    "hidden_params": [
+                        (k, v) for k, v in request.GET.items()
+                        if k not in (keys["q"], keys["page"])
+                    ],
+                    "page": Paginator(rows, 5).get_page(request.GET.get(keys["page"])),
+                    "user_field": user_field,
+                    "touched": any(key in request.GET for key in keys.values()),
+                })
+            active_kind = next((item["kind"] for item in lists if item["touched"]), "checkin")
+            attendance_cards.append({
+                "role": role.lower(), "label": label, "label_en": label_en,
+                "lists": lists, "active_kind": active_kind,
+            })
+        for card in attendance_cards:
+            for item in card["lists"]:
+                for row in item["page"]:
+                    row.person = getattr(row, item["user_field"])
+        context["attendance_cards"] = attendance_cards
         context["active_class_alerts"] = ClassAlert.objects.filter(
             status=ClassAlertStatus.ACTIVE
         ).select_related("session__pairing__semester", "reporter", "subject")
