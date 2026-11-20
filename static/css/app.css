@@ -7172,4 +7172,6 @@ td small {
 .student-tag-add { display: inline-flex; gap: 6px; margin: 0; }
 .student-tag-add input { width: 9.5em; padding: 4px 8px; }
 .candidate-admin-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
-.candidate-admin-tags span { padding: 2px 10px; border-radius: 999px; background: var(--ocean-100); color: var(--ocean-800); font-size: 0.8rem; font-weight: 700; }
+.candidate-admin-tags span { color: var(--slate-700, #5b6675); font-size: 0.72rem; font-style: italic; font-weight: 400; }
+/* 有標籤時,頭部與標籤之間不畫分隔線 */
+.candidate-card-head:has(+ .candidate-admin-tags) { border-bottom: 0; padding-bottom: 0; }
