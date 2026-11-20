@@ -2842,6 +2842,14 @@ class ClassWorkflowTests(TestCase):
             },
         )
 
+    def test_student_overview_defaults_to_late_count_descending(self):
+        admin = User.objects.create_superuser(username="DEFAULT-SORT-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        overview = self.client.get(reverse("accounts:dashboard")).context["student_overview"]
+        self.assertEqual((overview["sort"], overview["direction"]), ("late", "desc"))
+        overview = self.client.get(reverse("accounts:dashboard") + "?stu_sort=person").context["student_overview"]
+        self.assertEqual((overview["sort"], overview["direction"]), ("person", "asc"))
+
     def test_admin_tags_students_and_tutor_sees_tags_only_on_candidate_cards(self):
         admin = User.objects.create_superuser(username="TAG-ADMIN", password="Admin-password-2026")
         self.client.force_login(admin)

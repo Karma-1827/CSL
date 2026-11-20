@@ -1296,10 +1296,14 @@ def dashboard(request):
         # 加上 Admin 自由輸入的標籤(老師搜尋學生時的卡片會顯示,學生本人看不到)。
         stu_keys = {name: f"stu_{name}" for name in ("q", "sort", "dir", "page")}
         stu_query = request.GET.get(stu_keys["q"], "").strip()[:60]
-        stu_sort = request.GET.get(stu_keys["sort"], "person")
+        stu_sort = request.GET.get(stu_keys["sort"], "late")  # 預設依遲交次數由多到少(2026-11-20)
         if stu_sort not in ("person", "late", "absent"):
-            stu_sort = "person"
-        stu_dir = "desc" if request.GET.get(stu_keys["dir"]) == "desc" else "asc"
+            stu_sort = "late"
+        # 沒指定順序時:依次數排序預設遞減,依學號排序預設遞增。
+        stu_dir_param = request.GET.get(stu_keys["dir"])
+        if stu_dir_param not in ("asc", "desc"):
+            stu_dir_param = "asc" if stu_sort == "person" else "desc"
+        stu_dir = stu_dir_param
         # 只列「有配對過」的學生(含已結束的配對,使用者 2026-11-19 決定)。
         tutees = User.objects.filter(role=Role.TUTEE, tutee_pairings__isnull=False).exclude(
             roster_entry__student_id__startswith="TEST-"
