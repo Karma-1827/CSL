@@ -2774,6 +2774,15 @@ class ClassWorkflowTests(TestCase):
         self.assertContains(detail, '<button class="button button-secondary" name="action" value="revise">待補正 / Revise</button>', html=True)
         self.assertContains(detail, '<button class="button button-danger" name="action" value="reject">未通過 / Reject</button>', html=True)
 
+    def test_admin_class_detail_decision_form_has_preset_comment_buttons(self):
+        """2026-11-20:審核意見框下方有常用意見按鈕,點一下由 JS 放進輸入框。"""
+        session = self._confirmed_pending_session()
+        admin = User.objects.create_superuser(username="PRESET-ADMIN", password="Admin-password-2026")
+        self.client.force_login(admin)
+        detail = self.client.get(reverse("tutoring:class_detail", args=[session.pk]))
+        self.assertContains(detail, "data-note-presets")
+        self.assertContains(detail, 'data-preset-text="請繼續加油！⋆✦٩（｡•̀ᴗ•́｡）و✦⋆"')
+
     def test_admin_class_detail_decision_form_shows_the_tutees_program_tag(self):
         """2026-10-13(使用者要求「課程審核 Class review decision，由上面加上師大外籍生/
         馬里蘭大學的標籤，這樣審課的人比較清楚是哪個計畫」):標籤看 Tutee 的

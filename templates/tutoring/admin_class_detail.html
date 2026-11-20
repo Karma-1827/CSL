@@ -152,7 +152,12 @@
         </form>
         {% if class_review_history.0.note %}<div class="help-text"><strong>上一則留言 / Previous comment：</strong>{{ class_review_history.0.note|rich_note }}</div>{% endif %}
         <form action="{% url 'tutoring:review_class' session.pk %}" method="post" class="stack-form">
-          {% csrf_token %}<input type="hidden" name="next" value="detail"><div class="rich-note-field"><span class="rich-note-label">審核意見 / Review comments</span><textarea name="note" rows="3" data-rich-note></textarea></div>
+          {% csrf_token %}<input type="hidden" name="next" value="detail"><div class="rich-note-field"><span class="rich-note-label">審核意見 / Review comments</span><textarea name="note" rows="3" data-rich-note></textarea>
+            {% comment %}預設審核意見(2026-11-20):點一下把文字放進上方輸入框;沒有 JS 時整列保持隱藏。要新增常用語就多加一顆 button。{% endcomment %}
+            <div class="note-presets" data-note-presets hidden>
+              <span>常用意見 / Quick comments</span>
+              <button type="button" class="note-preset" data-preset-text="請繼續加油！⋆✦٩（｡•̀ᴗ•́｡）و✦⋆">請繼續加油！⋆✦٩（｡•̀ᴗ•́｡）و✦⋆</button>
+            </div></div>
           <div class="inline-actions"><button class="button button-success" name="action" value="approve">通過 / Approve</button><button class="button button-secondary" name="action" value="revise">待補正 / Revise</button><button class="button button-danger" name="action" value="reject">未通過 / Reject</button>{% if can_contact_office %}<button class="button button-contact-office" name="action" value="contact">請聯繫系辦 / Contact office</button>{% endif %}</div>
         </form>
       </section>
@@ -160,5 +165,5 @@
   </main>
   <footer class="app-footer">© 2026 NTNU CSL · 華語實習暨輔導系統 / Mandarin Practicum and Tutoring System</footer>
 </div>
-<script src="{% static 'js/rich-note-editor.js' %}?v=20261024-lists" defer></script>
+<script src="{% static 'js/rich-note-editor.js' %}?v=20261120-presets" defer></script>
 {% endblock %}

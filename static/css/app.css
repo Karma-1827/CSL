@@ -7175,3 +7175,10 @@ td small {
 .candidate-admin-tags span { color: var(--slate-700, #5b6675); font-size: 0.72rem; font-style: italic; font-weight: 400; }
 /* 有標籤時,頭部與標籤之間不畫分隔線 */
 .candidate-card-head:has(+ .candidate-admin-tags) { border-bottom: 0; padding-bottom: 0; }
+
+/* 審核意見的常用語按鈕(2026-11-20) */
+.note-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.note-presets[hidden] { display: none; }
+.note-presets > span { color: var(--ink-muted, #5b6675); font-size: 0.75rem; }
+.note-preset { border: 1px solid var(--line, #d9dee7); background: #fff; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 0.82rem; cursor: pointer; }
+.note-preset:hover { background: var(--ocean-100); border-color: var(--ocean-800); }

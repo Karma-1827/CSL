@@ -83,7 +83,31 @@
     }
   }
 
+  // 常用意見:點一下就把文字插進同一個欄位的編輯區(游標處;沒有游標就接在最後)。
+  function wirePresets(container) {
+    var field = container.closest(".rich-note-field");
+    var editor = field && field.querySelector(".rich-note-surface");
+    if (!editor) { return; }
+    container.hidden = false;
+    container.querySelectorAll("[data-preset-text]").forEach(function (button) {
+      button.addEventListener("mousedown", function (event) { event.preventDefault(); });
+      button.addEventListener("click", function () {
+        editor.focus();
+        var selection = window.getSelection();
+        if (!selection.rangeCount || !editor.contains(selection.anchorNode)) {
+          var range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        document.execCommand("insertText", false, button.getAttribute("data-preset-text"));
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("textarea[data-rich-note]").forEach(enhance);
+    document.querySelectorAll("[data-note-presets]").forEach(wirePresets);
   });
 })();
