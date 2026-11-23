@@ -231,8 +231,8 @@ class ClassRecordForm(forms.ModelForm):
             self.fields["evidence_links"].required = False
             self.fields["evidence_links"].label = "佐證連結 / Evidence links（選填 / Optional）"
             count_point = (
-                '<span><b>1</b><span>可選擇提供 0–5 個可供對方及管理者查看的當次上課佐證連結，必須上傳實際授課照片、詳細教材等，作業或錄影可選填。'
-                '<small>Optionally provide 0–5 accessible links showing evidence of this class for your partner and administrators to review — photos of the actual teaching session and detailed materials are required, while assignments or recordings are optional.</small></span></span>'
+                '<span><b>1</b><span>上課時老師會拍攝實際授課照片，學生不需要自行拍照。可選擇提供 0–5 個可供對方及管理者查看的當次上課佐證連結（例如學習筆記、作業或錄影）。'
+                '<small>Your teacher will take photos of the actual session, so you don\'t need to take photos yourself. You may optionally provide 0–5 accessible links showing evidence of this class (for example study notes, assignments, or recordings) for your partner and administrators to review.</small></span></span>'
             )
         else:
             count_point = (
