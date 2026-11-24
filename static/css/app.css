@@ -7182,3 +7182,9 @@ td small {
 .note-presets > span { color: var(--ink-muted, #5b6675); font-size: 0.75rem; }
 .note-preset { border: 1px solid var(--line, #d9dee7); background: #fff; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 0.82rem; cursor: pointer; }
 .note-preset:hover { background: var(--ocean-100); border-color: var(--ocean-800); }
+
+/* 2026-11-24 線上口試:口語能力審核的通過/未通過按鈕(目前結果實心、另一顆淡化)與過去考試卡片間距 */
+.oral-review-buttons .button.is-dimmed { opacity: 0.45; }
+.oral-review-buttons .button.is-active { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18); }
+.oral-exam-past-heading { margin-top: 22px; }
+.oral-exam-past-card { margin-top: 14px; }

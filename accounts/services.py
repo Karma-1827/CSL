@@ -2,7 +2,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass, field
-from datetime import time
+from datetime import datetime, time
 
 import openpyxl
 from django.contrib.sessions.models import Session
@@ -11,10 +11,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (
+    AuditLog,
     DepartmentOralExamPass,
     DepartmentOralExamPassListType,
     EducationLevel,
     IdentityCategory,
+    OralExamAnnouncement,
     OralExamRegistration,
     OralExamRegistrationReviewStatus,
     PartnerProgram,
@@ -570,3 +572,33 @@ def schedule_oral_exam_registrations(exam_date, *, exam_minutes=10, step_minutes
 
     OralExamRegistration.objects.bulk_update(registrations, ["exam_time", "exam_order"])
     return scheduled, unscheduled
+
+
+# 2026-11-24(助教要求):口試當天下午 5:30 考試已全部結束,自動把「目前這一次」的口試設定與公布內容
+# 刪除還原;報名與考試名單因為本來就以 `exam_date` 快照存放,不會被刪,改在 Admin 畫面歸入「過去考試」卡片。
+ORAL_EXAM_AUTO_RESET_TIME = time(17, 30)
+
+
+def reset_finished_oral_exam(now=None):
+    """口試當天 17:30 之後,刪除目前的 `OralExamAnnouncement`(日期、截止時間、公布狀態、附件),回到尚未設定的狀態。
+
+    由 `tutoring.services.synchronize_matching_state()`(背景 timer 與 dashboard 載入都會呼叫)觸發,
+    可重複執行;沒有公告或時間未到時什麼都不做。回傳是否有重設。"""
+    now = now or timezone.now()
+    with transaction.atomic():
+        announcement = OralExamAnnouncement.objects.select_for_update().first()
+        if announcement is None:
+            return False
+        reset_at = timezone.make_aware(datetime.combine(announcement.exam_date, ORAL_EXAM_AUTO_RESET_TIME))
+        if now < reset_at:
+            return False
+        exam_date = announcement.exam_date
+        registration_count = OralExamRegistration.objects.filter(exam_date=exam_date).count()
+        announcement.delete()
+        AuditLog.record(
+            actor=None,
+            event_type="ORAL_EXAM_AUTO_RESET",
+            description="口試當天 17:30 已過,系統自動清除本次口試設定,報名與考試名單移入過去考試 / Oral exam settings reset automatically after the exam day",
+            metadata={"exam_date": exam_date.isoformat(), "registrations": registration_count},
+        )
+    return True

@@ -3570,6 +3570,55 @@ class OralExamRegistrationTests(TestCase):
         self.client.force_login(user)
         return self.client.post(reverse("accounts:submit_oral_exam_registration"), data)
 
+    def test_finished_oral_exam_resets_settings_after_1730_on_exam_day(self):
+        from accounts.services import reset_finished_oral_exam
+
+        self._submit(self.ntnu_tutor)
+        tz = timezone.get_current_timezone()
+        before = timezone.make_aware(datetime(2026, 10, 27, 17, 29), tz)
+        after = timezone.make_aware(datetime(2026, 10, 27, 17, 30), tz)
+        self.assertFalse(reset_finished_oral_exam(now=before))
+        self.assertTrue(OralExamAnnouncement.objects.exists())
+        self.assertTrue(reset_finished_oral_exam(now=after))
+        self.assertFalse(OralExamAnnouncement.objects.exists())
+        # 報名紀錄保留(以 exam_date 快照),可重複執行不出錯
+        self.assertEqual(OralExamRegistration.objects.filter(exam_date=date(2026, 10, 27)).count(), 1)
+        self.assertFalse(reset_finished_oral_exam(now=after))
+        self.assertTrue(AuditLog.objects.filter(event_type="ORAL_EXAM_AUTO_RESET").exists())
+
+    def test_past_exam_card_lists_registrations_and_exam_list_after_reset(self):
+        from accounts.services import reset_finished_oral_exam
+
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        registration.exam_time = time(9, 0)
+        registration.save()
+        reset_finished_oral_exam(now=timezone.make_aware(datetime(2026, 10, 27, 18, 0)))
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "2026-10-27口試")
+        self.assertContains(response, "過去考試")
+        self.assertContains(response, "師大老師")
+        self.assertContains(response, "考試時間 / Exam time")
+
+    def test_oral_review_buttons_mark_current_result(self):
+        from tutoring.models import QualificationDocument, QualificationStatus
+
+        self._submit(self.ntnu_tutor)
+        registration = OralExamRegistration.objects.get()
+        registration.review_status = OralExamRegistrationReviewStatus.CONFIRMED
+        registration.exam_time = time(9, 0)
+        registration.save()
+        QualificationDocument.objects.create(
+            tutor=self.ntnu_tutor, file=SimpleUploadedFile("q.pdf", minimal_pdf_bytes()),
+            original_filename="q.pdf", status=QualificationStatus.APPROVED,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounts:dashboard"))
+        self.assertContains(response, "button-success is-active")
+        self.assertContains(response, "button-danger is-dimmed")
+
     def test_ntnu_tutor_can_submit_a_registration(self):
         response = self._submit(self.ntnu_tutor)
         self.assertRedirects(response, reverse("accounts:dashboard") + "#oral-exam")

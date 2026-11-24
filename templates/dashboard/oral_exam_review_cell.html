@@ -1,0 +1,17 @@
+{% comment %}
+  口試名單的「口語能力審核」欄(目前考試與過去考試共用):只顯示「通過 / 未通過」兩顆按鈕,目前結果的那顆
+  以實心標示(`is-active`),另一顆淡化;尚未審核時兩顆都正常顯示。按下去直接改這位老師的口語能力證明審核狀態
+  (`accounts:review_qualification`,`next=oral-exam` 導回「線上口語考試」分頁)。需傳入 `registration`。
+{% endcomment %}
+{% with doc=registration.tutor.qualification %}
+  {% if doc %}
+    <form action="{% url 'accounts:review_qualification' doc.pk %}" method="post" class="inline-actions oral-review-buttons">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="oral-exam">
+      <button class="button button-small button-success{% if doc.status == 'APPROVED' %} is-active{% elif doc.status == 'REJECTED' %} is-dimmed{% endif %}" type="submit" name="action" value="approve" aria-pressed="{% if doc.status == 'APPROVED' %}true{% else %}false{% endif %}">通過 / Pass</button>
+      <button class="button button-small button-danger{% if doc.status == 'REJECTED' %} is-active{% elif doc.status == 'APPROVED' %} is-dimmed{% endif %}" type="submit" name="action" value="reject" aria-pressed="{% if doc.status == 'REJECTED' %}true{% else %}false{% endif %}">未通過 / Fail</button>
+    </form>
+  {% else %}
+    <span class="help-text">尚未上傳口語能力證明。 / No document uploaded yet.</span>
+  {% endif %}
+{% endwith %}

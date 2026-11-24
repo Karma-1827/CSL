@@ -451,6 +451,24 @@ def dashboard(request):
             if oral_exam_announcement else []
         )
         oral_exam_published_count = sum(1 for row in oral_exam_scheduled_registrations if row.is_schedule_published)
+        # 2026-11-24:過去的口試(口試當天 17:30 後設定被自動清除,報名資料仍以 exam_date 保留)各自成一張小卡片,新的在前。
+        past_exam_rows = OralExamRegistration.objects.select_related("tutor", "tutor__qualification")
+        if oral_exam_announcement:
+            past_exam_rows = past_exam_rows.exclude(exam_date=oral_exam_announcement.exam_date)
+        oral_exam_past_exams = {}
+        for row in past_exam_rows.order_by("-exam_date", "submitted_at"):
+            oral_exam_past_exams.setdefault(row.exam_date, []).append(row)
+        oral_exam_past_exams = [
+            {
+                "exam_date": exam_date,
+                "registrations": rows,
+                "scheduled": sorted(
+                    (r for r in rows if r.review_status == OralExamRegistrationReviewStatus.CONFIRMED),
+                    key=lambda r: (r.exam_time is None, r.exam_time or time(0, 0), r.submitted_at),
+                ),
+            }
+            for exam_date, rows in oral_exam_past_exams.items()
+        ]
         overview_semesters = semester_rows
         overview_semester_groups = _semester_name_groups(overview_semesters)
         overview_semester, overview_semester_members = _pick_semester_group(
@@ -727,6 +745,7 @@ def dashboard(request):
                 "oral_exam_registrations": oral_exam_registrations,
                 "oral_exam_scheduled_registrations": oral_exam_scheduled_registrations,
                 "oral_exam_published_count": oral_exam_published_count,
+                "oral_exam_past_exams": oral_exam_past_exams,
                 "roster_q": roster_q,
                 "roster_role": roster_role,
                 "roster_program": roster_program,

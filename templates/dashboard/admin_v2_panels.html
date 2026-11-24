@@ -445,26 +445,7 @@
                     <input type="url" name="meet_link_{{ registration.pk }}" form="exam-bulk-form" value="{{ registration.meet_link }}" placeholder="https://meet.google.com/..." hidden data-exam-input aria-label="視訊連結 / Meeting link">
                   </td>
                   <td>
-                    {% comment %}
-                      2026-10-09(使用者要求「口語是否通過（手動作業，如果按通過就代表口語
-                      能力證明直接通過，如果未通過就是口語能力證明未通過）」):直接重用既有
-                      的 `accounts:review_qualification` view(帶 `next=oral-exam` 導回這個
-                      分頁),不是另外做一個獨立的「口試結果」欄位——按下去真的就是在改這位
-                      Tutor 的口語能力證明審核狀態。
-                    {% endcomment %}
-                    {% with doc=registration.tutor.qualification %}
-                      {% if doc %}
-                        <span class="result-text status-{{ doc.status|lower }}">{{ doc.get_status_display }}</span>
-                        <form action="{% url 'accounts:review_qualification' doc.pk %}" method="post" class="inline-actions">
-                          {% csrf_token %}
-                          <input type="hidden" name="next" value="oral-exam">
-                          <button class="button button-small button-success" type="submit" name="action" value="approve">通過 / Pass</button>
-                          <button class="button button-small button-danger" type="submit" name="action" value="reject">未通過 / Fail</button>
-                        </form>
-                      {% else %}
-                        <span class="help-text">尚未上傳口語能力證明。 / No document uploaded yet.</span>
-                      {% endif %}
-                    {% endwith %}
+                    {% include 'dashboard/oral_exam_review_cell.html' with registration=registration %}
                   </td>
                 </tr>
               {% endfor %}
@@ -485,5 +466,57 @@
         <div class="empty-state">目前沒有已登記的報名。 / No confirmed registrations yet.</div>
       {% endif %}
     </details>
+  {% endif %}
+  {% if oral_exam_past_exams %}
+    {% comment %}
+      2026-11-24(助教要求):口試當天 17:30 後,目前的設定與公布內容自動清除,該次的報名清單與考試名單改放在這裡,
+      每次考試一張小卡片「YYYY-MM-DD口試」(唯讀;口語能力通過/未通過仍可在這裡標記)。
+    {% endcomment %}
+    <div class="panel-heading oral-exam-past-heading"><div><span class="eyebrow">PAST EXAMS</span><h2>過去考試 <small>Past exams</small></h2></div></div>
+    {% for past in oral_exam_past_exams %}
+      <details class="panel collapsible-panel oral-exam-past-card">
+        <summary class="panel-heading"><div><span class="eyebrow">{{ past.registrations|length }} 筆報名 · {{ past.scheduled|length }} 位已排考</span><h2>{{ past.exam_date|date:"Y-m-d" }}口試 <small>Oral exam on {{ past.exam_date|date:"Y-m-d" }}</small></h2></div></summary>
+        <h3>報名清單 <small>Registrations</small></h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>老師 / Teacher</th><th>可口試時段 / Available time slots</th><th>繳費紀錄 / Payment proof</th><th>報名時間 / Submitted at</th><th>狀態 / Status</th></tr></thead>
+            <tbody>
+              {% for registration in past.registrations %}
+                <tr>
+                  <td><a href="{% url 'accounts:admin_user_profile' registration.tutor_id %}"><strong>{{ registration.tutor.bilingual_name }}</strong></a><small>{{ registration.tutor.username }}</small></td>
+                  <td>{% for slot_range in registration.time_slot_ranges %}{{ slot_range }}{% if not forloop.last %}、{% endif %}{% endfor %}</td>
+                  <td><a class="payment-proof-filename" href="{% url 'accounts:download_oral_exam_payment_proof' registration.pk %}" target="_blank" rel="noopener">{{ registration.payment_proof_filename }}</a></td>
+                  <td>{{ registration.submitted_at|date:"Y-m-d H:i" }}</td>
+                  <td>{{ registration.get_review_status_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <h3>考試名單 <small>Exam schedule</small></h3>
+        {% if past.scheduled %}
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>學號 / Student ID</th><th>姓名 / Name</th><th>Email</th><th>考試時間 / Exam time</th><th>順序 / Order</th><th>視訊連結 / Meeting link</th><th>口語能力審核 / Oral proficiency review</th></tr></thead>
+              <tbody>
+                {% for registration in past.scheduled %}
+                  <tr>
+                    <td>{{ registration.tutor.username }}</td>
+                    <td><a href="{% url 'accounts:admin_user_profile' registration.tutor_id %}">{{ registration.tutor.bilingual_name }}</a></td>
+                    <td>{{ registration.tutor.email }}</td>
+                    <td>{% if registration.exam_time %}{{ registration.exam_time|time:"H:i" }}{% else %}—{% endif %}</td>
+                    <td>{% if registration.exam_order %}{{ registration.exam_order }}{% else %}—{% endif %}</td>
+                    <td>{% if registration.meet_link %}<a href="{{ registration.meet_link }}" target="_blank" rel="noopener">加入會議 / Join</a>{% else %}—{% endif %}</td>
+                    <td>{% include 'dashboard/oral_exam_review_cell.html' with registration=registration %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state">這次考試沒有已登記的名單。 / No confirmed registrations for this exam.</div>
+        {% endif %}
+      </details>
+    {% endfor %}
   {% endif %}
 </section>
