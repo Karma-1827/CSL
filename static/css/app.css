@@ -7188,3 +7188,9 @@ td small {
 .oral-review-buttons .button.is-active { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18); }
 .oral-exam-past-heading { margin-top: 22px; }
 .oral-exam-past-card { margin-top: 14px; }
+
+/* 分頁列直接輸入頁數(static/js/page-jump.js 把「目前頁 / 總頁數」文字換成輸入框) */
+.page-jump { display: inline-flex; gap: 6px; align-items: center; }
+.page-jump-input { width: 3.8em; padding: 4px 6px; text-align: center; -moz-appearance: textfield; }
+.page-jump-input::-webkit-outer-spin-button,
+.page-jump-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

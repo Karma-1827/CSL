@@ -120,3 +120,31 @@ class PageMemoryScriptTests(SimpleTestCase):
     def test_script_dashboard_path_matches_the_real_url(self):
         self.assertEqual(reverse("accounts:dashboard"), "/dashboard/")
         self.assertIn('const DASHBOARD_PATH = "/dashboard/";', self.SCRIPT.read_text(encoding="utf-8"))
+
+
+class PageJumpScriptTests(SimpleTestCase):
+    """全站分頁列都能直接輸入頁數(static/js/page-jump.js)。站台 CSP 啟用 Trusted Types,
+    腳本不可寫入 HTML;所有分頁列也必須帶 data-page-param,否則不會有輸入框。"""
+
+    SCRIPT = Path(settings.BASE_DIR) / "static" / "js" / "page-jump.js"
+
+    def test_script_never_assigns_html_sinks(self):
+        source = self.SCRIPT.read_text(encoding="utf-8")
+        source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+        source = re.sub(r"(?m)^\s*//.*$|(?<=\s)//[^\n]*$", "", source)
+        for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function"):
+            self.assertNotIn(sink, source, sink)
+
+    def test_every_pagination_bar_is_wired_for_page_jump(self):
+        for path in (Path(settings.BASE_DIR) / "templates").rglob("*.html"):
+            text = path.read_text(encoding="utf-8")
+            for match in re.finditer(r'<nav class="simple-pagination[^>]*>', text):
+                tag = match.group(0)
+                # 出缺席的分頁列自己有 <form> 輸入頁數,其餘一律要帶 data-page-param。
+                if "attendance-pager" in tag:
+                    continue
+                self.assertIn("data-page-param=", tag, f"{path.name}: {tag[:80]}")
+
+    def test_base_template_loads_the_script(self):
+        base = (Path(settings.BASE_DIR) / "templates" / "base.html").read_text(encoding="utf-8")
+        self.assertIn("js/page-jump.js", base)

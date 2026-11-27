@@ -208,7 +208,7 @@
               {% empty %}<tr><td colspan="5"><div class="empty-state">找不到符合條件的配對。 / No matches found.</div></td></tr>{% endfor %}
             </tbody>
           </table></div>
-          {% if pairing_page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="配對分頁 / Matching pages">{% if pairing_page.has_previous %}<a href="?pairing_q={{ pairing_q|urlencode }}&pairing_status={{ pairing_status }}&pairing_page={{ pairing_page.previous_page_number }}#matching">← 上一頁 / Previous</a>{% endif %}<span>{{ pairing_page.number }} / {{ pairing_page.paginator.num_pages }}</span>{% if pairing_page.has_next %}<a href="?pairing_q={{ pairing_q|urlencode }}&pairing_status={{ pairing_status }}&pairing_page={{ pairing_page.next_page_number }}#matching">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+          {% if pairing_page.paginator.num_pages > 1 %}<nav class="simple-pagination" data-page-param="pairing_page" data-page-current="{{ pairing_page.number }}" data-page-total="{{ pairing_page.paginator.num_pages }}" aria-label="配對分頁 / Matching pages">{% if pairing_page.has_previous %}<a href="?pairing_q={{ pairing_q|urlencode }}&pairing_status={{ pairing_status }}&pairing_page={{ pairing_page.previous_page_number }}#matching">← 上一頁 / Previous</a>{% endif %}<span>{{ pairing_page.number }} / {{ pairing_page.paginator.num_pages }}</span>{% if pairing_page.has_next %}<a href="?pairing_q={{ pairing_q|urlencode }}&pairing_status={{ pairing_status }}&pairing_page={{ pairing_page.next_page_number }}#matching">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
         {% else %}<div class="empty-state">尚無配對資料 / No matches yet</div>{% endif %}
         <details class="semester-add-disclosure">
           <summary>
@@ -451,7 +451,7 @@
                   </article>
                 {% empty %}<div class="empty-state compact">此狀態目前沒有資料。 / No records in this status.</div>{% endfor %}
               </div>
-              {% if section.page.paginator.num_pages > 1 %}<nav class="simple-pagination" aria-label="{{ section.label }}分頁 / {{ section.label_en }} pages">{% if section.page.has_previous %}<a href="?{{ section.page_param }}={{ section.page.previous_page_number }}#class-review">← 上一頁 / Previous</a>{% endif %}<span>{{ section.page.number }} / {{ section.page.paginator.num_pages }}</span>{% if section.page.has_next %}<a href="?{{ section.page_param }}={{ section.page.next_page_number }}#class-review">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
+              {% if section.page.paginator.num_pages > 1 %}<nav class="simple-pagination" data-page-param="{{ section.page_param }}" data-page-current="{{ section.page.number }}" data-page-total="{{ section.page.paginator.num_pages }}" aria-label="{{ section.label }}分頁 / {{ section.label_en }} pages">{% if section.page.has_previous %}<a href="?{{ section.page_param }}={{ section.page.previous_page_number }}#class-review">← 上一頁 / Previous</a>{% endif %}<span>{{ section.page.number }} / {{ section.page.paginator.num_pages }}</span>{% if section.page.has_next %}<a href="?{{ section.page_param }}={{ section.page.next_page_number }}#class-review">下一頁 / Next →</a>{% endif %}</nav>{% endif %}
             </details>
           {% endfor %}
         </div>
